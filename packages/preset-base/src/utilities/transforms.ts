@@ -14,6 +14,9 @@ const negativeFractions = Object.fromEntries(
 )
 const fractions = { ...positiveFractions, ...negativeFractions }
 
+/** `rotate: 'auto'`: a rotation about each axis, an unset one adding nothing. */
+const ROTATE_AXES = 'var(--rotate-x, ) var(--rotate-y, ) var(--rotate-z, )'
+
 export const transforms: UtilityConfig = {
   transformOrigin: {
     className: 'trf-o',
@@ -36,44 +39,53 @@ export const transforms: UtilityConfig = {
     group: 'Transform',
     property: 'rotate',
     values: {
-      auto: 'var(--rotate-x) var(--rotate-y)',
-      'auto-3d': 'var(--rotate-x) var(--rotate-y) var(--rotate-z)',
+      auto: ROTATE_AXES,
+      'auto-3d': ROTATE_AXES,
     },
-    // Read without a fallback, so each needs an initial value of its own: an unset axis has
-    // to compose to no rotation rather than take the whole declaration down with it.
+    // `auto` composes the axes on `transform`. The `rotate` property holds one rotation about
+    // one axis: fed two angles it computed to `none`, and fed one, a flat spin about z — so
+    // `rotateX` never tilted anything. Anything else, `rotate: '45deg'`, is that one rotation.
+    //
+    // `auto` clears `rotate` as well, so one set under a condition replaces an angle beneath it
+    // rather than adding to it: the two are different properties, and neither overrides the
+    // other on its own.
+    transform(value) {
+      return value === ROTATE_AXES ? { rotate: 'none', transform: value } : { rotate: value }
+    },
+    // No `initialValue`: each is read with an empty fallback, so an axis left unset composes to
+    // nothing, as `filter`'s functions do.
     customProperties: {
-      '--rotate-x': { inherits: false, initialValue: '0', syntax: '*' },
-      '--rotate-y': { inherits: false, initialValue: '0', syntax: '*' },
-      '--rotate-z': { inherits: false, initialValue: '0', syntax: '*' },
+      '--rotate-x': { inherits: false, syntax: '*' },
+      '--rotate-y': { inherits: false, syntax: '*' },
+      '--rotate-z': { inherits: false, syntax: '*' },
     },
   },
+  // An angle each, so not typed as `rotate` values: `none` or `x 45deg` would come out as
+  // `rotateX(none)`, which takes the whole composed `transform` down with it.
   rotateX: {
     className: 'rotate-x',
     group: 'Transform',
-    property: 'rotate',
     transform(value) {
       return {
-        '--rotate-x': value,
+        '--rotate-x': `rotateX(${value})`,
       }
     },
   },
   rotateY: {
     className: 'rotate-y',
     group: 'Transform',
-    property: 'rotate',
     transform(value) {
       return {
-        '--rotate-y': value,
+        '--rotate-y': `rotateY(${value})`,
       }
     },
   },
   rotateZ: {
     className: 'rotate-z',
     group: 'Transform',
-    property: 'rotate',
     transform(value) {
       return {
-        '--rotate-z': value,
+        '--rotate-z': `rotateZ(${value})`,
       }
     },
   },
@@ -154,15 +166,14 @@ export const transforms: UtilityConfig = {
       }
     },
   },
+  // No fractions: they are percentages, and `translate` has no size in z to take one of, so
+  // `translateZ: '1/2'` invalidated the whole declaration and dropped x and y with it.
   translateZ: {
     shorthand: 'z',
     className: 'translate-z',
     group: 'Transform',
     values(theme) {
-      return {
-        ...theme('spacing'),
-        ...fractions,
-      }
+      return theme('spacing')
     },
     transform(value) {
       return {

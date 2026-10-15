@@ -35,6 +35,34 @@ respectively show or hide the scrollbar.
 <div className={css({ scrollbar: 'hidden' })}>Scrollbar hidden</div>
 ```
 
+### Width and colour
+
+`scrollbarWidth` is `auto`, `thin` or `none` — `scrollbar-width` takes no length.
+
+The colours are two utilities that compose: `scrollbarThumb` and `scrollbarTrack`, each taking a `colors` token. Set
+either or both; a side left unset is the colour of the text for the thumb, and transparent for the track.
+
+```jsx
+<div
+  className={css({
+    overflow: 'auto',
+    scrollbarWidth: 'thin',
+    scrollbarThumb: 'gray.400',
+    scrollbarTrack: 'gray.100',
+  })}
+/>
+```
+
+`scrollbarColor` writes `scrollbar-color` as it is given, so it takes both colours at once, `'red transparent'`. A
+single colour token is not a value the property takes; use `scrollbarThumb` for one.
+
+| Prop             | CSS Property                           | Token Category |
+| ---------------- | -------------------------------------- | -------------- |
+| `scrollbarWidth` | `scrollbar-width`                      | -              |
+| `scrollbarThumb` | `scrollbar-color`, `--scrollbar-thumb` | `colors`       |
+| `scrollbarTrack` | `scrollbar-color`, `--scrollbar-track` | `colors`       |
+| `scrollbarColor` | `scrollbar-color`                      | -              |
+
 ## Scroll Margin
 
 Scroll margin utilities set margins around scroll containers.

@@ -303,24 +303,18 @@ describe('Global css', () => {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --rotate-y {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --rotate-z {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --scale-x {
@@ -361,6 +355,18 @@ describe('Global css', () => {
           inherits: false;
 
           initial-value: 0;
+        }
+
+        @property --scrollbar-thumb {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --scrollbar-track {
+          syntax: '*';
+
+          inherits: false;
         }
 
         @property --scroll-snap-strictness {
@@ -660,24 +666,18 @@ describe('Global css', () => {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --rotate-y {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --rotate-z {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --scale-x {
@@ -718,6 +718,18 @@ describe('Global css', () => {
           inherits: false;
 
           initial-value: 0;
+        }
+
+        @property --scrollbar-thumb {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --scrollbar-track {
+          syntax: '*';
+
+          inherits: false;
         }
 
         @property --scroll-snap-strictness {
@@ -950,24 +962,18 @@ describe('Global css', () => {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --rotate-y {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --rotate-z {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --scale-x {
@@ -1008,6 +1014,18 @@ describe('Global css', () => {
           inherits: false;
 
           initial-value: 0;
+        }
+
+        @property --scrollbar-thumb {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --scrollbar-track {
+          syntax: '*';
+
+          inherits: false;
         }
 
         @property --scroll-snap-strictness {
@@ -1242,24 +1260,18 @@ describe('Global css', () => {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --rotate-y {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --rotate-z {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --scale-x {
@@ -1300,6 +1312,18 @@ describe('Global css', () => {
           inherits: false;
 
           initial-value: 0;
+        }
+
+        @property --scrollbar-thumb {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --scrollbar-track {
+          syntax: '*';
+
+          inherits: false;
         }
 
         @property --scroll-snap-strictness {
@@ -1539,24 +1563,18 @@ describe('Global css', () => {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --rotate-y {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --rotate-z {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --scale-x {
@@ -1597,6 +1615,18 @@ describe('Global css', () => {
           inherits: false;
 
           initial-value: 0;
+        }
+
+        @property --scrollbar-thumb {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --scrollbar-track {
+          syntax: '*';
+
+          inherits: false;
         }
 
         @property --scroll-snap-strictness {
@@ -1836,24 +1866,18 @@ describe('Global css', () => {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --rotate-y {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --rotate-z {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --scale-x {
@@ -1894,6 +1918,18 @@ describe('Global css', () => {
           inherits: false;
 
           initial-value: 0;
+        }
+
+        @property --scrollbar-thumb {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --scrollbar-track {
+          syntax: '*';
+
+          inherits: false;
         }
 
         @property --scroll-snap-strictness {
@@ -2123,24 +2159,18 @@ describe('Global css', () => {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --rotate-y {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --rotate-z {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --scale-x {
@@ -2181,6 +2211,18 @@ describe('Global css', () => {
           inherits: false;
 
           initial-value: 0;
+        }
+
+        @property --scrollbar-thumb {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --scrollbar-track {
+          syntax: '*';
+
+          inherits: false;
         }
 
         @property --scroll-snap-strictness {
@@ -2422,24 +2464,18 @@ describe('Global css', () => {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --rotate-y {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --rotate-z {
           syntax: '*';
 
           inherits: false;
-
-          initial-value: 0;
         }
 
         @property --scale-x {
@@ -2480,6 +2516,18 @@ describe('Global css', () => {
           inherits: false;
 
           initial-value: 0;
+        }
+
+        @property --scrollbar-thumb {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --scrollbar-track {
+          syntax: '*';
+
+          inherits: false;
         }
 
         @property --scroll-snap-strictness {

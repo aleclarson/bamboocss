@@ -5593,7 +5593,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scrollbar-color
          */
-      scrollbarColor?: ConditionalValue<UtilityValues["scrollbarColor"] | CssVars | CssProperties["scrollbarColor"] | AnyString>
+      scrollbarColor?: ConditionalValue<CssProperties["scrollbarColor"] | AnyString>
        /**
          * Since December 2024, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -8003,15 +8003,17 @@ describe('generate property types', () => {
        borderSpacingX?: ConditionalValue<UtilityValues["borderSpacingX"] | CssVars | AnyString>
        borderSpacingY?: ConditionalValue<UtilityValues["borderSpacingY"] | CssVars | AnyString>
        animationState?: ConditionalValue<string | number | AnyString>
-       rotateX?: ConditionalValue<UtilityValues["rotateX"] | CssVars | AnyString>
-       rotateY?: ConditionalValue<UtilityValues["rotateY"] | CssVars | AnyString>
-       rotateZ?: ConditionalValue<UtilityValues["rotateZ"] | CssVars | AnyString>
+       rotateX?: ConditionalValue<string | number | AnyString>
+       rotateY?: ConditionalValue<string | number | AnyString>
+       rotateZ?: ConditionalValue<string | number | AnyString>
        scaleX?: ConditionalValue<string | number | AnyString>
        scaleY?: ConditionalValue<string | number | AnyString>
        translateX?: ConditionalValue<UtilityValues["translateX"] | CssVars | AnyString>
        translateY?: ConditionalValue<UtilityValues["translateY"] | CssVars | AnyString>
        translateZ?: ConditionalValue<UtilityValues["translateZ"] | CssVars | AnyString>
        scrollbar?: ConditionalValue<UtilityValues["scrollbar"] | CssVars | AnyString>
+       scrollbarThumb?: ConditionalValue<UtilityValues["scrollbarThumb"] | CssVars | AnyString>
+       scrollbarTrack?: ConditionalValue<UtilityValues["scrollbarTrack"] | CssVars | AnyString>
        scrollSnapStrictness?: ConditionalValue<UtilityValues["scrollSnapStrictness"] | CssVars | AnyString>
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2021.

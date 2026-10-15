@@ -131,8 +131,75 @@ describe('transform axes write the variables their composer reads', () => {
 
   test('an axis variable is read by the composed declaration', () => {
     expect(value({ translate: 'auto' }, 'translate')).toContain('var(--translate-x)')
-    expect(value({ rotate: 'auto' }, 'rotate')).toContain('var(--rotate-x)')
+    expect(value({ rotate: 'auto' }, 'transform')).toContain('var(--rotate-x,')
     expect(value({ scale: 'auto' }, 'scale')).toContain('var(--scale-x)')
+  })
+})
+
+/**
+ * What the composed transforms and the scrollbar utilities compute to, which is what was wrong
+ * with them: each emitted a declaration that looked right and that the browser threw away.
+ */
+describe('composed transforms and scrollbars are declarations the browser keeps', () => {
+  /**
+   * The `rotate` property holds one rotation about one axis. Fed two angles —
+   * `var(--rotate-x) var(--rotate-y)` — it computed to `none`, and fed one, to a flat spin
+   * about z, so `rotateX` never tilted anything. `auto` composes the axes on `transform`.
+   */
+  test('rotate: auto composes each axis as its own function on transform', () => {
+    expect(value({ rotate: 'auto' }, 'transform')).toMatch(
+      /^var\(--rotate-x,\s*\) var\(--rotate-y,\s*\) var\(--rotate-z,\s*\)$/,
+    )
+    expect(value({ rotateX: '45deg' }, '--rotate-x')).toBe('rotateX(45deg)')
+    expect(value({ rotateY: '30deg' }, '--rotate-y')).toBe('rotateY(30deg)')
+    expect(value({ rotateZ: '0.5turn' }, '--rotate-z')).toBe('rotateZ(0.5turn)')
+  })
+
+  // A different property from an angle's, so it clears that one: set under a condition, it
+  // replaces the angle beneath it instead of adding to it.
+  test('rotate: auto clears the single rotation', () => {
+    expect(value({ rotate: 'auto' }, 'rotate')).toBe('none')
+    expect(value({ rotate: 'auto-3d' }, 'rotate')).toBe('none')
+  })
+
+  test('a single rotation stays on rotate', () => {
+    expect(value({ rotate: '45deg' }, 'rotate')).toBe('45deg')
+    expect(value({ rotate: '45deg' }, 'transform')).toBeUndefined()
+  })
+
+  // Its values are the spacing scale alone: a fraction is a percentage, which `translate` cannot
+  // take in z, so it dropped x and y with it.
+  test('translateZ resolves the spacing scale', () => {
+    expect(value({ translateZ: '4' }, '--translate-z')).toBe('var(--spacing-4)')
+  })
+
+  // `scrollbar-width` takes a keyword and no length; a `sizes` token there was always dropped.
+  test('scrollbarWidth takes its keywords', () => {
+    expect(value({ scrollbarWidth: 'thin' }, 'scrollbar-width')).toBe('thin')
+    expect(value({ scrollbarWidth: 'none' }, 'scrollbar-width')).toBe('none')
+  })
+
+  // `scrollbar-color` is two colours or `auto`. One colour token there was invalid, and dropped.
+  test('scrollbarColor is the two colours, written out', () => {
+    expect(value({ scrollbarColor: 'red transparent' }, 'scrollbar-color')).toBe('red transparent')
+  })
+
+  test.each([
+    ['scrollbarThumb', '--scrollbar-thumb'],
+    ['scrollbarTrack', '--scrollbar-track'],
+  ])('%s sets its side, and composes scrollbar-color with the other', (utility, variable) => {
+    const styles = { [utility]: 'red.300' } as Styles
+
+    expect(value(styles, variable)).toBe('var(--colors-red-300)')
+    expect(value(styles, 'scrollbar-color')).toBe(
+      'var(--scrollbar-thumb, currentColor) var(--scrollbar-track, transparent)',
+    )
+  })
+
+  // Named as every other colour utility's helper is, not `--mix---scrollbar-thumb`.
+  test('an opacity modifier mixes through a variable named for the utility', () => {
+    expect(value({ scrollbarThumb: 'red.300/50' } as Styles, '--mix-scrollbarThumb')).toContain('color-mix(')
+    expect(value({ scrollbarThumb: 'red.300/50' } as Styles, '--scrollbar-thumb')).toContain('var(--mix-scrollbarThumb')
   })
 })
 

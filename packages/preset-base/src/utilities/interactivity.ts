@@ -1,5 +1,26 @@
-import type { UtilityConfig } from '@bamboocss/types'
+import type { NestedCssProperties, UtilityConfig } from '@bamboocss/types'
 import { createColorMixTransform } from '../color-mix-transform'
+
+/**
+ * One side of `scrollbar-color`, and the declaration composing it with the other.
+ *
+ * An unset side falls back to what it is anyway — a thumb the colour of the text, a track with
+ * none — since `auto` cannot stand beside a colour. That takes the two variables not inheriting:
+ * a nested scroller setting its track would otherwise take its ancestor's thumb.
+ *
+ * Nothing is written for WebKit's `::-webkit-scrollbar-*`. Those apply only once
+ * `::-webkit-scrollbar` itself is styled, which this does not do, and where an app does style
+ * it, a side set here would have overridden the app's colour for the side it did not set.
+ */
+const scrollbarColorStyles = (side: NestedCssProperties | undefined) => ({
+  ...side,
+  scrollbarColor: 'var(--scrollbar-thumb, currentColor) var(--scrollbar-track, transparent)',
+})
+
+const scrollbarSides = {
+  '--scrollbar-thumb': { inherits: false, syntax: '*' },
+  '--scrollbar-track': { inherits: false, syntax: '*' },
+}
 
 export const interactivity: UtilityConfig = {
   accentColor: {
@@ -45,19 +66,39 @@ export const interactivity: UtilityConfig = {
       }
     },
   },
+  // `scrollbar-color` is two colours, thumb then track, or `auto`: a single colour token is not a
+  // value it takes, so it is written raw — `red transparent` — and each side has a utility of its
+  // own, which composes with the other.
   scrollbarColor: {
     className: 'scr-bar-c',
+    group: 'Scroll',
+  },
+  scrollbarThumb: {
+    className: 'scr-bar-th',
     values: 'colors',
     group: 'Scroll',
-    transform: createColorMixTransform('scrollbarColor'),
+    transform(value, args) {
+      return scrollbarColorStyles(createColorMixTransform('--scrollbar-thumb', 'scrollbarThumb')(value, args))
+    },
+    customProperties: scrollbarSides,
+  },
+  scrollbarTrack: {
+    className: 'scr-bar-tk',
+    values: 'colors',
+    group: 'Scroll',
+    transform(value, args) {
+      return scrollbarColorStyles(createColorMixTransform('--scrollbar-track', 'scrollbarTrack')(value, args))
+    },
+    customProperties: scrollbarSides,
   },
   scrollbarGutter: {
     className: 'scr-bar-g',
     group: 'Scroll',
   },
+  // Keywords only: `scrollbar-width` takes no length, so a `sizes` token was never valid there.
   scrollbarWidth: {
     className: 'scr-bar-w',
-    values: 'sizes',
+    values: ['auto', 'thin', 'none'],
     group: 'Scroll',
   },
 
