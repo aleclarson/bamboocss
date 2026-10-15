@@ -3932,6 +3932,14 @@ describe('the stylesheet requested before its importer', () => {
  * its folder: no `add` reached the plugin, the inventory was never reconciled, and the stylesheet
  * went on without the file until the server restarted.
  */
+/**
+ * Until a project written an instant ago is past being reported. The watcher can still deliver the
+ * writes that made it, and one of them is the config, which this plugin declares to Vite as a config
+ * file: Vite restarts, and the request in flight fails with "The server is being restarted or
+ * closed". Waiting this long took it from 2 failures in 16 runs to none.
+ */
+const settled = () => new Promise((resolve) => setTimeout(resolve, 300))
+
 describe('a file added under an include outside the root', () => {
   const cases: Array<[string, typeof createServer, number]> = [
     ['Vite 7', createServer, 24797],
@@ -3955,6 +3963,7 @@ describe('a file added under an include outside the root', () => {
         join(app, 'src/app.tsx'),
         `import { css } from '../styled-system/css'\nexport const app = css({ width: '[741.1px]' })\n`,
       )
+      await settled()
 
       const server = await createDevServer({
         root: app,
@@ -4072,6 +4081,7 @@ describe('a source include reached through a link', () => {
   for (const [label, createDevServer, port, packages] of servers) {
     test(`${label} carries an edit to it, and a file added beside it, to the dev stylesheet`, async () => {
       const { app, ui } = project(packages)
+      await settled()
       const server = await createDevServer({
         root: app,
         configFile: false,
