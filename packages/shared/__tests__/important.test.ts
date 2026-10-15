@@ -1,6 +1,6 @@
 import { FALLBACK_SEPARATOR } from '../src/fallback-value'
 import { describe, expect, test } from 'vitest'
-import { isImportant, markImportant, sanitize, withoutImportant, withoutSpace } from '../src/important'
+import { importantMark, isImportant, markImportant, sanitize, withoutImportant, withoutSpace } from '../src/important'
 
 /**
  * These four run per style leaf on every `css()` cache miss and each carries a fast path for
@@ -17,8 +17,23 @@ describe('important and space handling', () => {
       // A bare trailing `!` is the short form of the mark.
       ['red!', true],
       ['red !important ', true],
-      // Not a form the generated types accept, so not one the runtime reads as a mark either.
-      ['red ! important', false],
+      // Not a form the generated types accept, but one CSS reads as a mark, so the browser
+      // would treat the declaration as important whether the class said so or not.
+      ['red ! important', true],
+      ['red !  IMPORTANT ', true],
+      ['red !\timportant', true],
+      ['red important', false],
+      ['red !x important', false],
+      // The space inside a mark is CSS's: to the browser, `! important` is no mark.
+      ['red ! important', false],
+      // A `!` ending a string, a bracket or an escape is the value's, and ` important` a word after it.
+      ['"a!" important', false],
+      ['[a!] important', false],
+      // An escaped `!` is part of the identifier, `foo!`; an escaped backslash leaves the `!` a mark.
+      ['foo\\! important', false],
+      ['foo\\!important', false],
+      ['red\\!', false],
+      ['red\\\\!', true],
       // An escape hatch keeps its contents as written, so the mark sits inside the brackets.
       ['[absolute!]', true],
       ['[red !important]', true],
@@ -46,6 +61,22 @@ describe('important and space handling', () => {
     })
   })
 
+  describe('importantMark', () => {
+    test.each([
+      ['red !important', '!important'],
+      ['red ! IMPORTANT ', '! IMPORTANT'],
+      ['red !important !', '!'],
+      ['[absolute!]', '!'],
+      ['[red ! important]', '! important'],
+      // The candidate that carries it, not a `!` in a later one.
+      ['fallback("a" !important, "b!")', '!important'],
+      ['"!"', undefined],
+      ['red', undefined],
+    ])('%j -> %j', (value, expected) => {
+      expect(importantMark(value)).toBe(expected)
+    })
+  })
+
   describe('withoutImportant', () => {
     test('strips the marker', () => {
       expect(withoutImportant('red !important')).toBe('red')
@@ -57,6 +88,12 @@ describe('important and space handling', () => {
       // Leaving one behind would come out as `red !important !important`, which is invalid.
       expect(withoutImportant('red !important !important')).toBe('red')
       expect(withoutImportant('red ! !')).toBe('red')
+      expect(withoutImportant('red ! important ! important')).toBe('red')
+    })
+
+    test('strips a mark with whitespace inside it', () => {
+      expect(withoutImportant('red ! important')).toBe('red')
+      expect(withoutImportant('[absolute ! important]')).toBe('[absolute]')
     })
 
     test('strips a mark inside an escape hatch, keeping its brackets', () => {

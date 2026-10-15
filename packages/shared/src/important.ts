@@ -2,6 +2,7 @@ import { FALLBACK_SEPARATOR, parseFallbackValue } from './fallback-value'
 
 const IMPORTANT = 'important'
 const BANG = 0x21
+const BACKSLASH = 0x5c
 const OPEN_BRACKET = 0x5b
 const CLOSE_BRACKET = 0x5d
 const whitespaceRegex = /\s/
@@ -9,19 +10,39 @@ const whitespaceRegex = /\s/
 /**
  * Where the important mark ending `value` — read up to `end` — starts, or -1.
  *
- * A mark is a `!`, optionally the keyword in any case, then only whitespace. Only one that ends
- * the value counts. Any `!` used to — the one in `content: '"!"'`, in a quoted font name, in an
- * SVG data URI's `<!--` — and it was cut out of the value as the declaration was marked:
- * `content: "" !important`.
+ * A mark is a `!`, then optionally CSS whitespace and the keyword in any case, then only
+ * whitespace. Only one that ends the value counts. Any `!` used to — the one in `content: '"!"'`,
+ * in a quoted font name, in an SVG data URI's `<!--` — and it was cut out of the value as the
+ * declaration was marked: `content: "" !important`.
  *
- * Read from the end, so finding one costs the trailing whitespace and at most ten characters,
- * and stripping a run of them is linear however long the value is.
+ * The space inside a mark is CSS's. `red ! important` reaches the browser as an important
+ * declaration whatever this says, so a class naming it as an ordinary one would be ordered, and
+ * composed, as something it is not; `! important` is no mark to the browser, and is left
+ * as written. Nor is an escaped `\!`, which is part of the identifier before it.
+ *
+ * Read from the end, so finding one costs the whitespace around the keyword and its nine
+ * characters, and stripping a run of them is linear however long the value is.
  */
 function markAt(value: string, end = value.length): number {
   while (end > 0 && isWhitespace(value.charCodeAt(end - 1))) end--
-  if (end > 0 && value.charCodeAt(end - 1) === BANG) return end - 1
+  if (end > 0 && value.charCodeAt(end - 1) === BANG) return isEscaped(value, end - 1) ? -1 : end - 1
   const keyword = end - IMPORTANT.length
-  return keyword > 0 && value.charCodeAt(keyword - 1) === BANG && isKeyword(value, keyword) ? keyword - 1 : -1
+  if (keyword <= 0 || !isKeyword(value, keyword)) return -1
+  let bang = keyword
+  while (bang > 0 && isCssWhitespace(value.charCodeAt(bang - 1))) bang--
+  return bang > 0 && value.charCodeAt(bang - 1) === BANG && !isEscaped(value, bang - 1) ? bang - 1 : -1
+}
+
+/** Whether the character at `at` follows an odd run of backslashes, which escapes it. */
+function isEscaped(value: string, at: number): boolean {
+  let backslashes = 0
+  while (at - backslashes > 0 && value.charCodeAt(at - backslashes - 1) === BACKSLASH) backslashes++
+  return backslashes % 2 === 1
+}
+
+/** CSS's whitespace: space, tab and the line breaks — not the wider set `trim` removes. */
+function isCssWhitespace(code: number): boolean {
+  return code === 0x20 || code === 0x09 || code === 0x0a || code === 0x0c || code === 0x0d
 }
 
 /** What `trim` removes: WhiteSpace and LineTerminator, the set `\s` matches. */
@@ -121,6 +142,25 @@ export function isImportant<T extends string | number | boolean>(value: T) {
   if (markAt(value) !== -1) return true
   const trimmed = value.trim()
   return isMarkedArbitrary(trimmed) || markedFallback(trimmed) !== undefined
+}
+
+/**
+ * The mark that makes `value` important, as written — `!important`, `! IMPORTANT`, `!` — or
+ * `undefined` when `isImportant` would say it is not. The one `withoutImportant` removes, found
+ * where it does: ending the value, inside an escape hatch's brackets, or ending a fallback's
+ * candidate. For a message quoting it back; not on any per-leaf path.
+ */
+export function importantMark(value: string): string | undefined {
+  if (!value.includes('!')) return undefined
+  const trimmed = value.trim()
+  const at = markAt(trimmed)
+  if (at !== -1) return trimmed.slice(at)
+  if (isMarkedArbitrary(trimmed)) {
+    const close = trimmed.length - 1
+    return trimmed.slice(markAt(trimmed, close), close).trim()
+  }
+  const candidate = markedFallback(trimmed)?.find((candidate) => markAt(candidate) !== -1)
+  return candidate === undefined ? undefined : candidate.slice(markAt(candidate)).trim()
 }
 
 // `string | T` is stated rather than inferred: `T` is a literal type at most call sites, and

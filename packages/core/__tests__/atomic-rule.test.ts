@@ -63,6 +63,22 @@ describe('atomic / with basic style object', () => {
     `)
   })
 
+  test('a mark with whitespace inside it, as CSS allows', () => {
+    // The browser reads `red ! important` as important either way. Unmarked, it was written as
+    // it came, into an ordinary sublayer, and ordered as something it is not.
+    expect(css({ color: 'red ! important' })).toMatchInlineSnapshot(`
+      "@layer utilities {
+        @layer important;
+
+        @layer important {
+          .c_red\\! {
+            color: red !important;
+      }
+        }
+      }"
+    `)
+  })
+
   test('a trailing mark after a value holding a `!` marks only the declaration', () => {
     expect(css({ content: '"hello!" !important' })).toMatchInlineSnapshot(`
       "@layer utilities {

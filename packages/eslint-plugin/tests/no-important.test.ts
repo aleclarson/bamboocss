@@ -51,7 +51,7 @@ eslintTester.run(RULE_NAME, rule, {
     },
 
     {
-      // The build reads the keyword in any case, so the rule has to as well.
+      // The build reads the keyword in any case, so the rule has to as well — and quotes it as written.
       code: multiline`
   import { css } from './bamboo/css';
 
@@ -59,13 +59,87 @@ eslintTester.run(RULE_NAME, rule, {
       errors: [
         {
           messageId: 'important',
+          data: { keyword: '!IMPORTANT' },
           suggestions: [
             {
               messageId: 'remove',
+              data: { keyword: '!IMPORTANT' },
               output: multiline`
   import { css } from './bamboo/css';
 
   const styles = css({ color: 'red' })`,
+            },
+          ],
+        },
+      ],
+    },
+
+    {
+      // CSS allows whitespace inside the mark, and reads it as one.
+      code: multiline`
+  import { css } from './bamboo/css';
+
+  const styles = css({ color: 'red ! important' })`,
+      errors: [
+        {
+          messageId: 'important',
+          data: { keyword: '! important' },
+          suggestions: [
+            {
+              messageId: 'remove',
+              data: { keyword: '! important' },
+              output: multiline`
+  import { css } from './bamboo/css';
+
+  const styles = css({ color: 'red' })`,
+            },
+          ],
+        },
+      ],
+    },
+
+    {
+      // In a fallback, the candidate that carries the mark, not a `!` in a later one.
+      code: multiline`
+  import { css } from './bamboo/css';
+
+  const styles = css({ content: 'fallback("a" !important, "b!")' })`,
+      errors: [
+        {
+          messageId: 'important',
+          data: { keyword: '!important' },
+          suggestions: [
+            {
+              messageId: 'remove',
+              data: { keyword: '!important' },
+              output: multiline`
+  import { css } from './bamboo/css';
+
+  const styles = css({ content: 'fallback("a", "b!")' })`,
+            },
+          ],
+        },
+      ],
+    },
+
+    {
+      // The mark the message names is the one removed: the `!important` in the string is content.
+      code: multiline`
+  import { css } from './bamboo/css';
+
+  const styles = css({ content: '"!important" !' })`,
+      errors: [
+        {
+          messageId: 'important',
+          data: { keyword: '!' },
+          suggestions: [
+            {
+              messageId: 'remove',
+              data: { keyword: '!' },
+              output: multiline`
+  import { css } from './bamboo/css';
+
+  const styles = css({ content: '"!important"' })`,
             },
           ],
         },

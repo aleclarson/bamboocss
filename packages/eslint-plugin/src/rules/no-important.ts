@@ -1,14 +1,15 @@
 import { createRule } from '../utils'
 import { isBambooAttribute, isBambooProp as isBambooProperty, isRecipeVariant } from '../utils/helpers'
 import { isIdentifier, isJSXExpressionContainer, isLiteral, isTemplateLiteral } from '../utils/nodes'
-import { isImportant, withoutImportant } from '@bamboocss/shared'
+import { importantMark, isImportant, withoutImportant } from '@bamboocss/shared'
 import { type TSESTree } from '@typescript-eslint/utils'
 
-// The keyword as the author wrote it, for the message. Which values are important, and what
-// removing the mark leaves, is decided by `isImportant` and `withoutImportant` — the predicates
-// the build itself uses — so a value the build marks is one this reports, and a `!` the build
-// leaves in the value is not.
-const keywordRegex = /!important/i
+// Which values are important, what removing the mark leaves, and the mark the message quotes are
+// all decided by `isImportant`, `withoutImportant` and `importantMark` — the build's own — so a
+// value the build marks is one this reports, a `!` the build leaves in the value is not, and the
+// keyword named is the one the fix removes. Its whitespace is collapsed, so a mark split across
+// lines in a template literal does not split the message.
+const keywordOf = (value: string) => (importantMark(value) ?? '!').replaceAll(/\s+/g, ' ')
 
 export const RULE_NAME = 'no-important'
 
@@ -66,7 +67,7 @@ const rule = createRule({
 
       // Every mark goes, as the build strips every one, and an escape hatch keeps its brackets.
       const fixed = String(withoutImportant(value))
-      const keyword = keywordRegex.exec(value)?.[0] ?? '!'
+      const keyword = keywordOf(value)
 
       context.report({
         data: { keyword },
