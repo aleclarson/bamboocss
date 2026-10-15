@@ -1,4 +1,5 @@
 import type { Context } from '@bamboocss/core'
+import { closestMatch } from '@bamboocss/shared'
 
 /**
  * A key nested in a style object that is neither a property nor a condition.
@@ -36,43 +37,6 @@ const SELECTOR = /^(?:[a-z][a-z0-9-]*|[.#[>+~*].*)$/
 /** A key as it is written in source: bare when it is an identifier, quoted when it is not. */
 const asKey = (key: string) => (/^[A-Za-z_$][\w$]*$/.test(key) ? key : `'${key.replaceAll("'", "\\'")}'`)
 
-/** Edits turning `a` into `b`: an insertion, a deletion, a substitution, or two neighbours swapped. */
-const editDistance = (a: string, b: string) => {
-  let beforePrevious: number[] = []
-  let previous = Array.from({ length: b.length + 1 }, (_, index) => index)
-  for (let i = 1; i <= a.length; i++) {
-    const current = [i]
-    for (let j = 1; j <= b.length; j++) {
-      let distance = Math.min(previous[j]! + 1, current[j - 1]! + 1, previous[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1))
-      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
-        distance = Math.min(distance, beforePrevious[j - 2]! + 1)
-      }
-      current.push(distance)
-    }
-    beforePrevious = previous
-    previous = current
-  }
-  return previous[b.length]!
-}
-
-/**
- * The condition `key` is a typo of: one edit away for every four characters, and always one.
- * A tie goes to the condition declared first.
- */
-const nearestCondition = (conditions: string[], key: string) => {
-  let nearest: string | undefined
-  let distance = Math.max(1, Math.floor(key.length / 4)) + 1
-  for (const condition of conditions) {
-    if (Math.abs(condition.length - key.length) >= distance) continue
-    const edits = editDistance(key, condition)
-    if (edits < distance) {
-      nearest = condition
-      distance = edits
-    }
-  }
-  return nearest
-}
-
 /**
  * What `key` was probably meant to be, written as it would be in source.
  *
@@ -87,7 +51,8 @@ const suggest = (ctx: Context, key: string, next: string | undefined) => {
     const argument = next !== undefined && !conditions.isCondition(next) && !ctx.isValidProperty(next) ? next : '…'
     return asKey(`&:${key}(${argument})`)
   }
-  const nearest = nearestCondition(conditions.keys(), key)
+  // A tie goes to the condition declared first.
+  const nearest = closestMatch(key, conditions.keys())
   if (nearest) return asKey(nearest)
   if (SELECTOR.test(key) && !ctx.isValidProperty(key)) return asKey(`& ${key}`)
   return undefined

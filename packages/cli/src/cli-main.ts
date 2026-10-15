@@ -16,9 +16,10 @@ import {
   startProfiling,
   type CssGenOptions,
 } from '@bamboocss/node'
-import { BambooError, compact } from '@bamboocss/shared'
+import { BambooError, closestMatch, compact } from '@bamboocss/shared'
 import type { Config, CssArtifactType } from '@bamboocss/types'
 import { cac } from 'cac'
+import { existsSync } from 'node:fs'
 import { join, resolve } from 'path'
 import { version } from '../package.json'
 import type {
@@ -63,6 +64,32 @@ const normalizeStrictTokens = (value: unknown): Config['strictValues'] | undefin
     'CONFIG_ERROR',
     `\`--strict-values ${named}\` is not a setting. Pass it bare to require every value to be a token.`,
   )
+}
+
+/**
+ * Refuse a word one slip from a command, and naming nothing on disk — `bamboo codgen`.
+ *
+ * The default command reads its arguments as `include` globs, so a mistyped command matched no
+ * files, built a stylesheet from nothing over the real one, and exited 0. `generate` refuses any
+ * glob matching nothing; this answers the one case it can say more about, the command meant.
+ * Watching or not, as the typo is a typo either way. A word near no command — `bamboo doctor` —
+ * is left to `generate`, which watching lets wait for the files to appear.
+ */
+const assertKnownCommand = (files: string[], cwd: string, commands: string[]) => {
+  for (const file of files) {
+    if (!/^[a-z][\w-]*$/i.test(file) || existsSync(resolve(cwd, file))) continue
+
+    const suggestion = closestMatch(file.toLowerCase(), commands)
+    if (!suggestion) continue
+
+    throw new BambooError(
+      'UNKNOWN_COMMAND',
+      `\`bamboo ${file}\` is not a command; did you mean \`bamboo ${suggestion}\`?`,
+      {
+        hint: 'Run `bamboo --help` for the list of commands.',
+      },
+    )
+  }
 }
 
 export async function main() {
@@ -293,7 +320,9 @@ export async function main() {
     })
 
   cli
-    .command('[files]', 'Include file glob', { ignoreOptionDefaultValue: true })
+    // Every word, for a glob the shell expanded: `[files]` took the first file of `src/*.tsx`
+    // and built the stylesheet from it alone, dropping the rest without a word.
+    .command('[...files]', 'Include file globs', { ignoreOptionDefaultValue: true })
     .option('-o, --outdir <dir>', 'Output directory', { default: 'styled-system' })
     .option('-m, --minify', 'Minify generated code')
     .option('-w, --watch', 'Watch files and rebuild')
@@ -312,6 +341,9 @@ export async function main() {
       const { config: configPath, silent, ...rest } = flags
 
       const cwd = resolve(flags.cwd ?? '')
+      const commands = cli.commands.map((command) => command.name).filter(Boolean)
+      assertKnownCommand(files, cwd, commands)
+
       const stream = setLogStream({ cwd, logfile: flags.logfile })
 
       let stopProfiling: Function = () => void 0
@@ -323,8 +355,8 @@ export async function main() {
         logger.level = 'silent'
       }
 
-      const config = compact({ include: files, ...rest, cwd })
-      await generate(config, configPath)
+      const config = compact({ include: files.length ? files : undefined, ...rest, cwd })
+      await generate(config, configPath, { requireFiles: files.length > 0 })
 
       stopProfiling()
 

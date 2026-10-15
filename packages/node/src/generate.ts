@@ -1,5 +1,8 @@
 import { logger } from '@bamboocss/logger'
+import { BambooError } from '@bamboocss/shared'
 import type { ArtifactId, Config } from '@bamboocss/types'
+import { statSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { assembleExtractedSheet } from './assemble-sheet'
 import { codegen } from './codegen'
 import { loadConfigAndCreateContext } from './config'
@@ -34,10 +37,48 @@ async function build(ctx: BambooContext, sourceScanCache?: SourceScanCache, arti
   done(ctx.messages.buildComplete(parsed.files.length))
 }
 
-export async function generate(config: Config, configPath?: string) {
+export interface GenerateOptions {
+  /**
+   * Refuse to build when `include` matches no files, instead of writing an empty stylesheet over
+   * the one already there.
+   *
+   * For globs a person just typed, where matching nothing is a mistake — `bamboo ./codgen`,
+   * `bamboo 'src/*.tsxx'` — and not a config's own, which a new project has nothing under yet.
+   * Watching, where the files may be about to appear, only a directory is refused: a glob matches
+   * files, so nothing appearing under it ever matches it.
+   */
+  requireFiles?: boolean
+}
+
+/** Refuse an `include` matching no files — see `GenerateOptions.requireFiles`. */
+function assertFilesMatched(ctx: BambooContext) {
+  const { include, exclude, cwd, watch } = ctx.config
+  // `bamboo src` reads as building from the directory.
+  const directory = include.find((glob) => statSync(resolve(cwd, glob), { throwIfNoEntry: false })?.isDirectory())
+  if ((watch && directory === undefined) || ctx.getFiles().length) return
+
+  const name = directory?.replace(/(.)[\\/]+$/, '$1')
+  throw new BambooError(
+    'NOT_FOUND',
+    `${include.map((glob) => `\`${glob}\``).join(', ')} match${include.length === 1 ? 'es' : ''} no files, so ` +
+      `nothing was built, and the stylesheet was left as it was.`,
+    {
+      hint:
+        name !== undefined
+          ? `\`${name}\` is a directory, and a glob matches files: write one for the files in it, like \`${name}/**/*.tsx\`.`
+          : `Globs are read from ${cwd}${exclude?.length ? ', less what `exclude` takes out' : ''}. Run ` +
+            `\`bamboo --help\` if you meant a command.`,
+    },
+  )
+}
+
+export async function generate(config: Config, configPath?: string, options: GenerateOptions = {}) {
   let ctx = await loadConfigAndCreateContext({ config, configPath })
   const sourceScanCache = createSourceScanCache()
   const { cwd, watch, poll } = ctx.config
+
+  if (options.requireFiles && !ctx.config.emitTokensOnly) assertFilesMatched(ctx)
+
   await build(ctx, watch ? sourceScanCache : undefined)
 
   if (watch) {

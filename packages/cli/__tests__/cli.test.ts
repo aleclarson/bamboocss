@@ -1,10 +1,10 @@
-import { execSync } from 'node:child_process'
+import { execSync, spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, symlinkSync, writeFileSync } from 'node:fs'
 import fs from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { afterAll, describe, expect, test } from 'vitest'
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 // Helper to run command and capture output even if it fails
 function runCommand(cmd: string, options: any) {
@@ -172,6 +172,84 @@ describe('CLI', () => {
     // Check that the `styled-system/styles.css` was created
     const stylesCssExists = await fs.access(path.resolve(paths.styledSystem, 'styles.css'))
     expect(stylesCssExists).toBeUndefined()
+  })
+
+  /**
+   * The default command reads its arguments as `include` globs, so a mistyped or never-defined
+   * command used to match no files, build a stylesheet from nothing over the real one, and exit 0.
+   * So did any glob or path matching nothing, and a glob the shell expanded built from its first
+   * file alone.
+   *
+   * The sheet is built from real styles first, which is what makes "left alone" mean anything:
+   * built from nothing, it is the same sheet a build from nothing would write.
+   */
+  describe('an argument naming nothing to build from', () => {
+    const stylesheet = path.resolve(paths.styledSystem, 'styles.css')
+    const sources = {
+      red: path.resolve(testsCwd, 'src/unknown-command-red.tsx'),
+      blue: path.resolve(testsCwd, 'src/unknown-command-blue.tsx'),
+    }
+    const run = (args: string) => {
+      const { status, stdout, stderr } = spawnSync(`node ${binPath} ${args} --cwd="${testsCwd}"`, {
+        cwd: testsCwd,
+        shell: true,
+        encoding: 'utf8',
+        env: { ...process.env, NO_COLOR: '1' },
+      })
+      return { status, output: stdout + stderr }
+    }
+
+    beforeAll(async () => {
+      await fs.mkdir(path.dirname(sources.red), { recursive: true })
+      for (const [color, source] of Object.entries(sources)) {
+        await fs.writeFile(
+          source,
+          `import { css } from '../styled-system/css'\nexport const a = css({ color: '${color}.300' })\n`,
+        )
+      }
+
+      expect(run('')).toMatchObject({ status: 0, output: expect.stringContaining('Successfully extracted css') })
+      const sheet = await fs.readFile(stylesheet, 'utf8')
+      expect(sheet).toContain('color: var(--colors-red-300)')
+      expect(sheet).toContain('color: var(--colors-blue-300)')
+    })
+
+    afterAll(async () => {
+      for (const source of Object.values(sources)) await fs.rm(source, { force: true })
+    })
+
+    test.each([
+      ['codgen', '`bamboo codgen` is not a command; did you mean `bamboo codegen`?'],
+      ['doctor', '`doctor` matches no files, so nothing was built, and the stylesheet was left as it was.'],
+      ['./codgen', '`./codgen` matches no files'],
+      [`'src/*.tsxx'`, '`src/*.tsxx` matches no files'],
+      // A glob matches files, so a directory alone matches nothing.
+      ['src', '`src` is a directory, and a glob matches files: write one for the files in it, like `src/**/*.tsx`.'],
+      ['src/', 'like `src/**/*.tsx`.'],
+    ])('`bamboo %s` is refused, and leaves the sheet alone', async (args, message) => {
+      const before = await fs.readFile(stylesheet, 'utf8')
+      const result = run(args)
+
+      expect(result.status).toBe(1)
+      expect(result.output).toContain(message)
+      expect(await fs.readFile(stylesheet, 'utf8')).toBe(before)
+    })
+
+    test('a glob builds from every file it matches, quoted or expanded by the shell', async () => {
+      for (const glob of [`'src/unknown-command-*.tsx'`, 'src/unknown-command-*.tsx']) {
+        expect(run(glob)).toMatchObject({ status: 0, output: expect.stringContaining('Successfully extracted css') })
+        const sheet = await fs.readFile(stylesheet, 'utf8')
+        expect(sheet).toContain('color: var(--colors-red-300)')
+        expect(sheet).toContain('color: var(--colors-blue-300)')
+      }
+    })
+
+    test('a glob builds from what it matches, and nothing else', async () => {
+      expect(run(`'src/unknown-command-red.tsx'`)).toMatchObject({ status: 0 })
+      const sheet = await fs.readFile(stylesheet, 'utf8')
+      expect(sheet).toContain('color: var(--colors-red-300)')
+      expect(sheet).not.toContain('color: var(--colors-blue-300)')
+    })
   })
 
   test('debug', async () => {
