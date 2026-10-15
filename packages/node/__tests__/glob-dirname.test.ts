@@ -88,6 +88,13 @@ describe('globDirname', () => {
     expect(dir('{foo,bar\\}/')).toMatchInlineSnapshot(`"."`)
   })
 
+  // A watcher given these watches only what they name, so a pattern starting at `.` has to name
+  // it even beside one that names a folder of its own.
+  test('names `.` for a pattern starting there, beside the folders others name', () => {
+    expect(globDirname(['**/*.tsx', '../shared/**/*.tsx'])).toEqual(['.', '../shared'])
+    expect(globDirname(['src/**', '{a,b}/*.ts'])).toEqual(['src', '.'])
+  })
+
   test('should handle glob patterns with braces', () => {
     expect(dir('js/t(wo|est)/*.js')).toMatchInlineSnapshot(`"js"`)
     expect(dir('js/t/(wo|est)/*.js')).toMatchInlineSnapshot(`"js/t"`)

@@ -1,10 +1,11 @@
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { Builder } from '@bamboocss/node'
 import * as bambooConfig from '@bamboocss/config'
 import { esc } from '@bamboocss/shared'
-import { describe, expect, test, vi } from 'vitest'
+import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { asError, bamboocssCss, bamboocssCssEarly, VIRTUAL_CSS_ID } from '../src/css'
 import { optimizeStaticCssAssets } from '../src/css-output-module'
 import { createLazyCssOutputModule } from '../src/lazy-modules'
@@ -122,6 +123,7 @@ describe('the virtual stylesheet', () => {
             invalidateModule() {},
           },
           reloadModule: (mod: { id: string }) => void reloaded.push(mod.id),
+          config: { root: cwd },
           watcher: { on: (event: string, listener: (file: string) => void) => listeners.set(event, listener) },
         } as never,
       )
@@ -369,6 +371,7 @@ describe('the virtual stylesheet', () => {
             invalidateModule: () => {},
           },
           reloadModule: () => {},
+          config: { root: cwd },
           watcher: { on: (event: string, listener: (file: string) => void) => listeners.set(event, listener) },
         } as never,
       )
@@ -426,6 +429,7 @@ describe('the virtual stylesheet', () => {
           invalidateModule: () => {},
         },
         reloadModule: (mod: { id: string }) => void reloaded.push(mod.id),
+        config: { root: cwd },
         watcher: { on: (event: string, listener: (file: string) => void) => listeners.set(event, listener) },
       } as never,
     )
@@ -480,6 +484,7 @@ describe('the virtual stylesheet', () => {
           invalidateModule: () => {},
         },
         reloadModule: (mod: { id: string }) => void reloaded.push(mod.id),
+        config: { root: cwd },
         watcher: { on: (event: string, listener: (file: string) => void) => listeners.set(event, listener) },
       } as never,
     )
@@ -508,7 +513,7 @@ describe('the virtual stylesheet', () => {
       hookOf(plugin.configureServer)!.call(
         {} as never,
         {
-          config,
+          config: { ...config, root: cwd },
           environments: { client: { moduleGraph: { getModulesByFile: () => undefined } } },
           moduleGraph: { getModuleById: () => undefined, getModulesByFile: () => undefined, invalidateModule() {} },
           reloadModule() {},
@@ -580,6 +585,73 @@ describe('the virtual stylesheet', () => {
     } finally {
       rmSync(fixtureDir, { recursive: true, force: true })
     }
+  }, 60_000)
+})
+
+/**
+ * The folders `include` reaches outside the dev server's root, which Vite would not watch: a file
+ * added there has to raise an `add` to reach the sheet.
+ */
+describe('the folders a dev server watches beyond its root', () => {
+  test('are each handed once to every watcher, where they really lie outside', async () => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'bamboo-vite-watch-')))
+    onTestFinished(() => rmSync(root, { force: true, recursive: true }))
+    const app = join(root, 'app')
+    const link = process.platform === 'win32' ? 'junction' : 'dir'
+    mkdirSync(join(app, 'src'), { recursive: true })
+    mkdirSync(join(root, 'shared'), { recursive: true })
+    mkdirSync(join(root, 'elsewhere'), { recursive: true })
+    // Inside the root as written, so Vite's own watch follows it there.
+    symlinkSync(join(root, 'elsewhere'), join(app, 'src/linked'), link)
+    writeFileSync(
+      join(app, 'bamboo.config.ts'),
+      `export default { include: ${JSON.stringify(['src/**/*.tsx', 'src/linked/**/*.tsx', '../shared/**/*.tsx', '../later/**/*.tsx'])}, outdir: 'styled-system', preflight: false }\n`,
+    )
+    const source = join(app, 'src/app.tsx')
+    writeFileSync(
+      source,
+      `import { css } from '../styled-system/css'\nexport const app = css({ width: '[742.1px]' })\n`,
+    )
+    // The root as Vite was handed it, through a link: `src` is inside it all the same.
+    const linkedRoot = join(root, 'linked-app')
+    symlinkSync(app, linkedRoot, link)
+
+    const plugin = bamboocssCss({ cwd: app, session: createStaticCompilationSession() })
+    await hookOf(plugin.configResolved)?.call({} as never, { build: { sourcemap: false }, command: 'serve' } as never)
+    const resolved = hookOf(plugin.resolveId)!.call({} as never, VIRTUAL_CSS_ID, undefined, {} as never) as string
+    const serve = () => {
+      const added: string[] = []
+      const listeners = new Map<string, (file: string) => void>()
+      hookOf(plugin.configureServer)!.call(
+        {} as never,
+        {
+          config: { root: linkedRoot },
+          environments: { client: { moduleGraph: { getModulesByFile: () => undefined } } },
+          moduleGraph: { getModuleById: () => undefined, getModulesByFile: () => undefined, invalidateModule() {} },
+          reloadModule() {},
+          watcher: {
+            add: (path: string) => void added.push(path),
+            on: (event: string, listener: (file: string) => void) => listeners.set(event, listener),
+          },
+        } as never,
+      )
+      // An edit to a file the sheet was built from, so the next load is a pass of its own.
+      return { added, edit: () => listeners.get('change')!(source) }
+    }
+    const pass = () => hookOf(plugin.load)!.call({ addWatchFile() {} } as never, resolved, undefined as never)
+
+    const first = serve()
+    await pass()
+    // `../later` is not there yet: the watcher looks out for it.
+    expect(first.added).toEqual([join(root, 'shared'), join(root, 'later')])
+
+    first.edit()
+    await pass()
+    expect(first.added, 'once each').toHaveLength(2)
+
+    // A restart's new watcher, given them as it is configured: it may serve the sheet it remembers
+    // without a pass.
+    expect(serve().added).toEqual([join(root, 'shared'), join(root, 'later')])
   }, 60_000)
 })
 

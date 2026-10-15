@@ -1,4 +1,5 @@
-import { dirname, resolve } from 'node:path'
+import { realpathSync } from 'node:fs'
+import { dirname, isAbsolute, relative, resolve, sep } from 'node:path'
 import type { AtomOrigin } from '@bamboocss/core'
 import { logger } from '@bamboocss/logger'
 import { esc, truncateList } from '@bamboocss/shared'
@@ -418,6 +419,21 @@ export const bamboocssCssEarly = (options: { session: StaticCompilationSession; 
   },
 })
 
+/** Where a path really is, or the path itself when there is nothing there to resolve. */
+const realPath = (path: string) => {
+  try {
+    return realpathSync.native(path)
+  } catch {
+    return path
+  }
+}
+
+/** Whether `path` is `root` or inside it. */
+const within = (root: string, path: string) => {
+  const fromRoot = relative(root, path)
+  return fromRoot !== '..' && !fromRoot.startsWith(`..${sep}`) && !isAbsolute(fromRoot)
+}
+
 /**
  * Serve bamboo's stylesheet as a virtual module, in dev and in build.
  *
@@ -465,6 +481,47 @@ export const bamboocssCss = (options: BambooCssPluginOptions): Plugin => {
   }
 
   /**
+   * The folders `include` and `dependencies` reach outside the dev server's root, added to its
+   * watcher.
+   *
+   * Vite watches its root, and a file outside it only once something has loaded it — the sheet
+   * registers every file it was built from, so an edit to one is seen. A file *added* outside it, a
+   * new component in a workspace package `include` names as `../ui/src/**`, is one nothing has
+   * loaded, in a folder nothing watched: no `add` reached the watcher in `configureServer`, the
+   * inventory was never reconciled, and the sheet went on without the file until the server
+   * restarted.
+   *
+   * Asked as each pass begins — just after it has globbed them, so a file landing in the moment
+   * between is left to the next — since a config reload can move `include`, and as a restarted
+   * server is configured, since its watcher is new and may serve the sheet it remembers without a
+   * pass. A folder is handed to each watcher once, whether or not it is there yet: the watcher
+   * looks for one that is not, and for one deleted and made again, as a package's `dist` is. One a
+   * reload no longer names stays watched, its events turned away like any other file's, since
+   * unwatching it would also unwatch the modules Vite watches inside it.
+   *
+   * Outside means outside the root however either is spelled: Vite's own watch follows a link
+   * inside the root, and a root handed over through a link still holds its real folders. An
+   * `include` above the root — `../**` — watches the folder above, which is what it asks to be read.
+   */
+  const watchedDirectories = new WeakMap<object, { root: string; added: Set<string> }>()
+  const watchOutsideRoot = (devServer: ViteDevServer, activeBuilder: CompilationBuilder) => {
+    let watched = watchedDirectories.get(devServer.watcher)
+    if (!watched) {
+      watched = { root: realPath(devServer.config.root), added: new Set() }
+      watchedDirectories.set(devServer.watcher, watched)
+    }
+    for (const directory of activeBuilder.getWatchDirectories()) {
+      if (watched.added.has(directory)) continue
+      watched.added.add(directory)
+      const watchedByVite =
+        within(devServer.config.root, directory) ||
+        within(watched.root, directory) ||
+        within(watched.root, realPath(directory))
+      if (!watchedByVite) devServer.watcher.add(directory)
+    }
+  }
+
+  /**
    * Serialised, because both `load` and the watcher can reach it and `Builder` keeps one
    * context. Two overlapping passes would extract into the same encoder and emit the
    * stylesheet twice over.
@@ -509,6 +566,7 @@ export const bamboocssCss = (options: BambooCssPluginOptions): Plugin => {
   const build = () =>
     host.runCssPass(async (activeBuilder) => {
       builder = activeBuilder
+      if (server && activeBuilder.context) watchOutsideRoot(server, activeBuilder)
 
       // Writes the `styled-system` artifacts, which is what lets this plugin be a project's
       // only codegen. On the first pass it writes all of them; afterwards only what a config
@@ -880,6 +938,7 @@ export const bamboocssCss = (options: BambooCssPluginOptions): Plugin => {
 
     configureServer(devServer) {
       server = devServer
+      if (builder?.context) watchOutsideRoot(devServer, builder)
 
       /**
        * The graph the stylesheet's own module lives in, which is the one that has to reach it.

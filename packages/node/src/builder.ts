@@ -9,6 +9,7 @@ import { codegen } from './codegen'
 import { loadConfigAndCreateContext } from './config'
 import { BambooContext } from './create-context'
 import { assembleExtractedSheet } from './assemble-sheet'
+import { globDirname } from './glob-dirname'
 import { globIgnore } from './node-runtime'
 import { createSourceScanCache, recordResolvedTokenReferences } from './token-references'
 
@@ -174,6 +175,30 @@ export class Builder {
 
   /** @internal The inventory reconciled by the most recent extraction pass. */
   getSourceFiles = (): readonly string[] => Object.freeze([...(this.sourceInventory ?? [])])
+
+  /** The folders each context's patterns are globbed from. @see getWatchDirectories */
+  private watchDirectories = new WeakMap<BambooContext, readonly string[]>()
+
+  /**
+   * @internal The folders `include` and `dependencies` are globbed from, absolute: where a file
+   * appearing can change the stylesheet, and so what a watcher has to watch for it to be seen.
+   */
+  getWatchDirectories = (): readonly string[] => {
+    const ctx = this.getContextOrThrow()
+    let directories = this.watchDirectories.get(ctx)
+    if (!directories) {
+      const { cwd, dependencies, include } = ctx.config
+      // A negation reads nothing, so it names no folder; `!(legacy)/**` is no negation, but a glob.
+      const patterns = [...(include ?? []), ...(dependencies ?? [])].filter(
+        (pattern) => !picomatch.scan(pattern).negated,
+      )
+      directories = Object.freeze(
+        patterns.length ? uniq(globDirname(patterns).map((directory) => resolve(cwd, directory))) : [],
+      )
+      this.watchDirectories.set(ctx, directories)
+    }
+    return directories
+  }
 
   /** The compiled `include`/`exclude` matcher of each context, since the compiler asks per module. */
   private sourceMatchers = new WeakMap<BambooContext, ((path: string) => boolean) | undefined>()

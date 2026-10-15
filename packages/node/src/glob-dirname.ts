@@ -11,9 +11,9 @@ export function globDirname(globs: string[]) {
       continue
     }
     const nonGlobTokens = scan.tokens?.filter((token: any) => !token.isPrefix && !token.isGlob)
-    if (nonGlobTokens?.length) {
-      rootDirs.add(join(...nonGlobTokens.map((token: any) => token.value)))
-    }
+    // A pattern with no folder before its first glob — `**/*.tsx` — is walked from `.`, beside
+    // whatever folders the others name, not only when none of them names one.
+    rootDirs.add(nonGlobTokens?.length ? join(...nonGlobTokens.map((token: any) => token.value)) : '.')
   }
 
   if (rootDirs.size === 0) {

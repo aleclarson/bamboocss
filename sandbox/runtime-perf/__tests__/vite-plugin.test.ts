@@ -1,4 +1,14 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  realpathSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { logger } from '@bamboocss/logger'
@@ -7,7 +17,7 @@ import bamboocss from '@bamboocss/vite'
 import { build, createBuilder as createVite7Builder, createServer, type Plugin as VitePlugin, type Rollup } from 'vite'
 import { TraceMap, originalPositionFor } from '@jridgewell/trace-mapping'
 import { build as buildVite8, createBuilder, createServer as createVite8Server, type Plugin } from 'vite8'
-import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, onTestFinished, test, vi } from 'vitest'
 import { cascadeOrder } from '../../../packages/core/__tests__/cascade-oracle'
 
 /**
@@ -3905,6 +3915,76 @@ describe('the stylesheet requested before its importer', () => {
         } while (!code.includes('w_\\\\[731\\\\.2px\\\\]') && Date.now() < deadline)
 
         expect(code, 'the edit never reached the stylesheet').toContain('w_\\\\[731\\\\.2px\\\\]')
+      } finally {
+        await server.close()
+      }
+    }, 120_000)
+  }
+})
+
+/**
+ * A file added under an `include` outside the dev server's root.
+ *
+ * Vite watches its root, and a file outside it only once something has loaded it — the stylesheet
+ * registers every file it was built from, so an edit to one was always seen. A file *added* there,
+ * a new component in a workspace package `include` names as `../shared/**`, had nothing watching
+ * its folder: no `add` reached the plugin, the inventory was never reconciled, and the stylesheet
+ * went on without the file until the server restarted.
+ */
+describe('a file added under an include outside the root', () => {
+  const cases: Array<[string, typeof createServer, number]> = [
+    ['Vite 7', createServer, 24797],
+    ['Vite 8', createVite8Server as unknown as typeof createServer, 24798],
+  ]
+
+  for (const [label, createDevServer, port] of cases) {
+    test(`${label} reaches the dev stylesheet`, async () => {
+      const root = realpathSync(mkdtempSync(join(tmpdir(), 'bamboo-outside-root-')))
+      onTestFinished(() => rmSync(root, { force: true, recursive: true }))
+      const app = join(root, 'app')
+      const shared = join(root, 'shared')
+      mkdirSync(join(app, 'src'), { recursive: true })
+      mkdirSync(shared, { recursive: true })
+      writeFileSync(
+        // CommonJS once bundled, so it is compiled in place rather than imported from a temporary file.
+        join(app, 'bamboo.config.ts'),
+        `export default { include: ['src/**/*.tsx', '../shared/**/*.tsx'], outdir: 'styled-system', preflight: false }\n`,
+      )
+      writeFileSync(
+        join(app, 'src/app.tsx'),
+        `import { css } from '../styled-system/css'\nexport const app = css({ width: '[741.1px]' })\n`,
+      )
+
+      const server = await createDevServer({
+        root: app,
+        configFile: false,
+        logLevel: 'silent',
+        css: { postcss: { plugins: [] } },
+        plugins: [bamboocss({ cwd: app, reportSummary: false }) as never],
+        server: { middlewareMode: true, hmr: { port } },
+      })
+      const sheet = async () => (await server.environments.client.transformRequest('virtual:bamboo.css'))?.code ?? ''
+
+      try {
+        expect(await sheet()).toContain('w_\\\\[741\\\\.1px\\\\]')
+        // The watcher has the folder: what appears in it can be seen.
+        await vi.waitFor(() => expect(server.watcher.getWatched()).toHaveProperty([shared]), { timeout: 10_000 })
+
+        // A fresh file each second until one is seen, since the watcher lists a folder before it
+        // listens to it and a file landing between the two raises no `add` — a window a loaded
+        // machine leaves wide enough to write into. Each is a new addition, so none can be seen
+        // unless the folder is watched. Polled with a macrotask between reads, as Vite 8 answers a
+        // cached module without leaving the microtask queue.
+        const card = `import { css } from '../app/styled-system/css'\nexport const card = css({ width: '[741.2px]' })\n`
+        const deadline = Date.now() + 20_000
+        let code = ''
+        for (let poll = 0; !code.includes('w_\\\\[741\\\\.2px\\\\]') && Date.now() < deadline; poll++) {
+          if (poll % 20 === 0) writeFileSync(join(shared, `card-${poll}.tsx`), card)
+          await new Promise((resolve) => setTimeout(resolve, 50))
+          code = await sheet()
+        }
+
+        expect(code, 'no added file ever reached the stylesheet').toContain('w_\\\\[741\\\\.2px\\\\]')
       } finally {
         await server.close()
       }
