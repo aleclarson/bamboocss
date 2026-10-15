@@ -133,6 +133,54 @@ export const mixed${index} = (tone) => recipe${index}({ tone, size: 'lg' })
 ).join('')}
 `
 
+/**
+ * A module whose styles come from helpers the evaluator has to call, which nothing else here
+ * does — the others call only `css` and patterns, which are not run — and the same styles
+ * written out, as its control.
+ *
+ * Every helper call goes through the guard that refuses a recursion the build cannot see the end
+ * of: it compares the call with those of the same helper already running before following it. So
+ * it costs per call, and more the deeper a recursion runs. `layer` passes a theme down sixteen
+ * levels, and only the arguments' fingerprint keeps that theme from being compared in full at
+ * every level, against every level above it. The gap between the two is what calling the helpers
+ * costs, the guard included.
+ */
+const TONES = ['red.300', 'blue.500', 'gray.700']
+const LAYERS = 16
+
+const HELPER_MODULE = `
+import { css } from 'styled-system/css'
+
+const theme = { space: { sm: '1', md: '2', lg: '4' }, tone: { info: 'blue.500', warn: 'red.300' } }
+const space = (step) => ({ padding: step, margin: step })
+const tone = (color, strong) => ({ color, fontWeight: strong ? 'bold' : 'normal' })
+const card = (color, step) => ({ ...space(step), ...tone(color, true), borderRadius: 'md' })
+const layer = (t, depth) => (depth > 0 ? { '& > div': layer(t, depth - 1), padding: t.space.md } : { color: t.tone.info })
+
+${Array.from(
+  { length: 12 },
+  (_, index) => `
+export const card${index} = css(card('${TONES[index % 3]}', '${index % 4}'))
+export const layered${index} = css(layer(theme, ${LAYERS}))
+`,
+).join('')}
+`
+
+const layered = (depth: number): string =>
+  depth > 0 ? `{ '& > div': ${layered(depth - 1)}, padding: '2' }` : `{ color: 'blue.500' }`
+
+const WRITTEN_OUT_MODULE = `
+import { css } from 'styled-system/css'
+
+${Array.from(
+  { length: 12 },
+  (_, index) => `
+export const card${index} = css({ padding: '${index % 4}', margin: '${index % 4}', color: '${TONES[index % 3]}', fontWeight: 'bold', borderRadius: 'md' })
+export const layered${index} = css(${layered(LAYERS)})
+`,
+).join('')}
+`
+
 const ctx = createContext()
 const runtimeCss = createRuntimeCss(ctx)
 const styleCompiler = createStaticStyleSetCompiler(ctx, runtimeCss)
@@ -216,6 +264,15 @@ describe('per-module transform cost', () => {
 
   bench('analyze + fold, names cold (recipe module)', () => {
     parseAndFoldCold(RECIPE_MODULE)
+  })
+
+  // The control for the one below: the same styles, with no helper to call.
+  bench('analyze only (helper module, written out)', () => {
+    parseOnly(WRITTEN_OUT_MODULE)
+  })
+
+  bench('analyze only (helper module)', () => {
+    parseOnly(HELPER_MODULE)
   })
 
   for (const { file, code } of SANDBOX_FILES) {

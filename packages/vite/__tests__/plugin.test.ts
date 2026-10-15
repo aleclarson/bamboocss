@@ -259,6 +259,33 @@ describe('a refusal, as the error says it', () => {
     )
   })
 
+  test('a recursion on what it is already running with, at the helper', () => {
+    expect(describeRefusal({ ...statement('loop', 'nest'), kind: 'recursion' }, root)).toBe(
+      '`nest` at src/theme.ts:4:3 calls itself with arguments the build cannot tell apart from the ones it is ' +
+        'already running with, so the compiler cannot see the recursion end',
+    )
+  })
+
+  // Not "never reaches its base case": one that would end, deeper than the limit, is refused too.
+  test('a recursion nested too deep', () => {
+    expect(describeRefusal({ ...statement('depth', 'deeper'), kind: 'recursion' }, root)).toBe(
+      '`deeper` at src/theme.ts:4:3 recurses more deeply than the compiler follows',
+    )
+  })
+
+  test('a recursion that makes too many calls, in a function with no name', () => {
+    expect(describeRefusal({ ...statement('calls'), kind: 'recursion' }, root)).toBe(
+      'a function at src/theme.ts:4:3 makes more helper calls than the compiler follows for one value',
+    )
+  })
+
+  test('a recursion through another module', () => {
+    expect(describeRefusal({ ...statement('module', 'a'), kind: 'recursion' }, root)).toBe(
+      '`a` at src/theme.ts:4:3 is called again through another module while it runs, which the compiler does not ' +
+        'follow',
+    )
+  })
+
   test('outside the project, where it is in full', () => {
     expect(describeRefusal({ ...statement('switch', 'tone'), filePath: '/elsewhere/theme.ts' }, root)).toBe(
       '`tone` uses a `switch` statement at /elsewhere/theme.ts:4:3, which the compiler does not run',

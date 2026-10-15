@@ -309,6 +309,22 @@ export const describeRefusal = (refusal: FoldRefusal, root: string) => {
       `longer holds the value it was declared with`
     )
   }
+  if (refusal.kind === 'recursion') {
+    const called = `${refusal.helper ? `\`${refusal.helper}\`` : 'a function'} at ${at}`
+    if (refusal.subject === 'loop') {
+      return (
+        `${called} calls itself with arguments the build cannot tell apart from the ones it is already running ` +
+        `with, so the compiler cannot see the recursion end`
+      )
+    }
+    if (refusal.subject === 'module') {
+      return `${called} is called again through another module while it runs, which the compiler does not follow`
+    }
+    // Whether it would have ended is not something the limit can say, so the message does not either.
+    return refusal.subject === 'calls'
+      ? `${called} makes more helper calls than the compiler follows for one value`
+      : `${called} recurses more deeply than the compiler follows`
+  }
   const helper = refusal.helper ? `\`${refusal.helper}\`` : 'a function it calls'
   if (refusal.subject === 'expression') {
     return `${helper} runs \`${refusal.excerpt}\` for its effect at ${at}, which the compiler does not run`

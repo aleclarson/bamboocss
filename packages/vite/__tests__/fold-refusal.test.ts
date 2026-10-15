@@ -141,6 +141,252 @@ describe('a refused call says why', () => {
   })
 })
 
+/**
+ * A recursion the evaluator cannot see the end of.
+ *
+ * On a value the build cannot read — `nest(props.depth)` — a recursive helper never reaches its
+ * base case. Following it overflowed the native stack: the process died, dev server and all, with
+ * no message. It is refused now, like any other code the evaluator will not run.
+ */
+describe('a recursion with no end the build can see', () => {
+  test('on a value the build cannot read, at once, naming the helper', () => {
+    // `d - 1` is as unknown as `d`, so the next call is the one already running over again.
+    const refusal = refusalOf(
+      withImport(
+        `const nest = (d) => (d > 0 ? { '& > div': nest(d - 1), color: 'red.300' } : {})\n` +
+          `export const f = (props) => css(nest(props.depth))`,
+      ),
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'loop', helper: 'nest', line: 2, column: 14 })
+  })
+
+  test('branching, as surely', () => {
+    const refusal = refusalOf(
+      withImport(
+        `const tree = (d) => (d > 0 ? { '& > a': tree(d - 1), '& > b': tree(d - 1) } : {})\n` +
+          `export const f = (props) => css(tree(props.depth))`,
+      ),
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'loop', helper: 'tree' })
+  })
+
+  test('on arguments that never change, known or not', () => {
+    const refusal = refusalOf(withImport(`const again = (d) => ({ color: again(d) })\nexport const A = css(again(1))`))
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'loop', helper: 'again' })
+  })
+
+  test('through a second helper', () => {
+    const refusal = refusalOf(
+      withImport(
+        `const a = (d) => ({ '& > div': b(d - 1) })\nconst b = (d) => a(d)\n` +
+          `export const f = (props) => css(a(props.depth))`,
+      ),
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'loop', helper: 'a' })
+  })
+
+  test('through another module', () => {
+    const refusal = refusalOf(
+      `import { css } from 'styled-system/css'\nimport { nest } from './nest'\nexport const f = (props) => css(nest(props.depth))\n`,
+      'app/use.tsx',
+      { 'app/nest.ts': `export const nest = (d) => (d > 0 ? { '& > div': nest(d - 1) } : { color: 'red.300' })\n` },
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'loop', helper: 'nest' })
+    expect(refusal?.filePath).toMatch(/app\/nest\.ts$/)
+  })
+
+  test('between modules, at the helper called again', () => {
+    // Each call into another module parses it afresh, so the call running is not one to compare
+    // against: the second call into `a` is refused, whatever its arguments.
+    const refusal = refusalOf(
+      `import { css } from 'styled-system/css'\nimport { a } from './a'\nexport const f = (props) => css(a(props.depth))\n`,
+      'app/use.tsx',
+      {
+        'app/a.ts': `import { b } from './b'\nexport const a = (d) => ({ '& > div': b(d - 1) })\n`,
+        'app/b.ts': `import { a } from './a'\nexport const b = (d) => a(d)\n`,
+      },
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'module', helper: 'a', line: 2, column: 18 })
+    expect(refusal?.filePath).toMatch(/app\/a\.ts$/)
+  })
+
+  test('between modules, at the function however its export is written', () => {
+    const refusal = refusalOf(
+      `import { css } from 'styled-system/css'\nimport { a } from './a'\nexport const f = (props) => css(a(props.depth))\n`,
+      'app/use.tsx',
+      {
+        'app/a.ts': `import { b } from './b'\nconst a = (d) => ({ '& > div': b(d - 1) })\nexport { a }\n`,
+        'app/b.ts': `import { a } from './a'\nexport const b = (d) => a(d)\n`,
+      },
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'module', helper: 'a', line: 2, column: 11 })
+  })
+
+  test('on arguments that change without ending, cut off at the depth', () => {
+    const refusal = refusalOf(
+      withImport(`const deeper = (d) => ({ '& > div': deeper(d + 1) })\nexport const A = css(deeper(0))`),
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'depth', helper: 'deeper' })
+  })
+
+  test('one that would end, deeper than the depth, as surely', () => {
+    const refusal = refusalOf(
+      withImport(
+        `const nest = (d) => (d > 0 ? { '& > div': nest(d - 1) } : { color: 'red.300' })\nexport const A = css(nest(70))`,
+      ),
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'depth', helper: 'nest' })
+  })
+
+  test('named for the recursion, not the helper it reached at the depth', () => {
+    // The call past the depth is `leaf`, which recurses into nothing.
+    const refusal = refusalOf(
+      withImport(
+        `const leaf = () => ({ color: 'red.300' })\n` +
+          `const walk = (n) => (n > 0 ? { '& > div': walk(n - 1), color: 'blue.500' } : leaf())\n` +
+          `export const A = css(walk(63))`,
+      ),
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'depth', helper: 'walk', line: 3, column: 14 })
+  })
+
+  test('named for the recursion when the helper it reached is in another module', () => {
+    // `leaf`'s module has none of `walk`'s calls to name it by; `walk`'s, returned to, does.
+    const refusal = refusalOf(
+      withImport(
+        `import { leaf } from '../leaf'\n` +
+          `const walk = (n) => (n > 0 ? { '& > div': walk(n - 1) } : leaf())\n` +
+          `export const A = css(walk(63))`,
+      ),
+      undefined,
+      { 'app/leaf.ts': `export const leaf = () => ({ color: 'red.300' })\n` },
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'depth', helper: 'walk', line: 3, column: 14 })
+    expect(refusal?.filePath).toMatch(/app\/src\/test\.tsx$/)
+  })
+
+  test('leaves no export it gave up on in the cache', () => {
+    // After the refusal, `theme` is read while the abandoned call unwinds, and `makeTheme()` is
+    // refused with it. Asked for again elsewhere, `theme` is evaluated afresh.
+    const fixture = createFoldFixture()
+    fixture.addFiles({
+      'app/theme.ts': `const makeTheme = () => ({ tone: 'red.300' })\nexport const theme = makeTheme()\n`,
+    })
+    const walked = fixture.fold(
+      `import { css } from 'styled-system/css'\nimport { theme } from '../theme'\n` +
+        `const walk = (n) => (n > 0 ? { '& > div': walk(n - 1), color: theme.tone } : {})\n` +
+        `export const A = css(walk(70))\n`,
+      'app/src/walk.tsx',
+    )
+    const plain = fixture.fold(
+      `import { css } from 'styled-system/css'\nimport { theme } from '../theme'\nexport const B = css({ color: theme.tone })\n`,
+      'app/src/plain.tsx',
+    )
+
+    expect(walked.skipped[0]?.refusal).toMatchObject({ kind: 'recursion', subject: 'depth', helper: 'walk' })
+    expect(plain.skipped).toEqual([])
+    expect(plain.folded).toHaveLength(1)
+  })
+
+  test('through a function written in place, named for the helper it is written in', () => {
+    const refusal = refusalOf(
+      withImport(`const outer = (n) => (() => ({ '& > div': outer(n + 1) }))()\nexport const A = css(outer(0))`),
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'depth', helper: 'outer', line: 2, column: 15 })
+  })
+
+  test('branching on arguments that change, cut off at the depth without following every branch there', () => {
+    // Every call has a key of its own, so none repeats; the first branch reaches the depth and
+    // nothing more is followed. Down every branch, this was 2^64 calls.
+    const refusal = refusalOf(
+      withImport(
+        `const tree = (d, p) => (d > 0 ? { [p + 'a']: tree(d - 1, p + 'a'), [p + 'b']: tree(d - 1, p + 'b') } : {})\n` +
+          `export const f = (props) => css(tree(props.depth, '&'))`,
+      ),
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'depth', helper: 'tree' })
+  })
+
+  /**
+   * Exported values are cached across calls, so where one was first asked for must not decide
+   * what it is. Asked for 30 calls deep, `deep` has 34 levels left for its 40 and is refused;
+   * asked for directly, it has all of them — and the same holds whichever comes first.
+   */
+  describe('cut off by where it was asked for, whatever was asked first', () => {
+    const source = `const nest = (d) => (d > 0 ? { '& > div': nest(d - 1) } : { color: 'red.300' })\nexport const deep = nest(40)\n`
+    const walk = (fixture: ReturnType<typeof createFoldFixture>) =>
+      fixture.fold(
+        `import { css } from 'styled-system/css'\nimport { deep } from '../deep'\n` +
+          `const walk = (n) => (n > 0 ? walk(n - 1) : deep)\nexport const A = css(walk(30))\n`,
+        'app/src/walk.tsx',
+      )
+    const direct = (fixture: ReturnType<typeof createFoldFixture>) =>
+      fixture.fold(
+        `import { css } from 'styled-system/css'\nimport { deep } from '../deep'\nexport const B = css(deep)\n`,
+        'app/src/direct.tsx',
+      )
+
+    test.each([
+      ['the deep one first', true],
+      ['the direct one first', false],
+    ])('%s', (_, deepFirst) => {
+      const fixture = createFoldFixture()
+      // A byte apart, so neither order finds what the other left in the cache.
+      fixture.addFiles({ 'app/deep.ts': `${source}// ${deepFirst}\n` })
+      const first = deepFirst ? walk(fixture) : undefined
+      const plain = direct(fixture)
+      const walked = first ?? walk(fixture)
+
+      expect(walked.skipped[0]?.refusal).toMatchObject({ kind: 'recursion', subject: 'depth', helper: 'nest' })
+      expect(plain.skipped).toEqual([])
+      expect(plain.folded).toHaveLength(1)
+    })
+  })
+
+  test('branching within the depth, until the calls run out', () => {
+    // A depth the build can read, and an end, but `2^15` calls to get there.
+    const refusal = refusalOf(
+      withImport(`const fan = (d) => (d > 0 ? fan(d - 1) + fan(d - 1) : 1)\nexport const A = css({ zIndex: fan(14) })`),
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'calls', helper: 'fan' })
+  })
+
+  test.each([
+    [
+      'nested',
+      `const nest = (d) => (d > 0 ? { '& > div': nest(d - 1) } : { color: 'red.300' })\nexport const A = css(nest(3))`,
+    ],
+    [
+      'branching',
+      `const fan = (d) => (d > 0 ? { '& > a': fan(d - 1), '& > b': fan(d - 1) } : { color: 'red.300' })\nexport const A = css(fan(3))`,
+    ],
+    // `g()` has the same arguments at every level, but not the same `n`: not a call over again.
+    [
+      'through a closure called the same way each time',
+      `const f = (n) => {\n  const g = () => (n > 0 ? { '& > div': f(n - 1) } : { color: 'red.300' })\n  return g()\n}\nexport const A = css(f(3))`,
+    ],
+  ])('a recursion that ends still compiles: %s', (_, body) => {
+    const result = createFoldFixture().fold(withImport(body))
+
+    expect(result.skipped).toEqual([])
+    expect(result.folded).toHaveLength(1)
+  })
+})
+
 describe('carrying the reason changes nothing that compiles', () => {
   // `x.join()` is tried as an array's join first. A refusal in `x` is the reason only when
   // nothing else calls it: here `helpers.join` is a method, and `size` has nothing to do with it.

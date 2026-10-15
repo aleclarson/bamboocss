@@ -76,11 +76,16 @@ pub struct FoldCall {
 pub struct FoldRefusal {
     /// `statement`: a helper's body uses a statement the evaluator does not run.
     /// `write`: a binding is reassigned or written into after its declaration.
+    /// `recursion`: a helper call the evaluator does not follow.
     pub kind: String,
     /// For `statement`, its keyword — `switch`, `for…of`, `throw` — or `expression` for one run
-    /// for its effect. For `write`, the binding's name.
+    /// for its effect. For `write`, the binding's name. For `recursion`, why: `loop`, the helper
+    /// is already running with arguments the evaluator cannot tell apart; `depth`, calls nest
+    /// deeper than it follows; `calls`, one call makes more of them than it follows; `module`,
+    /// the helper is called again, through another module, while it runs.
     pub subject: String,
-    /// For `statement`, the helper whose body it is in, when it has a name.
+    /// For `statement`, the helper whose body it is in, when it has a name. For `recursion`, the
+    /// recursive helper, which is also where the refusal points.
     pub helper: Option<String>,
     /// The statement, or the one making the write, as written: its first line, shortened.
     pub excerpt: String,

@@ -162,10 +162,14 @@ export interface FoldCall {
 /**
  * Code the evaluator does not run. `statement`: a helper's body uses one — `subject` is its
  * keyword, or `expression` for a statement run for its effect. `write`: the binding `subject` is
- * reassigned or written into after its declaration. `line` is 1-based; `column` too, in UTF-16.
+ * reassigned or written into after its declaration. `recursion`: a helper call the evaluator does not
+ * follow — `subject` is `loop` when the helper is already running with arguments it cannot tell
+ * apart, `depth` when calls nest deeper than it follows, `calls` when one call makes more of them
+ * than it follows, `module` when the helper is called again through another module while it runs;
+ * `helper` and the location are the recursive helper. `line` is 1-based; `column` too, in UTF-16.
  */
 export interface FoldRefusal {
-  kind: 'statement' | 'write'
+  kind: 'statement' | 'write' | 'recursion'
   subject: string
   helper?: string
   excerpt: string
