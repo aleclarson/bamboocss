@@ -269,6 +269,10 @@ type Gradient =
     }
 ```
 
+A linear gradient's `placement` may be a number, which is an angle in degrees: `placement: 90` is
+`linear-gradient(90deg, …)`. A radial gradient is placed with a shape and a position, like `'circle at top'`. A stop's
+numeric `position` is in pixels.
+
 ```jsx
 const theme = {
   tokens: {

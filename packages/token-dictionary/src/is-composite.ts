@@ -11,7 +11,7 @@ export const isCompositeShadow = isMatching({
 
 export const isCompositeGradient = isMatching({
   type: P.string,
-  placement: P.string,
+  placement: P.union(P.string, P.number),
   stops: P.union(
     P.array(P.string),
     P.array({

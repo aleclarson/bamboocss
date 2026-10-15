@@ -45,6 +45,30 @@ export const transformShadow: TokenTransformer = {
  * Gradient token transform
  * -----------------------------------------------------------------------------*/
 
+/**
+ * A numeric `placement`, as an angle in degrees: what `linear-gradient(90deg, …)` takes first, and
+ * `conic-gradient(from 90deg, …)` after `from`. It matched no composite gradient before, and the
+ * token reached the stylesheet as an object.
+ *
+ * A radial gradient has no angle — it is placed with a shape and a position, `'circle at top'` —
+ * so a number there is an error rather than css the browser drops without a word.
+ */
+const gradientAngle = (name: string, type: string, placement: number) => {
+  if (!Number.isFinite(placement)) {
+    throw new BambooError(
+      'INVALID_TOKEN',
+      `The gradient \`${name}\` has a \`placement\` of ${placement}, which is no angle.`,
+    )
+  }
+  if (type === 'linear' || type === 'repeating-linear') return `${placement}deg`
+  if (type === 'conic' || type === 'repeating-conic') return `from ${placement}deg`
+  throw new BambooError(
+    'INVALID_TOKEN',
+    `The ${type} gradient \`${name}\` has a numeric \`placement\`, and only a linear or conic gradient takes an angle. ` +
+      `Place a ${type} gradient with a shape and a position, like \`'circle at top'\`.`,
+  )
+}
+
 export const transformGradient: TokenTransformer = {
   name: 'tokens/gradient',
   match: (token) => token.extensions.category === 'gradients',
@@ -60,7 +84,8 @@ export const transformGradient: TokenTransformer = {
         const { color, position } = stop
         return `${color} ${position}px`
       })
-      return `${type}-gradient(${placement}, ${rawStops.join(', ')})`
+      const direction = typeof placement === 'number' ? gradientAngle(token.name, type, placement) : placement
+      return `${type}-gradient(${direction}, ${rawStops.join(', ')})`
     }
 
     return token.value

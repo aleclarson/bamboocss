@@ -53,6 +53,10 @@ export interface Shadow {
 
 export interface Gradient {
   type: 'linear' | 'radial'
+  /**
+   * Where the gradient goes: `'to right'`, `'circle at top'`, or — for a linear gradient — a number,
+   * which is an angle in degrees.
+   */
   placement: string | number
   stops:
     | Array<{
