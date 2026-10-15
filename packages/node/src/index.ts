@@ -1,7 +1,7 @@
 export { analyze } from './analyze'
 export { buildInfo } from './build-info'
 export { Builder, type BuilderSetupOptions, type BuilderSourceChanges } from './builder'
-export { codegen } from './codegen'
+export { artifactsToRebuild, codegen } from './codegen'
 export { loadConfigAndCreateContext } from './config'
 export { startProfiling } from './cpu-profile'
 export { BambooContext, explainUnresolvedStyle } from './create-context'

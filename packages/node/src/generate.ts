@@ -4,7 +4,7 @@ import type { ArtifactId, Config } from '@bamboocss/types'
 import { statSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { assembleExtractedSheet } from './assemble-sheet'
-import { codegen } from './codegen'
+import { artifactsToRebuild, codegen } from './codegen'
 import { loadConfigAndCreateContext } from './config'
 import { BambooContext } from './create-context'
 import { createSourceScanCache, recordResolvedTokenReferences, type SourceScanCache } from './token-references'
@@ -93,7 +93,7 @@ export async function generate(config: Config, configPath?: string, options: Gen
 
         logger.info('ctx:updated', 'config rebuilt ✅')
         await ctx.hooks['config:change']?.({ config: ctx.config, changes: affecteds })
-        return build(ctx, sourceScanCache, Array.from(affecteds.artifacts))
+        return build(ctx, sourceScanCache, artifactsToRebuild(affecteds))
       },
       { cwd, poll },
     )

@@ -39,10 +39,11 @@ const stubBuilder = () => {
   } as any
 
   /** `affecteds` is private, and is set by `setup` from a real config diff. */
-  const configChanged = (artifacts: string[] | undefined) => {
+  const configChanged = (artifacts: string[] | undefined, paths: string[] = ['theme']) => {
     ;(builder as unknown as { affecteds: unknown }).affecteds = artifacts && {
       artifacts: new Set(artifacts),
       hasConfigChanged: true,
+      diffs: paths.map((path) => ({ type: 'CHANGE', path: [path] })),
     }
   }
 
@@ -80,5 +81,19 @@ describe('builder.emit', () => {
     await builder.emit()
 
     expect(written).toEqual(['css+tokens.mjs'])
+  })
+
+  // Every artifact, as a run from cold writes them, after an edit to what all of them are written
+  // from. Rebuilt from those the edit matched, the ones no option names kept the old extension.
+  test('writes every artifact after a config change to what all of them are written from', async () => {
+    const { builder, configChanged, written } = stubBuilder()
+
+    await builder.emit()
+    written.length = 0
+
+    configChanged(['css', 'tokens'], ['outExtension'])
+    await builder.emit()
+
+    expect(written).toEqual(['all.mjs'])
   })
 })

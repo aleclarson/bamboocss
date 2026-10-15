@@ -4,7 +4,7 @@ import { BambooError, uniq } from '@bamboocss/shared'
 import type { DiffConfigResult } from '@bamboocss/types'
 import { existsSync, readFileSync, realpathSync, statSync } from 'fs'
 import { normalize, resolve } from 'path'
-import { codegen } from './codegen'
+import { artifactsToRebuild, codegen } from './codegen'
 import { loadConfigAndCreateContext } from './config'
 import { BambooContext } from './create-context'
 import { assembleExtractedSheet } from './assemble-sheet'
@@ -507,7 +507,10 @@ export class Builder {
       // graph this pass is about to re-read in full.
       this.capturedLedger = undefined
       this.capturedDependents.clear()
-      await ctx.hooks['config:change']?.({ config: ctx.config, changes: this.affecteds })
+      // The context the reload built, as the CLI hands it: `ctx` is the one from before the edit,
+      // and its plugins were handed the config the edit replaced.
+      const current = this.getContextOrThrow()
+      await current.hooks['config:change']?.({ config: current.config, changes: this.affecteds })
       this.snapshotConfigGraphMtimes(configPath)
       return
     }
@@ -740,7 +743,7 @@ export class Builder {
       await codegen(this.getContextOrThrow())
     } else if (this.affecteds?.hasConfigChanged) {
       logger.debug('builder', 'Emit artifacts after config change')
-      await codegen(this.getContextOrThrow(), Array.from(this.affecteds.artifacts))
+      await codegen(this.getContextOrThrow(), artifactsToRebuild(this.affecteds))
     }
 
     this.hasEmitted = true

@@ -1,9 +1,13 @@
 import { diffConfigs, loadConfig } from '@bamboocss/config'
 import { Generator } from '@bamboocss/generator'
 import type { Config, LoadConfigResult } from '@bamboocss/types'
+import { configReloadOf } from './config-reload'
 import { getTsConfigResolutionFiles, loadTsConfig, rememberTsConfigResolutionFiles } from './load-tsconfig'
 
-const applyTsConfig = (conf: LoadConfigResult, next: Awaited<ReturnType<typeof loadTsConfig>>) => {
+const applyTsConfig = (
+  conf: LoadConfigResult,
+  next: Pick<LoadConfigResult, 'tsconfig' | 'tsconfigFile' | 'tsOptions'> | Awaited<ReturnType<typeof loadTsConfig>>,
+) => {
   // Assign every field, including `undefined`: a removed tsconfig must retract the previous
   // paths/baseUrl rather than leaving them attached to the otherwise fresh Bamboo config.
   conf.tsconfig = next?.tsconfig ?? {}
@@ -22,20 +26,27 @@ export class DiffEngine {
    * Reload config from disk and refresh the context
    */
   async reloadConfigAndRefreshContext(fn?: (conf: LoadConfigResult) => void) {
-    const conf = await loadConfig({ cwd: this.ctx.config.cwd, file: this.ctx.conf.path })
-    const resolutionFiles: { value?: readonly string[] } = {}
-    const tsconfig = await loadTsConfig(conf, conf.config.cwd || this.ctx.config.cwd, resolutionFiles)
-    applyTsConfig(conf, tsconfig)
-    rememberTsConfigResolutionFiles(conf, resolutionFiles.value ?? [])
+    // As it was prepared, where an integration prepared it. @see rememberConfigReload
+    const reload = configReloadOf(this.ctx.conf)
+    const conf = reload ? await reload() : await this.readAgain()
 
     const affected = this.refresh(conf, fn)
     if (!affected.hasConfigChanged) {
       // Keep the existing Context/encoder when only TypeScript resolution changed. Builder
       // invalidates the exact semantic owners after comparing the recorded config bytes.
-      applyTsConfig(this.ctx.conf, tsconfig)
-      rememberTsConfigResolutionFiles(this.ctx.conf, resolutionFiles.value ?? [])
+      applyTsConfig(this.ctx.conf, conf)
+      rememberTsConfigResolutionFiles(this.ctx.conf, getTsConfigResolutionFiles(conf))
     }
     return affected
+  }
+
+  /** The file read again, and its tsconfig, for a context no integration prepared. */
+  private readAgain = async () => {
+    const conf = await loadConfig({ cwd: this.ctx.config.cwd, file: this.ctx.conf.path })
+    const resolutionFiles: { value?: readonly string[] } = {}
+    applyTsConfig(conf, await loadTsConfig(conf, conf.config.cwd || this.ctx.config.cwd, resolutionFiles))
+    rememberTsConfigResolutionFiles(conf, resolutionFiles.value ?? [])
+    return conf
   }
 
   /** @internal Exact tsconfig files behind the currently attached resolution options. */

@@ -66,6 +66,18 @@ const artifactConfigDeps: Record<ArtifactId, ConfigPath[]> = {
   'styles.css': [],
 }
 
+/**
+ * Whether an edit changed what every artifact is written from: where they go, what they are
+ * named, the plugins they pass through. Rebuilt from the artifacts it matched, the ones no option
+ * names — `helpers`, `cva`, `css/index` — kept their old extension or stayed in the old
+ * directory, and the rest imported them under names nothing answered to.
+ *
+ * `presets` is among `all` and never a path here: the config is diffed as it was serialized, with
+ * its presets merged in and the list emptied. A preset's edit arrives as the paths it changed.
+ */
+export const changesEveryArtifact = (diffs: ReadonlyArray<{ path: ReadonlyArray<string | number> }>) =>
+  diffs.some((change) => all.includes(String(change.path[0])))
+
 // Prepare a list of regex that resolves to an artifact id from a list of config paths
 export const artifactMatchers = Object.entries(artifactConfigDeps).map(([key, paths]) => {
   if (!paths.length) return () => undefined

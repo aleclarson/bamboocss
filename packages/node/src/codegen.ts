@@ -1,10 +1,21 @@
-import type { ArtifactId } from '@bamboocss/types'
+import { changesEveryArtifact } from '@bamboocss/config'
+import type { ArtifactId, DiffConfigResult } from '@bamboocss/types'
 import type { BambooContext } from './create-context'
+
+/**
+ * What a rebuild after a config edit writes: the artifacts the edit changed, or every artifact,
+ * as a run from cold would, when the edit changed what all of them are written from.
+ */
+export const artifactsToRebuild = (affected: DiffConfigResult): ArtifactId[] | undefined =>
+  changesEveryArtifact(affected.diffs) ? undefined : Array.from(affected.artifacts)
 
 export async function codegen(ctx: BambooContext, ids?: ArtifactId[]) {
   const { default: pLimit } = await import('p-limit')
   const limit = pLimit(20)
-  if (ctx.config.clean) ctx.output.empty()
+  // Before a run that writes every artifact, and no other. One handed `ids` writes only what a
+  // config edit changed, and emptying the directory first left nothing else: with `clean` set,
+  // the first edit under a watch took most of `styled-system/` with it.
+  if (ctx.config.clean && !ids) ctx.output.empty()
 
   let artifacts = ctx.getArtifacts(ids)
 

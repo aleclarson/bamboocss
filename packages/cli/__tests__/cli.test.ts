@@ -136,6 +136,28 @@ describe('CLI', () => {
     await fs.unlink(cpuProfPath)
   })
 
+  // `--clean` was laid over the config whether it was passed or not, and absent it was
+  // `clean: undefined`, which set aside the config's own `clean: true`.
+  test('codegen reads `clean` from the config', async () => {
+    const cwd = mkdtempSync(path.join(tmpdir(), 'bamboo-cli-clean-'))
+    try {
+      writeFileSync(
+        path.join(cwd, 'bamboo.config.ts'),
+        `export default { clean: true, preflight: false, include: [], outdir: 'styled-system' }\n`,
+      )
+      const leftover = path.join(cwd, 'styled-system/leftover/stale.mjs')
+      mkdirSync(path.dirname(leftover), { recursive: true })
+      writeFileSync(leftover, 'export {}\n')
+
+      runCommand(`node ${binPath} codegen --cwd="${cwd}"`, { cwd })
+
+      await expect(fs.access(path.join(cwd, 'styled-system/css/index.mjs'))).resolves.toBeUndefined()
+      await expect(fs.access(leftover), 'emptied first').rejects.toThrow()
+    } finally {
+      await fs.rm(cwd, { force: true, recursive: true })
+    }
+  })
+
   test('cssgen', async () => {
     const cmd = `node ${binPath} cssgen --cwd="${testsCwd}"`
 

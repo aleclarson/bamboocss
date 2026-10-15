@@ -2,6 +2,7 @@ import { logger } from '@bamboocss/logger'
 import {
   BambooContext,
   analyze,
+  artifactsToRebuild,
   buildInfo,
   codegen,
   cssgen,
@@ -203,7 +204,8 @@ export async function main() {
 
       let ctx = await loadConfigAndCreateContext({
         cwd,
-        config: { clean },
+        // Only when it was passed: an absent `--clean` is not `clean: undefined` over the config's.
+        config: compact({ clean }),
         configPath,
       })
 
@@ -218,7 +220,7 @@ export async function main() {
             })
 
             await ctx.hooks['config:change']?.({ config: ctx.config, changes: affecteds })
-            await codegen(ctx, Array.from(affecteds.artifacts))
+            await codegen(ctx, artifactsToRebuild(affecteds))
             logger.info('ctx:updated', 'config rebuilt ✅')
           },
           { cwd, poll },
@@ -500,17 +502,14 @@ export async function main() {
         logger.level = 'silent'
       }
 
+      // Laid over the config, rather than set on the context, so a config read again keeps it.
       let ctx = await loadConfigAndCreateContext({
         cwd,
-        config: maybeGlob ? { include: [maybeGlob] } : undefined,
+        config: compact({ include: maybeGlob ? [maybeGlob] : undefined, minify }),
         configPath,
       })
 
       const outfile = outfileFlag ?? join(...ctx.paths.root, 'bamboo.buildinfo.json')
-
-      if (minify) {
-        ctx.config.minify = true
-      }
 
       await buildInfo(ctx, outfile)
 

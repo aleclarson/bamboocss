@@ -4,6 +4,7 @@ import { pluginSvelte } from '@bamboocss/plugin-svelte'
 import { pluginVue } from '@bamboocss/plugin-vue'
 import { pluginAstro } from './astro-to-tsx'
 import { BambooContext } from './create-context'
+import { copyLaidOver, rememberConfigReload } from './config-reload'
 import { loadTsConfig, rememberTsConfigResolutionFiles } from './load-tsconfig'
 
 const RESOLVED_HOOKS_NAME = '__resolved__'
@@ -41,10 +42,14 @@ interface PreparedNodeConfig {
 }
 
 /** Resolve all config state without constructing the parser Project owned by BambooContext. */
-async function prepareNodeConfig(options: NodeConfigOptions = {}): Promise<PreparedNodeConfig> {
+async function prepareNodeConfig(
+  options: NodeConfigOptions = {},
+  // Where the file is found and read from. Read again, it is read from where it was read first,
+  // wherever `process.cwd()` has moved since.
+  cwd = options.cwd ?? options?.config?.cwd ?? process.cwd(),
+): Promise<PreparedNodeConfig> {
   const { config, configPath } = options
 
-  const cwd = options.cwd ?? options?.config?.cwd ?? process.cwd()
   const conf = await loadConfig({ cwd, file: configPath })
 
   if (config) {
@@ -77,6 +82,12 @@ async function prepareNodeConfig(options: NodeConfigOptions = {}): Promise<Prepa
     Object.assign(conf, tsConfResult)
   }
   rememberTsConfigResolutionFiles(conf, tsconfigResolutionFiles.value ?? [])
+
+  // Read again as it was read now: the file it found, from where it found it, with what was laid
+  // over it. A copy of that, taken before anything is handed it — a hook changing `include` in
+  // place would otherwise change it for every config read after.
+  const again = { ...options, config: copyLaidOver(config), configPath: conf.path }
+  rememberConfigReload(conf, async () => (await prepareNodeConfig(again, cwd)).conf)
 
   return { conf }
 }

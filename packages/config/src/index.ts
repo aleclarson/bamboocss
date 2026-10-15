@@ -1,5 +1,6 @@
 export { bundleConfig } from './bundle-config'
 export { defaultPresets, presetBase, presetBamboo } from './bundled-preset'
+export { changesEveryArtifact } from './config-deps'
 export { diffConfigs } from './diff-config'
 export { findConfig } from './find-config'
 export { getConfigDependencies, type GetDepsOptions } from './get-mod-deps'
