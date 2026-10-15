@@ -197,6 +197,32 @@ The root's light and dark values collapse into one
 [`light-dark()`](/docs/overview/browser-support#semantic-tokens-and-light-dark) declaration. A theme's do not — its dark
 value sits under the theme condition rather than at the top level, so it keeps a media block of its own.
 
+### Themes and selector conditions
+
+A selector condition inside a theme holds wherever the two meet. With `_dark` written as `.dark &` and `body` given
+`_dark: 'token(colors.red.400)'`, the class can sit above the theme's root, on it, or on an element inside it:
+
+```css
+.dark [data-bamboo-theme='primary'],
+[data-bamboo-theme='primary'].dark,
+[data-bamboo-theme='primary'] .dark:not([data-bamboo-theme]),
+[data-bamboo-theme='primary'] :where([data-bamboo-theme].dark) {
+  --colors-body: var(--colors-red-400);
+}
+```
+
+Each form is more specific than the theme's own values and than the root's dark ones, so it wins over both in whichever
+order they are written. The last is for the root of another theme nested inside this one, and is no more specific than
+that root: the nested theme's own dark values win there, and this one's fill in what it leaves out.
+
+- A dark class on an element inside two nested themes matches both themes' rules equally, so the theme written later in
+  the stylesheet wins there. CSS has no selector for the nearer of two ancestors. The same goes for a value a nested
+  theme sets for every mode, on its root when that carries the dark class itself.
+- A value a theme sets for every mode is still overridden by the root's dark value on a dark element inside the theme,
+  wherever the root sets one with `_dark`.
+- A condition with a combinator of its own, such as `.dark > &`, meets the theme from above only. One with its `&` in
+  the middle, such as `.dark & .panel`, is written around the theme's root as it stands.
+
 ### Dynamically importing themes
 
 An alternative way of applying a theme is by using the new `styled-system/themes` entrypoint where you can import the

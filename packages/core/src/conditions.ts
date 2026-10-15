@@ -143,8 +143,21 @@ export class Conditions {
     return themeVariants
   }
 
-  getThemeSelector = (name: string) => {
-    return `[data-bamboo-theme=${name}]`
+  /** The conditions naming a theme in `theme.variants`, `_themePastel` for `pastel`. */
+  private themeConditions: Set<string> | undefined
+
+  /**
+   * Whether a condition is a theme's: one of `theme.variants`, rather than any whose name begins
+   * `_theme`, which a project may well name a condition of its own.
+   */
+  isThemeCondition = (key: string) => {
+    this.themeConditions ??= new Set(Object.keys(this.options.themes ?? {}).map(this.getThemeName))
+    return this.themeConditions.has(key)
+  }
+
+  /** The root of the theme named, or of any theme when none is. */
+  getThemeSelector = (name?: string) => {
+    return name === undefined ? '[data-bamboo-theme]' : `[data-bamboo-theme=${name}]`
   }
 
   getThemeName = (theme: string) => {

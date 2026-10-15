@@ -1,5 +1,14 @@
 import type { Conditions, Context } from '@bamboocss/core'
-import { Stylesheet, expandNestedCss, extractParentSelectors, stringify, withoutParents } from '@bamboocss/core'
+import {
+  Stylesheet,
+  expandNestedCss,
+  extractParentSelectors,
+  isCompound,
+  nestingParent,
+  splitSelectors,
+  stringify,
+  withoutParents,
+} from '@bamboocss/core'
 import { logger } from '@bamboocss/logger'
 import type { ConditionQuery } from '@bamboocss/types'
 import postcss, { Container, CssSyntaxError } from 'postcss'
@@ -312,13 +321,13 @@ export function generateTokenCss(ctx: Context, sheet: Stylesheet) {
     themeVariants = allowed.includes('*') ? keys : keys.filter((key) => allowed.includes(key))
   }
 
-  const themeConds = themeVariants.map((key) => conditions.getThemeName(key))
-  const themePrefix = ctx.conditions.getThemeName('')
+  const themeConds = new Set(themeVariants.map((key) => conditions.getThemeName(key)))
 
   for (const [key, values] of tokenVars.entries()) {
-    const isThemeSkipped =
-      key.startsWith(themePrefix) && !themeConds.some((condName) => key === condName || key.startsWith(condName + ':'))
-    if (isThemeSkipped) {
+    // A theme's tokens are written when `staticCss.themes` names it. A condition of the project's
+    // own named like one, `_themeDim`, is no theme: its tokens were dropped with every theme left out.
+    const first = key.split(':')[0]!
+    if (conditions.isThemeCondition(first) && !themeConds.has(first)) {
       continue
     }
 
@@ -379,9 +388,16 @@ export function stringifyVars(options: {
     combos = next
   }
 
+  // A theme's tokens are declared on its root, and each condition after it meets that root.
+  const anyTheme = conditions.isThemeCondition(keys[0]!) ? conditions.getThemeSelector() : undefined
+
   const rules = combos
     .map((segments) => {
-      const transformed = segments.map(transformSegment).filter(Boolean) as string[]
+      const transformed = segments
+        .map((segment, index) =>
+          anyTheme && index > 0 ? transformThemeSegment(segment, anyTheme) : transformSegment(segment),
+        )
+        .filter(Boolean) as string[]
       const rule = getDeepestRule(root, transformed)
       if (!rule) return
       getDeepestNode(rule)?.append(css)
@@ -430,6 +446,63 @@ function transformSegment(seg: string): string {
   if (seg.startsWith('@')) return seg
   const parent = extractParentSelectors(seg)
   return parent ? `&${parent}` : seg
+}
+
+/**
+ * A condition inside a theme, as the selector nested under the theme's root.
+ *
+ * A theme's tokens are declared on its root, `[data-bamboo-theme=pastel]`, and inherit from there.
+ * `.dark &` was compounded onto that root, as `transformSegment` writes it, and so held only where
+ * the theme attribute and the dark class share an element: a theme in a page that `<html
+ * class="dark">` puts in dark mode kept its light values, and a dark panel inside the theme took
+ * the default dark values instead of the theme's.
+ *
+ * So each `P &` in it meets the root wherever the two can, as `themeBoundaries` writes it. Anything
+ * else is nested as it is written: `&:hover` on the root, `.dark > &` above it alone, and
+ * `.dark & .panel` around it.
+ */
+function transformThemeSegment(segment: string, anyTheme: string): string {
+  if (segment.startsWith('@')) return segment
+  const selectors = splitSelectors(segment)
+  const parents = selectors.map(nestingParent)
+  // A pseudo-element takes no descendant and goes in no `:is()`, so one in a parent would make the
+  // whole list invalid, and the browser drop every form with it. Such a parent is compounded onto
+  // the root as it was.
+  if (parents.some((parent) => parent !== undefined && hasPseudoElement(parent))) return transformSegment(segment)
+  const meeting = selectors.flatMap((selector, index) => {
+    const parent = parents[index]
+    return parent === undefined ? [selector] : themeBoundaries(parent, anyTheme)
+  })
+  return [...new Set(meeting)].join(', ')
+}
+
+/** Whether a selector names a pseudo-element, `::part(x)`, outside a quoted value. */
+const hasPseudoElement = (selector: string) => withoutQuotes(selector).includes('::')
+
+/** A selector without what its quoted values hold, so a `::` in one is not read as its own. */
+const withoutQuotes = (selector: string) => selector.replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g, '""')
+
+/**
+ * Where `P` in `P &` meets a theme's root, `&`: above it, on it, and inside it, where the theme's
+ * values are declared on the element `P` names.
+ *
+ * Each is more specific than the theme's values alone and than the default `P` rule, so it wins
+ * over both in whichever order they are written — but for the root of another theme nested in this
+ * one. There the nested theme's own `P` values have to win, and this one's only fill in what it
+ * leaves out, so the rule for that root is no more specific than the root's own. It wins over the
+ * default rule by coming after it, and against a value the nested theme sets for every condition,
+ * the order of the two themes decides.
+ */
+function themeBoundaries(parent: string, anyTheme: string): string[] {
+  // Every element below the root is inside `*`: it meets the theme from above, and inside the
+  // theme it would declare on each element what that element inherits anyway.
+  if (parent === '*') return ['* &']
+  const compound = isCompound(parent)
+  // `&body.print` is no selector — a type comes first in a compound — and `&.app .dark` would make
+  // the root the `.app`. `:is()` keeps either whole, on the element it names.
+  const on = compound && /^[.[:#]/.test(parent) ? parent : `:is(${parent})`
+  const inside = compound ? parent : `:is(${parent})`
+  return [`${parent} &`, `&${on}`, `& ${inside}:not(${anyTheme})`, `& :where(${anyTheme}${on})`]
 }
 
 /**

@@ -15,7 +15,9 @@ export function getThemeCss(ctx: Context, themeName: string): string {
   const condName = conditions.getThemeName(themeName)
 
   for (const [key, values] of tokens.view.vars.entries()) {
-    if (key.startsWith(condName)) {
+    // The theme's own condition, and each nested under it: `_themePastel` began
+    // `_themePastelDark` too, and wrote that theme's variables into this one's css.
+    if (key === condName || key.startsWith(condName + ':')) {
       const css = stringifyVars({ values, conditionKey: key, root: '', conditions })
       if (css) {
         results.push(css)

@@ -100,6 +100,36 @@ export const splitSelectors = (selector: string): string[] => {
   return result
 }
 
+/**
+ * The ancestor a selector `P &` nests under, `P`, when that is all it asks: its one reference to a
+ * parent ends it, after a space, and `P` ends in no combinator of its own, as `.dark > &` does.
+ */
+export const nestingParent = (selector: string): string | undefined => {
+  const trimmed = selector.trim()
+  const at = parentReferences(trimmed)
+  if (at.length !== 1 || at[0] !== trimmed.length - 1) return
+  const space = trimmed.length - 2
+  if (!/\s/.test(trimmed[space] ?? '') || isEscaped(trimmed, space)) return
+  const parent = trimmed.slice(0, space).trim()
+  if (!parent || /[>+~]$/.test(parent)) return
+  return parent
+}
+
+/**
+ * Whether a selector is one compound — `.dark`, `html.dark`, `[data-mode="a b"]` — rather than
+ * several with a combinator between them, as `.app .dark` is.
+ */
+export const isCompound = (selector: string) => {
+  let compound = true
+  let brackets = 0
+  forEachSyntactic(selector.trim(), (char, _, depth) => {
+    if (char === '[') brackets++
+    else if (char === ']') brackets--
+    else if (depth === 0 && brackets === 0 && /[\s>+~]/.test(char)) compound = false
+  })
+  return compound
+}
+
 /** `selector` with each `&` naming its parent written as `parent`, as it is, `$` and all. */
 export const replaceParent = (selector: string, parent: string, at = parentReferences(selector)) => {
   let replaced = ''
