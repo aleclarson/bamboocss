@@ -51,9 +51,53 @@ eslintTester.run(RULE_NAME, rule, {
     },
 
     {
+      // The build reads the keyword in any case, so the rule has to as well.
       code: multiline`
   import { css } from './bamboo/css';
-  
+
+  const styles = css({ color: 'red !IMPORTANT' })`,
+      errors: [
+        {
+          messageId: 'important',
+          suggestions: [
+            {
+              messageId: 'remove',
+              output: multiline`
+  import { css } from './bamboo/css';
+
+  const styles = css({ color: 'red' })`,
+            },
+          ],
+        },
+      ],
+    },
+
+    {
+      // The build strips every mark that ends a value, so one fix has to remove them all.
+      code: multiline`
+  import { css } from './bamboo/css';
+
+  const styles = css({ color: 'red !important !important' })`,
+      errors: [
+        {
+          messageId: 'important',
+          suggestions: [
+            {
+              messageId: 'remove',
+              output: multiline`
+  import { css } from './bamboo/css';
+
+  const styles = css({ color: 'red' })`,
+            },
+          ],
+        },
+      ],
+    },
+
+    {
+      code: multiline`
+  import { css } from './bamboo/css';
+
   function App(){
     return <div className={css({ _hover: { position: '[absolute!]' } })} />;
   }`,
@@ -95,10 +139,18 @@ eslintTester.run(RULE_NAME, rule, {
     {
       code: multiline`
   import { css } from './bamboo/css';
-  
+
   function App(){
     return <div className={css({ _hover: { position: 'absolute' } })} />;
   }`,
+    },
+
+    {
+      // A `!` that is part of the value is not a mark, to the build or to this rule.
+      code: multiline`
+  import { css } from './bamboo/css';
+
+  const styles = css({ content: '"!"' })`,
     },
   ],
 })

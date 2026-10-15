@@ -1,12 +1,14 @@
 import { createRule } from '../utils'
 import { isBambooAttribute, isBambooProp as isBambooProperty, isRecipeVariant } from '../utils/helpers'
 import { isIdentifier, isJSXExpressionContainer, isLiteral, isTemplateLiteral } from '../utils/nodes'
-import { getArbitraryValue } from '@bamboocss/shared'
+import { isImportant, withoutImportant } from '@bamboocss/shared'
 import { type TSESTree } from '@typescript-eslint/utils'
 
-// Regular expressions to detect '!important' and '!' at the end of a value
-const exclamationRegex = /\s*!$/
-const importantRegex = /\s*!important\s*$/
+// The keyword as the author wrote it, for the message. Which values are important, and what
+// removing the mark leaves, is decided by `isImportant` and `withoutImportant` — the predicates
+// the build itself uses — so a value the build marks is one this reports, and a `!` the build
+// leaves in the value is not.
+const keywordRegex = /!important/i
 
 export const RULE_NAME = 'no-important'
 
@@ -56,52 +58,15 @@ const rule = createRule({
       return Boolean(result)
     }
 
-    // Function to check if a value contains '!important' or '!'
-    const hasImportantKeyword = (value: string | undefined): boolean => {
-      if (!value) {
-        return false
-      }
-
-      const arbitraryValue = getArbitraryValue(value)
-      return exclamationRegex.test(arbitraryValue) || importantRegex.test(arbitraryValue)
-    }
-
-    // Function to remove '!important' or '!' from a string
-    const removeImportantKeyword = (input: string): { fixed: string; keyword: null | string } => {
-      if (importantRegex.test(input)) {
-        // Remove '!important' with optional whitespace
-        return {
-          fixed: input.replace(importantRegex, '').trimEnd(),
-          keyword: '!important',
-        }
-      } else if (exclamationRegex.test(input)) {
-        // Remove trailing '!'
-        return {
-          fixed: input.replace(exclamationRegex, '').trimEnd(),
-          keyword: '!',
-        }
-      } else {
-        // No match, return the original string
-        return { fixed: input, keyword: null }
-      }
-    }
-
     // Unified function to handle reporting
     const handleNodeValue = (node: TSESTree.Node, value: string) => {
-      if (!hasImportantKeyword(value)) {
+      if (!value || !isImportant(value)) {
         return
       }
 
-      const arbitraryValue = getArbitraryValue(value)
-      const { fixed: fixedArbitrary, keyword } = removeImportantKeyword(arbitraryValue)
-
-      // If the value has escape hatch brackets, preserve them
-      let fixed = value
-      if (value.startsWith('[') && value.endsWith(']')) {
-        fixed = `[${fixedArbitrary}]`
-      } else {
-        fixed = fixedArbitrary
-      }
+      // Every mark goes, as the build strips every one, and an escape hatch keeps its brackets.
+      const fixed = String(withoutImportant(value))
+      const keyword = keywordRegex.exec(value)?.[0] ?? '!'
 
       context.report({
         data: { keyword },

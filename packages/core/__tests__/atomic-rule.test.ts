@@ -30,6 +30,53 @@ describe('atomic / with basic style object', () => {
     `)
   })
 
+  test('a `!` inside the value is part of it, not an important mark', () => {
+    // Any `!` used to count: `content: '"!"'` came out as `content: "" !important`.
+    expect(css({ content: '"!"', fontFamily: '"Foo!Bar", sans-serif' })).toMatchInlineSnapshot(`
+      "@layer utilities {
+        @layer s010-c0-p3000;
+
+        @layer s010-c0-p3000 {
+          .content_\\"\\!\\" {
+            content: "!";
+      }
+
+          .ff_\\"Foo\\!Bar\\"\\,_sans-serif {
+            font-family: "Foo!Bar", sans-serif;
+      }
+        }
+      }"
+    `)
+  })
+
+  test('a mark inside an escape hatch marks the declaration', () => {
+    expect(css({ position: '[absolute!]' })).toMatchInlineSnapshot(`
+      "@layer utilities {
+        @layer important;
+
+        @layer important {
+          .pos_\\[absolute\\]\\! {
+            position: absolute !important;
+      }
+        }
+      }"
+    `)
+  })
+
+  test('a trailing mark after a value holding a `!` marks only the declaration', () => {
+    expect(css({ content: '"hello!" !important' })).toMatchInlineSnapshot(`
+      "@layer utilities {
+        @layer important;
+
+        @layer important {
+          .content_\\"hello\\!\\"\\! {
+            content: "hello!" !important;
+      }
+        }
+      }"
+    `)
+  })
+
   test('should work with basic', () => {
     expect(css({ bg: 'red.300' })).toMatchInlineSnapshot(`
       "@layer utilities {

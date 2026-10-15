@@ -14,9 +14,25 @@ describe('important and space handling', () => {
       ['red !important', true],
       ['red!important', true],
       ['red !IMPORTANT', true],
-      // The regex is `\s*!(important)?`, so a bare `!` matches with or without the word.
+      // A bare trailing `!` is the short form of the mark.
       ['red!', true],
-      ['a!b', true],
+      ['red !important ', true],
+      // Not a form the generated types accept, so not one the runtime reads as a mark either.
+      ['red ! important', false],
+      // An escape hatch keeps its contents as written, so the mark sits inside the brackets.
+      ['[absolute!]', true],
+      ['[red !important]', true],
+      ['[a!b]', false],
+      // A mark ending a fallback candidate marks the declaration, as one after the call does.
+      ['fallback(red !important, blue)', true],
+      ['fallback(red, blue)!', true],
+      ['fallback("a!", blue)', false],
+      // Only a mark that ends the value is one: a `!` anywhere else is part of the value.
+      ['a!b', false],
+      ['"!"', false],
+      ['"hello!"', false],
+      ['"Foo!Bar", sans-serif', false],
+      ['url("data:image/svg+xml,<svg><!-- x --></svg>")', false],
       ['red', false],
       ['1px solid red', false],
       ['', false],
@@ -34,6 +50,46 @@ describe('important and space handling', () => {
     test('strips the marker', () => {
       expect(withoutImportant('red !important')).toBe('red')
       expect(withoutImportant('red!important')).toBe('red')
+      expect(withoutImportant('red!')).toBe('red')
+    })
+
+    test('strips every mark that ends the value', () => {
+      // Leaving one behind would come out as `red !important !important`, which is invalid.
+      expect(withoutImportant('red !important !important')).toBe('red')
+      expect(withoutImportant('red ! !')).toBe('red')
+    })
+
+    test('strips a mark inside an escape hatch, keeping its brackets', () => {
+      expect(withoutImportant('[absolute!]')).toBe('[absolute]')
+      expect(withoutImportant('[red !important]')).toBe('[red]')
+      expect(withoutImportant('[absolute!]!')).toBe('[absolute]')
+    })
+
+    test('strips a long run of marks', () => {
+      // Read from the end, so this is one pass rather than a rescan per mark.
+      expect(withoutImportant(`red${' !'.repeat(50_000)}`)).toBe('red')
+    })
+
+    test('strips a mark ending a fallback candidate', () => {
+      expect(withoutImportant('fallback(red !important, blue)')).toBe('fallback(red, blue)')
+      expect(withoutImportant('fallback(100dvh, 100vh)!')).toBe('fallback(100dvh, 100vh)')
+    })
+
+    test('a `!` before a long whitespace run is not a mark', () => {
+      // The shape an anchored `\s*!…$` was quadratic on: it retried its leading `\s*` at every
+      // position. The mark is now found from the last `!`, so this is one scan.
+      const value = `a${' '.repeat(50_000)}!${' '.repeat(50_000)}b`
+
+      expect(isImportant(value)).toBe(false)
+      expect(withoutImportant(value)).toBe(value)
+    })
+
+    test('leaves a `!` that is part of the value', () => {
+      expect(withoutImportant('"!"')).toBe('"!"')
+      expect(withoutImportant('"hello!"')).toBe('"hello!"')
+      expect(withoutImportant('"Foo!Bar", sans-serif')).toBe('"Foo!Bar", sans-serif')
+      // Only the mark is removed, not an earlier `!` in the same value.
+      expect(withoutImportant('"hello!" !important')).toBe('"hello!"')
     })
 
     test('still trims a value that carries no marker', () => {
