@@ -27,7 +27,6 @@ describe('bundle config', () => {
           "include": [
             "./src/**/*.{ts,tsx,jsx}",
           ],
-          "jsxFramework": "react",
           "name": "__bamboo.config__",
           "preflight": true,
           "presets": [
@@ -65,7 +64,6 @@ describe('bundle config', () => {
           "include": [
             "./src/**/*.{ts,tsx,jsx}",
           ],
-          "jsxFramework": "react",
           "name": "__bamboo.config__",
           "preflight": true,
           "presets": [
@@ -106,7 +104,6 @@ describe('bundle config', () => {
           "include": [
             "./src/**/*.{ts,tsx,jsx}",
           ],
-          "jsxFramework": "react",
           "name": "__bamboo.config__",
           "preflight": true,
           "presets": [
@@ -195,7 +192,6 @@ describe('bundle config', () => {
           "include": [
             "./src/**/*.{ts,tsx,jsx}",
           ],
-          "jsxFramework": "react",
           "name": "__bamboo.config__",
           "preflight": true,
           "presets": [
@@ -236,7 +232,6 @@ describe('bundle config', () => {
           "include": [
             "./src/**/*.{ts,tsx,jsx}",
           ],
-          "jsxFramework": "react",
           "name": "__bamboo.config__",
           "preflight": true,
           "presets": [
@@ -277,7 +272,6 @@ describe('bundle config', () => {
           "include": [
             "./src/**/*.{ts,tsx,jsx}",
           ],
-          "jsxFramework": "react",
           "name": "__bamboo.config__",
           "preflight": true,
           "presets": [
@@ -318,7 +312,6 @@ describe('bundle config', () => {
           "include": [
             "./src/**/*.{ts,tsx,jsx}",
           ],
-          "jsxFramework": "react",
           "name": "__bamboo.config__",
           "preflight": true,
           "presets": [
@@ -359,7 +352,6 @@ describe('bundle config', () => {
           "include": [
             "./src/**/*.{ts,tsx,jsx}",
           ],
-          "jsxFramework": "react",
           "name": "__bamboo.config__",
           "preflight": true,
           "presets": [
@@ -400,7 +392,6 @@ describe('bundle config', () => {
           "include": [
             "./src/**/*.{ts,tsx,jsx}",
           ],
-          "jsxFramework": "react",
           "name": "__bamboo.config__",
           "preflight": true,
           "presets": [

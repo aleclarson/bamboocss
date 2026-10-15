@@ -13,6 +13,9 @@ import type { UserConfig } from '@bamboocss/types'
  * bare "unknown option". Entries can be dropped a release or two after removal, once nobody is
  * upgrading across them.
  */
+const JSX_FACTORY_GONE = (key: string) => () =>
+  `\`${key}\` configured the JSX factory, which is gone: \`styled-system/jsx\` is not generated, and a recipe component is an ordinary one calling the recipe. Delete it.`
+
 const REMOVED: Record<string, (value: unknown) => string> = {
   pruneUnusedTokens: (value) =>
     value === 'strict'
@@ -43,6 +46,26 @@ const REMOVED: Record<string, (value: unknown) => string> = {
     value
       ? `\`lightningcss: true\` is now \`plugins: [pluginLightningcss()]\` from \`@bamboocss/plugin-lightningcss\`, which you install yourself. The flag forced a static import, so every project carried the native binary whether or not it was on.`
       : `\`lightningcss: false\` was the default and no longer exists — delete it.`,
+
+  // Panda's. A config migrated from `panda.config.ts` still carries them, and nothing else would
+  // say so: each one used to build clean, even under `validation: 'error'`. `strictTokens` was
+  // bamboo's too, before it became a build check.
+  strictTokens: (value) =>
+    value === 'unknown-tokens'
+      ? `\`strictTokens: 'unknown-tokens'\` is gone: the build reports a token that does not exist without it, graded by \`unresolvedToken\`. Delete it.`
+      : value
+        ? `\`strictTokens: true\` is now \`strictValues: true\`. The build checks it, rather than the generated types, and a raw value is written \`'[14px]'\`.`
+        : `\`strictTokens: false\` was the default and no longer exists — delete it.`,
+  polyfill: () =>
+    `\`polyfill\` is gone: cascade layers are written as they are, and not rewritten for browsers without \`@layer\`. Delete it.`,
+  jsxFramework: JSX_FACTORY_GONE('jsxFramework'),
+  jsxFactory: JSX_FACTORY_GONE('jsxFactory'),
+  jsxStyleProps: JSX_FACTORY_GONE('jsxStyleProps'),
+  syntax: (value) =>
+    value === 'template-literal'
+      ? `\`syntax: 'template-literal'\` is gone with the template-literal syntax: write styles as objects, \`css({ color: 'red.300' })\`, and delete it.`
+      : `\`syntax\` chose between template literals and objects, and objects are all there is now — delete it.`,
+  studio: () => `\`studio\` configured Panda Studio, which bamboo does not have — delete it.`,
 }
 
 /** Values that no longer exist for an option that does. Keyed by option, then by old value. */
@@ -155,6 +178,16 @@ export function validateRemovedOptions(
     addError('config', `\`prune.tokens\` takes a boolean now, not a strategy — write \`${replacement}\`.${note}`)
   }
 
+  // The JSX factory's module, in an import map: nothing is generated there, and nothing imported
+  // from it is read, so a component still importing from it is styled by nothing.
+  const importMaps = [dict.importMap].flat().filter((option) => option != null && typeof option === 'object')
+  if (importMaps.some((option) => Object.hasOwn(option, 'jsx'))) {
+    addError(
+      'config',
+      `\`importMap.jsx\` named the JSX factory's module, which is gone: \`styled-system/jsx\` is not generated. Delete it.`,
+    )
+  }
+
   // Per-pattern, so it is missed by every check above.
   for (const [name, pattern] of Object.entries(config.patterns ?? {})) {
     const dictPattern = pattern as Record<string, unknown> | undefined
@@ -168,6 +201,15 @@ export function validateRemovedOptions(
       addError(
         'patterns',
         `\`${name}.blocklist\` is now \`${name}.cssProps: { except: [...] }\`, which is no longer experimental and no longer silently dropped when the pattern also set \`strict\`.`,
+      )
+    }
+
+    // The pattern's JSX component — `<Stack>` — its name and the element it rendered.
+    for (const key of ['jsx', 'jsxName', 'jsxElement']) {
+      if (!Object.hasOwn(dictPattern, key)) continue
+      addError(
+        'patterns',
+        `\`${name}.${key}\` configured the pattern's JSX component, which is gone with the JSX factory: \`${name}()\` returns the class name to put on an element of your own. Delete it.`,
       )
     }
   }

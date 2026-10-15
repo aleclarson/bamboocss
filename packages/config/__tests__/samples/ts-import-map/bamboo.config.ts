@@ -6,7 +6,6 @@ export default defineConfig({
   include: ['./ts-import-map.js'],
   exclude: [],
   hash: false,
-  jsxFramework: 'react',
   outdir: './ts-import-map-outdir',
   importMap: {
     css: '#bamboo/css',

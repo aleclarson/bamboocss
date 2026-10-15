@@ -647,8 +647,8 @@ export interface PruneOptions {
    * assertion wants `warn`, which still prints every reference being covered.
    *
    * Named for what it checks rather than `strict`, which already means something unrelated
-   * here: `strictTokens` and `strictPropertyValues` narrow generated *typescript*, and
-   * neither implies nor is implied by this.
+   * here: `strictValues` asks for every value to be a token, `strictPropertyValues` narrows
+   * generated *typescript*, and neither implies nor is implied by this.
    *
    * @default 'off'
    */

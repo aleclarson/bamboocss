@@ -17,8 +17,15 @@ For most projects this is a find-and-replace of `panda` with `bamboo`, plus a re
 - Recipes, variants, compound variants and default variants. **Slot recipes are the exception** – their output compiles
   to one atom string per selected slot; see [below](#vite-compiles-slot-selections-directly).
 - Tokens, semantic tokens, conditions, breakpoints, themes, `staticCss`, cascade layers.
-- The config shape, minus five keys. Every key you have in `panda.config.ts` is valid in `bamboo.config.ts` except
-  `studio`, `jsxFramework`, `jsxFactory`, `jsxStyleProps` and `syntax`, none of which have an equivalent – delete them.
+- The config shape, with some keys renamed and a few gone. A config still setting one of the keys below fails the build
+  with the edit to make, rather than having it ignored:
+  - Renamed: `globalCss`, `globalFontface`, `globalVars` and `globalPositionTry` are
+    `global: { css, fontface, vars, positionTry }`; `themes` is `theme.variants`; `theme.textStyles`,
+    `theme.layerStyles` and `theme.animationStyles` are `theme.mixins`; `strictTokens` is `strictValues`; `hooks` is a
+    plugin; `eject: true` is `presets: []`; `lightningcss: true` is `plugins: [pluginLightningcss()]`; a pattern's
+    `strict` and `blocklist` are `cssProps`; and `validation: 'none'` is `'off'`.
+  - Gone, with no equivalent: `studio`, `jsxFramework`, `jsxFactory`, `jsxStyleProps`, `syntax`, `polyfill`, `jsx` in an
+    `importMap`, and a pattern's `jsx`, `jsxName` and `jsxElement` – delete them.
 - The output directory. It still defaults to `styled-system`, so imports like `styled-system/css` do not move.
 
 Because the generated output directory keeps its name and shape, the only imports you have to touch are the ones that

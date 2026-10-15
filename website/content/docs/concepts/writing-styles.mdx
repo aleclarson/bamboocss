@@ -105,7 +105,8 @@ const styles = css({ bg: '|' })
 - `config.strictPropertyValues` will throw for properties that do not have config tokens, such as `display`, `content`,
   `willChange`, etc. when the value is not a predefined CSS value.
 
-> In both cases, you can use the `[xxx]` escape-hatch syntax to use custom or raw CSS values without TypeScript errors.
+> In both cases, the `[xxx]` escape-hatch syntax writes a custom or raw CSS value: `strictValues` does not report it,
+> and the types `strictPropertyValues` narrows accept it.
 
 #### strictValues
 
@@ -123,8 +124,8 @@ css({ fontSize: '[123px]' }) // ✅ Valid, since `[123px]` is using the escape-h
 css({ content: 'abc' }) // ✅ Valid, since `content` isn't bound to a config token
 ```
 
-For one-off styles, you can always use the escape-hatch syntax `[xxx]` to use custom or raw CSS values without
-TypeScript errors.
+For one-off styles, the escape-hatch syntax `[xxx]` writes a custom or raw CSS value the build does not report. It is a
+build check, not a type: the error above comes from `bamboo` or the Vite plugin, not from `tsc`.
 
 ```ts filename="bamboo.config.ts"
 import { css } from '../styled-system/css'
@@ -143,7 +144,7 @@ css({ bg: 'rd.400!' }) // ❌ Error: `rd.400` is not a token, mark or no mark
 
 What follows the mark is **not** checked — `bg: 'red.400!nonsense'` typechecks. Spelling that out as a closed set of
 templates multiplies every token in the union by five, and it was around half the cost of typechecking a `css()` call
-under `strictValues`. [`unresolvedToken`](/docs/references/config#unresolvedtoken) resolves the path underneath the
+against the token union. [`unresolvedToken`](/docs/references/config#unresolvedtoken) resolves the path underneath the
 mark, so the build still reports the value — failing the build by default, exactly like `rd.400` above.
 
 #### A misspelled token is the build's job, not TypeScript's

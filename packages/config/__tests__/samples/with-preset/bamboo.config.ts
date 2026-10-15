@@ -7,7 +7,6 @@ export default defineConfig({
   include: ['./src/**/*.{ts,tsx,jsx}'],
   exclude: [],
   hash: false,
-  jsxFramework: 'react',
   theme: {
     extend: {
       tokens: {

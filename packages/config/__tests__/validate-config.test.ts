@@ -832,12 +832,12 @@ describe('validateConfig', () => {
 })
 
 /**
- * `strictTokens` is a boolean, and a string that is not one is simply *on*.
+ * `strictValues` is a boolean, and a string that is not one is simply *on*.
  *
- * The generated types test it for truthiness, so `strictValues: 'unknown-tokens'` — which used
- * to be a setting — turns every raw CSS value in the project into a type error, from a config
- * that reads as though it asked for something milder. A build that exits 0 and then a wall of
- * errors matching nothing in the docs.
+ * The build tests it for truthiness, so `strictValues: 'unknown-tokens'` — which, as
+ * `strictTokens`, used to be a setting — reports every raw CSS value in the project, from a
+ * config that reads as though it asked for something milder: a wall of findings matching nothing
+ * in the docs.
  */
 describe('strictValues', () => {
   const validate = (strictValues: unknown) =>

@@ -132,3 +132,50 @@ describe('removed config options', () => {
     expect(message).not.toContain('breakpoints')
   })
 })
+
+/**
+ * Keys a `panda.config.ts` carries that bamboo has no use for. Each of them built clean, even under
+ * `validation: 'error'`, so a migrated project kept `strictTokens: true` and nothing enforced it.
+ */
+describe("Panda's options", () => {
+  test.each([
+    [{ strictTokens: true }, '`strictTokens: true` is now `strictValues: true`'],
+    [{ strictTokens: false }, '`strictTokens: false` was the default and no longer exists'],
+    // Bamboo's own, between Panda's two: what it asked for is on by default now.
+    [{ strictTokens: 'unknown-tokens' }, 'graded by `unresolvedToken`'],
+    [{ polyfill: true }, '`polyfill` is gone'],
+    [{ jsxFramework: 'react' }, '`jsxFramework` configured the JSX factory, which is gone'],
+    [{ jsxFactory: 'styled' }, '`jsxFactory` configured the JSX factory, which is gone'],
+    [{ jsxStyleProps: 'minimal' }, '`jsxStyleProps` configured the JSX factory, which is gone'],
+    [{ syntax: 'template-literal' }, 'write styles as objects'],
+    [{ syntax: 'object-literal' }, 'objects are all there is now'],
+    [{ studio: { title: 'Design system' } }, '`studio` configured Panda Studio'],
+  ])('%o is refused, saying what to do', (config, expected) => {
+    expect(errorFor(config)).toContain(expected)
+  })
+
+  test.each([
+    [{ patterns: { stack: { jsxName: 'Stack' } } }, '`stack.jsxName` configured the pattern'],
+    [{ patterns: { stack: { jsx: ['Stack'] } } }, '`stack.jsx` configured the pattern'],
+    [{ patterns: { stack: { jsxElement: 'section' } } }, '`stack.jsxElement` configured the pattern'],
+    [{ importMap: { css: '@acme/ui/css', jsx: '@acme/ui/jsx' } }, '`importMap.jsx` named the JSX factory'],
+    [{ importMap: ['@acme/ui', { css: '@acme/ui/css', jsx: '@acme/ui/jsx' }] }, '`importMap.jsx`'],
+  ])('%o, a JSX field, is refused', (config, expected) => {
+    expect(errorFor(config)).toContain(expected)
+  })
+
+  test('an import map without one is not reported', () => {
+    expect(errorFor({ importMap: { css: '@acme/ui/css' } })).toBeUndefined()
+    expect(errorFor({ importMap: '@acme/ui' })).toBeUndefined()
+  })
+
+  test('all of them at once, one line each', () => {
+    expect(
+      linesFor({ strictTokens: true, polyfill: true, jsxFramework: 'react', syntax: 'object-literal', studio: {} }),
+    ).toHaveLength(5)
+  })
+
+  test('says nothing about what replaced `strictTokens`', () => {
+    expect(errorFor({ strictValues: true })).toBeUndefined()
+  })
+})

@@ -36,7 +36,6 @@ export async function getContext(options: Options) {
       exclude: ['**/Invalid.tsx', '**/bamboo.config.ts'],
       importMap: './bamboo',
       include: ['**/*'],
-      jsxFactory: 'styled',
     })
     return context
   } else {

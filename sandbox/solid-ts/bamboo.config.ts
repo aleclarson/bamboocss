@@ -65,7 +65,7 @@ export default defineConfig({
       },
     },
   },
-  // strictTokens: true,
+  // strictValues: true,
   global: {
     vars: {
       extend: {

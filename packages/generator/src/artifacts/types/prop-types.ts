@@ -41,7 +41,7 @@ export function generatePropTypes(ctx: Context) {
    * A template literal distributes over a union in any placeholder, so \`\${T}\` against a
    * 258-token colour palette is 258 members, and the old \`\${T}\${Important}\` was four times
    * that. Between them the two modifier forms were 5N of a ~1,560-member union for \`color\`
-   * alone, and half the cost of type-checking a \`css()\` call under \`strictTokens\`. Folding
+   * alone, and half the cost of type-checking a \`css()\` call with the union narrowed. Folding
    * them into one 3N tail is 14.5% off that — 7.09s against 8.29s over the same 4,000 call
    * sites, with a control repeat agreeing to 3.5%.
    *
@@ -74,7 +74,7 @@ export function generatePropTypes(ctx: Context) {
   type FallbackValue = \`fallback(\${string})\`
 
   /**
-   * Only relevant when using \`strictTokens\` or \`strictPropertyValues\` in your config.
+   * Only relevant when using \`strictPropertyValues\` in your config, which narrows the types this widens.
    * - Allows you to use an escape hatch (e.g. \`[123px]\`) to use any string as a value.
    * - Allows you to use a color opacity modifier (e.g. \`red/300\`) with known color values.
    * - Allows you to use an important mark (e.g. \`!\` or \`!important\`) in the value.
@@ -87,7 +87,6 @@ export function generatePropTypes(ctx: Context) {
    *   fontSize: '[123px]', // ⚠️ will not throw even if you haven't defined 123px as a token
    * })
    *
-   * @see https://bamboocss.com/docs/concepts/writing-styles#stricttokens
    * @see https://bamboocss.com/docs/concepts/writing-styles#strictpropertyvalues
    */
   export type WithEscapeHatch<T> =
