@@ -135,6 +135,36 @@ describe('one property of an object, whatever its siblings are', () => {
   })
 })
 
+/**
+ * `+` evaluates the way the source does at runtime. It used to concatenate whatever the operands
+ * were, so `base + 1` compiled to `z_101` — a class and a rule that agreed with each other and
+ * with nothing the author wrote.
+ */
+describe('arithmetic', () => {
+  test.each([
+    ['numbers add', `const base = 10\nexport const A = css({ zIndex: base + 1 })`, 'z_11', 'z-index: 11;'],
+    ['inside a template literal', 'export const A = css({ width: `${2 + 3}px` })', 'w_5px', 'width: 5px;'],
+    ['in a helper', `const layer = (n) => ({ zIndex: n + 1 })\nexport const A = css(layer(1))`, 'z_2', 'z-index: 2;'],
+    [
+      'a string operand concatenates',
+      `const unit = 'px'\nexport const A = css({ width: 4 + unit })`,
+      'w_4px',
+      'width: 4px;',
+    ],
+    [
+      'a numeric string concatenates too',
+      `const base = '10'\nexport const A = css({ zIndex: base + 1 })`,
+      'z_101',
+      'z-index: 101;',
+    ],
+  ])('%s', (_, body, className, declaration) => {
+    const result = foldOf(withImport(body))
+
+    expect(result).toMatchObject({ classes: [className], skipped: [] })
+    expect(result.css).toContain(declaration)
+  })
+})
+
 describe('what is still not known', () => {
   test.each([
     [
@@ -170,6 +200,8 @@ describe('what is still not known', () => {
       'a destructured property with a default standing in for it',
       `const theme = { px: compute() }\nconst { w = '10' } = theme\nexport const A = css({ width: w })`,
     ],
+    // A hole reads as `undefined`, and `undefined + 1` is `NaN` — not a value to compile.
+    ['`+` on an array hole', `const z = [, 2]\nexport const A = css({ zIndex: z[0] + 1 })`],
   ])('%s', (_, body) => {
     expect(foldOf(withImport(body))).toMatchObject({ classes: [], skipped: ['dynamic'] })
   })

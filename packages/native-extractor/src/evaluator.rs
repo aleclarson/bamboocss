@@ -1727,20 +1727,6 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             };
             let left = side(self, &binary.left);
             let right = side(self, &binary.right);
-            // Numeric `+` adds here. The general evaluator deliberately concatenates (class
-            // names already depend on it), but an enum member is a number to `tsc`, and
-            // `B = A + 1` concatenating to `"01"` would be a wrong value, not a style choice.
-            if binary.operator == BinaryOperator::Addition
-                && let (Some(serde_json::Value::Number(a)), Some(serde_json::Value::Number(b))) =
-                    (&left.value, &right.value)
-                && let (Some(a), Some(b)) = (a.as_f64(), b.as_f64())
-            {
-                return serde_json::Number::from_f64(a + b).map_or_else(EvalResult::unknown, |n| {
-                    let mut result = EvalResult::known(serde_json::Value::Number(n));
-                    result.complete = left.complete && right.complete;
-                    result
-                });
-            }
             return self.combine_binary(binary.operator, left, right);
         }
         self.evaluate(initializer)
@@ -1819,14 +1805,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             };
         };
         let value = match operator {
-            // The established extractor boxes `+` through property-name evaluation, which
-            // stringifies both sides even when both are numeric. Preserve that observable
-            // behavior: class names and CSS snapshots already contain it.
-            BinaryOperator::Addition => Some(serde_json::Value::String(format!(
-                "{}{}",
-                to_js_string(&left),
-                to_js_string(&right)
-            ))),
+            BinaryOperator::Addition => add_values(&left, &right),
             BinaryOperator::Subtraction => numeric_binary(&left, &right, |a, b| a - b),
             BinaryOperator::Multiplication => numeric_binary(&left, &right, |a, b| a * b),
             BinaryOperator::Division => numeric_binary(&left, &right, |a, b| a / b),
@@ -2832,9 +2811,17 @@ fn to_js_string(value: &serde_json::Value) -> String {
             }
         }
         serde_json::Value::String(value) => value.clone(),
+        // `Array.prototype.join`, which writes a `null` or `undefined` element — and a hole,
+        // which the array evaluator stores as `null` — as nothing.
         serde_json::Value::Array(values) => values
             .iter()
-            .map(to_js_string)
+            .map(|value| {
+                if value.is_null() {
+                    String::new()
+                } else {
+                    to_js_string(value)
+                }
+            })
             .collect::<Vec<_>>()
             .join(","),
         serde_json::Value::Object(_) => "[object Object]".to_string(),
@@ -2849,6 +2836,39 @@ fn number_value(value: &serde_json::Value) -> Option<f64> {
         serde_json::Value::String(value) => value.trim().parse().ok(),
         _ => None,
     }
+}
+
+/// `+` as JavaScript evaluates it: concatenation once either side is a string — or an array or
+/// object, which convert to one — and numeric addition otherwise.
+///
+/// It used to concatenate unconditionally, after the retired extractor, so `base + 1` with
+/// `base = 10` compiled to `z_101` while the same expression at runtime is `11`. The class and
+/// its rule agreed with each other, which is why nothing caught it; both disagreed with the
+/// source.
+///
+/// A `null` operand is left unknown. The array evaluator stores a hole and an `undefined`
+/// element as `null` too, and the two add differently — `null + 1` is `1`, `undefined + 1` is
+/// `NaN` — so a guess would compile a value the runtime may never produce.
+fn add_values(left: &serde_json::Value, right: &serde_json::Value) -> Option<serde_json::Value> {
+    if left.is_null() || right.is_null() {
+        return None;
+    }
+    let converts_to_string = |value: &serde_json::Value| {
+        matches!(
+            value,
+            serde_json::Value::String(_)
+                | serde_json::Value::Array(_)
+                | serde_json::Value::Object(_)
+        )
+    };
+    if converts_to_string(left) || converts_to_string(right) {
+        return Some(serde_json::Value::String(format!(
+            "{}{}",
+            to_js_string(left),
+            to_js_string(right)
+        )));
+    }
+    numeric_binary(left, right, |a, b| a + b)
 }
 
 fn numeric_binary(
