@@ -18,3 +18,11 @@ export type * from './system-types'
 export type * from './theme'
 export type * from './tokens'
 export type * from './utility'
+
+// Names two modules declare. `pattern.ts` and `composition.ts` keep copies of their own, since they
+// are copied whole into every project's `styled-system/types`, and a declaration file exports every
+// declaration in it — so `export type *` found each name twice, TS2308 in every project
+// type-checking its dependencies with `skipLibCheck` off. Named here, from the module each belongs
+// to, they are no longer ambiguous.
+export type { LiteralUnion, Primitive, Recursive } from './shared'
+export type { Token } from './tokens'

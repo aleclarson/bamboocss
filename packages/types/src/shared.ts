@@ -1,4 +1,4 @@
-type Primitive = string | number | boolean | null | undefined
+export type Primitive = string | number | boolean | null | undefined
 
 export type LiteralUnion<T, K extends Primitive = string> = T | (K & Record<never, never>)
 
