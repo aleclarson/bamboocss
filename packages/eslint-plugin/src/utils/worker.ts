@@ -8,7 +8,7 @@ import { Generator } from '@bamboocss/generator'
 import type { TokenDataTypes } from '@bamboocss/types'
 import { logger } from '@bamboocss/logger'
 import { readFileSync, statSync } from 'node:fs'
-import path from 'path'
+import path from 'node:path'
 import { runAsWorker } from 'synckit'
 import { configFor } from './config-path'
 

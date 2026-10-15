@@ -4,7 +4,7 @@ import chokidar from 'chokidar'
 import glob from 'fast-glob'
 import fsExtra from 'fs-extra'
 import { readdirSync, realpathSync, statSync, type Stats, type StatSyncOptions } from 'node:fs'
-import { dirname, extname, isAbsolute, join, posix, relative, resolve, sep } from 'path'
+import { dirname, extname, isAbsolute, join, posix, relative, resolve, sep } from 'node:path'
 import picomatch from 'picomatch'
 import { globDirname } from './glob-dirname'
 

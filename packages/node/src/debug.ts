@@ -1,5 +1,5 @@
 import { colors, logger } from '@bamboocss/logger'
-import { parse } from 'path'
+import { parse } from 'node:path'
 import type { BambooContext } from './create-context'
 
 interface DebugOptions {

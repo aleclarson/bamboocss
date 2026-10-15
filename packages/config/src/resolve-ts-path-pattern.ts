@@ -1,4 +1,4 @@
-import { posix, sep } from 'path'
+import { posix, sep } from 'node:path'
 import type { PathMapping } from './ts-config-paths'
 
 /**

@@ -1,4 +1,4 @@
-import { appendFileSync, readFileSync, writeFileSync } from 'fs'
+import { appendFileSync, readFileSync, writeFileSync } from 'node:fs'
 import { lookItUpSync } from 'look-it-up'
 import outdent from 'outdent'
 import type { BambooContext } from './create-context'

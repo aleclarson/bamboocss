@@ -21,7 +21,7 @@ import { BambooError, closestMatch, compact } from '@bamboocss/shared'
 import type { Config, CssArtifactType } from '@bamboocss/types'
 import { cac } from 'cac'
 import { existsSync } from 'node:fs'
-import { join, resolve } from 'path'
+import { join, resolve } from 'node:path'
 import { version } from '../package.json'
 import type {
   AnalyzeCommandFlags,

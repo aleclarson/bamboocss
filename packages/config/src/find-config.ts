@@ -1,6 +1,6 @@
 import { BambooError } from '@bamboocss/shared'
 import findUp from 'escalade/sync'
-import { resolve } from 'path'
+import { resolve } from 'node:path'
 import { isBambooConfig } from './is-bamboo-config'
 import type { ConfigFileOptions } from './types'
 

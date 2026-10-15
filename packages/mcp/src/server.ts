@@ -5,7 +5,7 @@ import { logger } from '@bamboocss/logger'
 import { analyze, loadConfigAndCreateContext, type BambooContext } from '@bamboocss/node'
 import { TOKEN_CATEGORIES } from '@bamboocss/token-dictionary'
 import { Console } from 'node:console'
-import { resolve } from 'path'
+import { resolve } from 'node:path'
 import * as z from 'zod/v4'
 import { version } from '../package.json'
 

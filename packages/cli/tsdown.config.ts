@@ -16,6 +16,9 @@ export default defineConfig(
       entry: [entry],
       format: ['esm', 'cjs'],
       shims: true,
+      // Bundled dependencies import Node's built-ins bare, `os` and `path`, which Deno resolves
+      // only with the `node:` prefix.
+      nodeProtocol: true,
     }),
   ),
 )

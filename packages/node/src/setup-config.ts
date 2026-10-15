@@ -6,8 +6,8 @@ import type { Config } from '@bamboocss/types'
 import fsExtra from 'fs-extra'
 import { lookItUpSync } from 'look-it-up'
 import { outdent } from 'outdent'
-import { join } from 'path'
-import { execFileSync } from 'child_process'
+import { join } from 'node:path'
+import { execFileSync } from 'node:child_process'
 
 type SetupOptions = Partial<Config> & {
   force?: boolean

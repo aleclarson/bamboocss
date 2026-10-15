@@ -1,4 +1,4 @@
-import { join } from 'path'
+import { join } from 'node:path'
 import picomatch from 'picomatch'
 
 export function globDirname(globs: string[]) {

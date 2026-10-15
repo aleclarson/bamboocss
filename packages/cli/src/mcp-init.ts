@@ -1,7 +1,7 @@
 import * as p from '@clack/prompts'
 import { logger } from '@bamboocss/logger'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'fs'
-import { dirname, resolve } from 'path'
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, resolve } from 'node:path'
 import { version } from '../package.json'
 import {
   CLIENT_NAMES,
