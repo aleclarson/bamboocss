@@ -39,6 +39,8 @@
   "dependencies": {
     "@bamboocss/config": "workspace:*",
     "@bamboocss/generator": "workspace:*",
+    "@bamboocss/logger": "workspace:*",
+    "@bamboocss/node": "workspace:*",
     "@bamboocss/shared": "workspace:*",
     "@typescript-eslint/scope-manager": "^8.43.0",
     "@typescript-eslint/utils": "^8.21.0",

@@ -286,6 +286,12 @@ importers:
       '@bamboocss/generator':
         specifier: workspace:*
         version: link:../generator
+      '@bamboocss/logger':
+        specifier: workspace:*
+        version: link:../logger
+      '@bamboocss/node':
+        specifier: workspace:*
+        version: link:../node
       '@bamboocss/shared':
         specifier: workspace:*
         version: link:../shared

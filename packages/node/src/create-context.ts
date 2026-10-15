@@ -29,7 +29,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createBox } from './cli-box'
 import { DiffEngine } from './diff-engine'
-import { ParserResult } from './parser-result'
+import { ParserResult, type UnresolvedStyle } from './parser-result'
 import { SourceProject } from './source-project'
 import { nodeRuntime } from './node-runtime'
 import { OutputEngine } from './output-engine'
@@ -85,6 +85,37 @@ const unresolvedReasons: Record<ParserResult['unresolved'][number]['reason'], (p
     `${prop}.raw() composes its own props rather than its styles, so ${prop}'s declarations will not reach the stylesheet`,
     `Call it instead — cx(${prop}(props), css({ … })) — or move the overrides into ${prop} itself.`,
   ],
+}
+
+/**
+ * What the build warns about a style it could not read, in parts: what is lost, why, what to do
+ * about it, and where to read more. The build's warning is all four; the editor's diagnostic —
+ * `@bamboocss/eslint-plugin`'s `no-unresolved-styles` — the first and the third, the same words.
+ *
+ * A recipe does not degrade the way a `css()` call does, so it does not get the same explanation.
+ * Its classes are named from a hash of its config: a declaration the build cannot see changes that
+ * hash, the browser asks for a name no rule was emitted under, and *every* style is lost rather
+ * than the unresolved one. A `css()` call's loss is partial — what the build saw still applies — so
+ * its wording says which half is missing rather than implying the element is unstyled.
+ */
+export function explainUnresolvedStyle(entry: Pick<UnresolvedStyle, 'kind' | 'prop' | 'reason'>) {
+  const [loss] = unresolvedReasons[entry.reason](entry.prop ? `\`${entry.prop}\`` : 'a property')
+  // The path is what makes several losses in one config distinguishable — without it they read
+  // as identical lines at the same position.
+  const what = entry.prop ? `${loss} at \`${entry.prop}\`` : loss
+  return entry.kind === 'recipe'
+    ? {
+        what,
+        why: "A recipe's classes are named from a hash of its config, so a declaration the build cannot see gives the build and the browser different names and the element renders with no styles at all.",
+        fix: 'Set `className` on the recipe, so its name does not depend on what the build could resolve.',
+        see: 'https://bamboocss.com/docs/concepts/recipes',
+      }
+    : {
+        what,
+        why: 'The build emits a rule per declaration it can see, and the runtime names a class for every declaration the object actually has — so the ones it could not see have no rule behind them and are simply absent.',
+        fix: 'Write the value out, or generate it with `staticCss` if it is genuinely dynamic.',
+        see: 'https://bamboocss.com/docs/guides/dynamic-styling',
+      }
 }
 
 export class BambooContext extends Generator {
@@ -202,33 +233,8 @@ export class BambooContext extends Generator {
       if (this.isGenerated(entry.filePath)) continue
 
       const where = `${entry.filePath}:${entry.line}:${entry.column}`
-      const prop = entry.prop ? `\`${entry.prop}\`` : 'a property'
-      const [what] = unresolvedReasons[entry.reason](prop)
-
-      // A recipe does not degrade the way a `css()` call does, so it does not get the same
-      // explanation. Its classes are named from a hash of its config: a
-      // declaration the build cannot see changes that hash, the browser asks for a name no
-      // rule was emitted under, and *every* style is lost rather than the unresolved one.
-      if (entry.kind === 'recipe') {
-        // The path is what makes several losses in one config distinguishable — without
-        // it they render as identical lines at the same position.
-        const at = entry.prop ? ` at \`${entry.prop}\`` : ''
-        logger.warn(
-          'recipe',
-          `${where} — ${what}${at}. A recipe's classes are named from a hash of its config, so a declaration the build cannot see gives the build and the browser different names and the element renders with no styles at all. Set \`className\` on the recipe, so its name does not depend on what the build could resolve. See https://bamboocss.com/docs/concepts/recipes`,
-        )
-        continue
-      }
-
-      {
-        // The loss is partial rather than total — what the build saw still applies — so the
-        // wording says which half is missing rather than implying the element is unstyled.
-        const at = entry.prop ? ` at \`${entry.prop}\`` : ''
-        logger.warn(
-          'css',
-          `${where} — ${what}${at}. The build emits a rule per declaration it can see, and the runtime names a class for every declaration the object actually has — so the ones it could not see have no rule behind them and are simply absent. Write the value out, or generate it with \`staticCss\` if it is genuinely dynamic. See https://bamboocss.com/docs/guides/dynamic-styling`,
-        )
-      }
+      const { fix, see, what, why } = explainUnresolvedStyle(entry)
+      logger.warn(entry.kind === 'recipe' ? 'recipe' : 'css', `${where} — ${what}. ${why} ${fix} See ${see}`)
     }
   }
 
@@ -412,7 +418,7 @@ export class BambooContext extends Generator {
    * "do not read it": the token and keyframe scans read whatever `include` covers, and a
    * project that excludes its `outdir` should not lose them.
    */
-  private isGenerated = (file: string) => {
+  isGenerated = (file: string) => {
     const outdir = this.runtime.path.join(...this.paths.root)
     return file === outdir || file.startsWith(outdir + this.runtime.path.sep)
   }

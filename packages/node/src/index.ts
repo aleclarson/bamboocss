@@ -4,7 +4,7 @@ export { Builder, type BuilderSetupOptions, type BuilderSourceChanges } from './
 export { codegen } from './codegen'
 export { loadConfigAndCreateContext } from './config'
 export { startProfiling } from './cpu-profile'
-export { BambooContext } from './create-context'
+export { BambooContext, explainUnresolvedStyle } from './create-context'
 export { cssgen, type CssGenOptions } from './cssgen'
 export { debug } from './debug'
 export { generate, type GenerateOptions } from './generate'

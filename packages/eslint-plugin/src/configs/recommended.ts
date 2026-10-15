@@ -12,6 +12,7 @@ export const recommendedRules = {
   'bamboo/no-invalid-token-paths': 'error',
   'bamboo/no-property-renaming': 'warn',
   'bamboo/no-unlayered-override': 'warn',
+  'bamboo/no-unresolved-styles': 'warn',
   'bamboo/require-recipe-class-name': ['warn', { mode: 'dynamic-only' }],
   'bamboo/no-unsafe-token-fn-usage': 'warn',
 } satisfies Linter.RulesRecord

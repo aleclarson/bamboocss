@@ -14,6 +14,7 @@ import noPhysicalProperties, { RULE_NAME as NoPhysicalProperties } from './no-ph
 import noPropertyRenaming, { RULE_NAME as NoPropertyRenaming } from './no-property-renaming'
 import noRedundantValue, { RULE_NAME as NoRedundantValue } from './no-redundant-value'
 import noUnlayeredOverride, { RULE_NAME as NoUnlayeredOverride } from './no-unlayered-override'
+import noUnresolvedStyles, { RULE_NAME as NoUnresolvedStyles } from './no-unresolved-styles'
 import requireLiteralTokenPath, { RULE_NAME as RequireLiteralTokenPath } from './require-literal-token-path'
 import requireRecipeClassName, { RULE_NAME as RequireRecipeClassName } from './require-recipe-class-name'
 import noUnsafeTokenUsage, { RULE_NAME as NoUnsafeTokenUsage } from './no-unsafe-token-fn-usage'
@@ -40,6 +41,7 @@ export const rules = {
   [NoPropertyRenaming]: noPropertyRenaming,
   [NoRedundantValue]: noRedundantValue,
   [NoUnlayeredOverride]: noUnlayeredOverride,
+  [NoUnresolvedStyles]: noUnresolvedStyles,
   [RequireLiteralTokenPath]: requireLiteralTokenPath,
   [RequireRecipeClassName]: requireRecipeClassName,
   [NoUnsafeTokenUsage]: noUnsafeTokenUsage,

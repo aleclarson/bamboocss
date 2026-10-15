@@ -63,6 +63,19 @@ export const syncAction = ((...args: Parameters<typeof run>) => {
   }
 }) as typeof run
 
+/**
+ * `syncAction` without its cache, for an action given the file's text: a cache keyed by every
+ * version of every file an editor lints would only grow.
+ */
+export const syncActionUncached = ((...args: Parameters<typeof run>) => {
+  try {
+    return _syncAction(...args)
+  } catch (error) {
+    console.error('syncAction error:', error)
+    return undefined
+  }
+}) as typeof run
+
 export type ImportResult = {
   alias: string
   importMapValue?: string

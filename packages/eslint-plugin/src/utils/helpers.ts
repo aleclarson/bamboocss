@@ -1,4 +1,4 @@
-import { type ImportResult, syncAction } from '.'
+import { type ImportResult, syncAction, syncActionUncached } from '.'
 import {
   isCallExpression,
   isIdentifier,
@@ -193,6 +193,22 @@ const isLocalStyledFactory = (node: TSESTree.JSXOpeningElement, context: RuleCon
   }
 
   return true
+}
+
+/**
+ * The styles in this file the build could not read, as the build explains them. Asked only of a
+ * file the build reads — one that imports bamboo, which `include` reaches, and that is a file
+ * rather than a code block a processor such as `@eslint/markdown` lifted out of one — which the
+ * cached answers settle without sending the file's text. A file reaching bamboo only through
+ * `require()` or a re-export is not asked about.
+ */
+export const getUnresolvedStyles = (context: RuleContext<any, any>) => {
+  // `physicalFilename` is ESLint 8.40's; before it, `getPhysicalFilename()`.
+  const physicalFilename =
+    context.physicalFilename ?? (context as { getPhysicalFilename?: () => string }).getPhysicalFilename?.()
+  if ((physicalFilename ?? context.filename) !== context.filename) return []
+  if (getImports(context).length === 0 || !isValidFile(context)) return []
+  return syncActionUncached('unresolvedStyles', getSyncOptions(context), context.sourceCode.text) ?? []
 }
 
 export const isValidFile = (context: RuleContext<any, any>) => {

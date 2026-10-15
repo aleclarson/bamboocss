@@ -1,7 +1,6 @@
 import { fixturePreset } from './config.ts'
 import { mergeConfigs } from '@bamboocss/config'
 import { defineConfig } from '@bamboocss/dev'
-import { Generator } from '@bamboocss/generator'
 import { parseJson, stringifyJson } from '@bamboocss/shared'
 import type { LoadConfigResult, UserConfig } from '@bamboocss/types'
 
@@ -137,16 +136,26 @@ const fixtureDefaults = {
   serialized: stringifyJson(config),
 } as LoadConfigResult
 
-export const createGeneratorContext = (userConfig?: Record<string, unknown>) => {
-  const resolvedConfig = mergeConfigs([
+const resolveConfig = (userConfig?: Record<string, unknown>) =>
+  mergeConfigs([
     fixtureDefaults.config,
     sandboxConfig,
     { importMap: './bamboo' },
     ...(userConfig ? [userConfig] : []),
   ] as unknown as Parameters<typeof mergeConfigs>[0]) as unknown as UserConfig
 
-  return new Generator({
+/** The context the rules read, over the fixture config, as `@bamboocss/node` prepares it. */
+export const createContext = async (userConfig?: Record<string, unknown>) => {
+  const { BambooContext } = await import('@bamboocss/node')
+  return new BambooContext({
     ...fixtureDefaults,
-    config: resolvedConfig,
+    // Where the linted files are, as a real config's directory is: `outdir` and `include` are read
+    // from it.
+    config: { ...resolveConfig(userConfig), cwd: process.cwd() },
+    // A rewrite the build reads in place of the file, as it reads a `.vue` file's script.
+    hooks: {
+      'parser:before': ({ content, filePath }: { content: string; filePath: string }) =>
+        filePath.endsWith('.rewritten.ts') ? `// rewritten\n${content}` : undefined,
+    },
   })
 }

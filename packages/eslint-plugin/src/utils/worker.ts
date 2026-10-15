@@ -5,7 +5,9 @@ import type { ImportResult } from '.'
 import { loadConfig } from '@bamboocss/config'
 import { resolveTsPathPattern } from '@bamboocss/config/ts-path'
 import { Generator } from '@bamboocss/generator'
+import { logger } from '@bamboocss/logger'
 import micromatch from 'micromatch'
+import { readFileSync, statSync } from 'node:fs'
 import path from 'path'
 import { runAsWorker } from 'synckit'
 import { configFor } from './config-path'
@@ -17,7 +19,24 @@ type Options = {
   cwd?: string
 }
 
-const contextCache: { [configPath: string]: Promise<Generator> } = {}
+/** A config's context, and — for one that failed to load — the config's mtime it failed at. */
+const contextCache = new Map<string, { context: Promise<Generator>; failedAt?: number }>()
+
+/** `@bamboocss/node`, loaded once, and only when a rule needs a context. */
+let nodeModule: Promise<typeof import('@bamboocss/node')> | undefined
+const loadNode = () => (nodeModule ??= import('@bamboocss/node'))
+
+/**
+ * Nothing the worker logs reaches ESLint's output, where a line corrupts `--format json`: no
+ * level, and no filter, which would lift the level to `debug` for what it matches. Again after
+ * every config load, which sets both from the config.
+ */
+const silence = () => {
+  logger.level = 'silent'
+  logger.filter = ''
+}
+
+const mtimeOf = (file: string) => statSync(file, { throwIfNoEntry: false })?.mtimeMs ?? -1
 
 export type DeprecatedToken =
   | string
@@ -32,38 +51,93 @@ export type DeprecatedToken =
 // NODE_ENV=test, since the fixtures are not published.
 const testContextModule = process.env.BAMBOO_ESLINT_TEST_CONTEXT
 
-export async function getContext(options: Options) {
+/**
+ * The context every rule reads: `@bamboocss/node`'s, as the build prepares it — `include` matched
+ * from the config's directory, the tsconfig's aliases read, the extraction behind it — one per
+ * config, so no two rules answer from different readings of one config.
+ *
+ * A config that fails to load is not loaded again until it changes: once per edit that broke it,
+ * rather than once per question every rule asks of every file.
+ */
+export async function getContext(options: Options): Promise<Generator> {
+  silence()
+  const key = testContextModule ?? configFor(options)
+  const cached = contextCache.get(key)
+  if (cached && (cached.failedAt === undefined || cached.failedAt === mtimeOf(key))) return cached.context
+
+  const entry: { context: Promise<Generator>; failedAt?: number } = { context: createContext(key) }
+  entry.context.then(silence, () => {
+    entry.failedAt = mtimeOf(key)
+  })
+  contextCache.set(key, entry)
+  return entry.context
+}
+
+async function createContext(configPath: string): Promise<Generator> {
   if (testContextModule) {
-    const { createGeneratorContext } = await import(testContextModule)
-    const context = createGeneratorContext({
+    const { createContext } = await import(testContextModule)
+    return createContext({
       exclude: ['**/Invalid.tsx', '**/bamboo.config.ts'],
       importMap: './bamboo',
       include: ['**/*'],
     })
-    return context
-  } else {
-    const configPath = configFor(options)
-
-    // The context cache ensures we don't reload the same config multiple times
-    if (!contextCache[configPath]) {
-      contextCache[configPath] = _getContext(configPath)
-    }
-
-    return contextCache[configPath]
-  }
-}
-
-async function _getContext(configPath: string | undefined) {
-  if (!configPath) {
-    throw new Error('Invalid config path')
   }
 
   const cwd = path.dirname(configPath)
+  const { loadConfigAndCreateContext } = await loadNode()
+  try {
+    return await loadConfigAndCreateContext({ configPath, cwd })
+  } catch {
+    // The build's preparation refused what the generator alone does not need — a tsconfig that
+    // does not parse, class names the build and the browser would disagree on. The rules that
+    // read only the config go on from it, and the extraction stands aside.
+    const conf = await loadConfig({ cwd, file: configPath })
+    conf.config.cwd ??= cwd
+    return new Generator(conf)
+  }
+}
 
-  const conf = await loadConfig({ cwd, file: configPath })
-  const context = new Generator(conf)
+/**
+ * The styles in `text` the build could not read: where they are, what is lost and what to do —
+ * what `bamboo` warns about at build time, each declaration it names absent from the stylesheet.
+ * Asked only of a file that imports bamboo and that `include` reaches (`getUnresolvedStyles`).
+ *
+ * None for a file under `outdir`, which nothing the author writes would change, as the build skips
+ * it too; nor for one the build reads rewritten — a `.vue`, `.svelte` or `.astro` file, or one a
+ * plugin's `parser:before` changes — whose positions are not the file's. The editor's text stands
+ * in for the file only while it is read, and only where it differs from the file: another file
+ * importing this one reads what is on disk. Its styles are encoded apart, and dropped: nothing in
+ * the worker emits CSS, and a long editor session would otherwise keep every version linted.
+ */
+const unresolvedStyles = async (options: Options, text: string) => {
+  const [context, { BambooContext, explainUnresolvedStyle }] = await Promise.all([getContext(options), loadNode()])
+  if (!(context instanceof BambooContext)) return []
+  const file = path.resolve(options.cwd ?? process.cwd(), options.currentFile)
+  if (context.isGenerated(file)) return []
 
-  return context
+  // ESLint drops a byte order mark from the text it lints.
+  const overlaid = readIfExists(file)?.replace(/^\uFEFF/, '') !== text
+  if (overlaid) context.project.addSourceFile(file, text)
+  try {
+    if (context.parsedSourceText(file) !== text) return []
+    const result = context.parseFile(file, context.encoder.clone())
+    return (result?.unresolved ?? [])
+      .filter((entry) => path.resolve(entry.filePath) === file)
+      .map((entry) => {
+        const { fix, what } = explainUnresolvedStyle(entry)
+        return { column: entry.column, fix, line: entry.line, what }
+      })
+  } finally {
+    if (overlaid) context.project.removeOverlay(file)
+  }
+}
+
+const readIfExists = (file: string) => {
+  try {
+    return readFileSync(file, 'utf8')
+  } catch {
+    return undefined
+  }
 }
 
 // Refactored to arrow function, removed async
@@ -115,6 +189,9 @@ const isColorToken = (context: Generator, value: string): boolean => {
   return Boolean(context.utility.tokens.view.categoryMap.get('colors')?.get(value))
 }
 
+/** A style the build could not read: where it is, what is lost, and what to do about it. */
+export type UnresolvedStyleReport = { column: number; fix: string; line: number; what: string }
+
 type MatchImportResult = {
   alias: string
   mod: string
@@ -144,6 +221,7 @@ export function run(action: 'matchImports', options: Options, result: MatchImpor
 export function run(action: 'filterImports', options: Options, imports: MatchImportResult[]): MatchImportResult[]
 export function run(action: 'getPropCategory', options: Options, property: string): string
 export function run(action: 'filterDeprecatedTokens', options: Options, tokens: DeprecatedToken[]): DeprecatedToken[]
+export function run(action: 'unresolvedStyles', options: Options, text: string): UnresolvedStyleReport[]
 export function run(action: string, options: Options, ...args: any[]): any {
   // @ts-expect-error cast
   return runAsync(action, options, ...args)
@@ -182,6 +260,8 @@ export function runAsync(
   tokens: DeprecatedToken[],
 ): Promise<DeprecatedToken[]>
 export async function runAsync(action: string, options: Options, ...args: any): Promise<any> {
+  if (action === 'unresolvedStyles') return unresolvedStyles(options, args[0])
+
   const context = await getContext(options)
 
   switch (action) {
@@ -207,7 +287,7 @@ export async function runAsync(action: string, options: Options, ...args: any): 
       // @ts-expect-error cast
       return isColorToken(context, ...args)
     case 'isValidFile':
-      return isValidFile(context, options.currentFile)
+      return isValidFile(context, path.resolve(options.cwd ?? process.cwd(), options.currentFile))
     case 'isValidProperty':
       // @ts-expect-error cast
       return isValidProperty(context, ...args)
