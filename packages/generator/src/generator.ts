@@ -478,19 +478,39 @@ export class Generator extends Context {
 
     if (!found.size) return
 
-    const detail = truncateList(
-      Array.from(found.values(), ({ prop, value }) => `- \`${prop}: ${value}\` — write \`[${value}]\` to mean it.`),
-      { limit: 25, unit: 'value', separator: '\n' },
+    const describe = (values: Iterable<{ prop: string; value: string }>, count: string) => {
+      const detail = truncateList(
+        Array.from(values, ({ prop, value }) => `- \`${prop}: ${value}\` — write \`[${value}]\` to mean it.`),
+        { limit: 25, unit: 'value', separator: '\n' },
+      )
+      return (
+        `${count} style value(s) are raw css rather than tokens:\n\n${detail}\n\n` +
+        `\`strictValues\` asks every value to come from the theme, so reaching outside it is visible in the ` +
+        `source. Write \`[value]\` to mean one literally, or add it to your tokens.`
+      )
+    }
+
+    // `error` fails each build on everything the source holds.
+    if (this.config.validation === 'error')
+      throw new BambooError('STRICT_VALUES', describe(found.values(), `${found.size}`))
+
+    // `warn` says each value once: a client and a server build emit the sheet each, and a dev
+    // server on every edit, and each repeated the whole list.
+    const fresh = [...found].filter(([id]) => !this.reportedRawValues.has(id))
+    if (!fresh.length) return
+    for (const [id] of fresh) this.reportedRawValues.add(id)
+    const count = fresh.length < found.size ? `${fresh.length} more, of ${found.size},` : `${fresh.length}`
+    logger.warn(
+      'strict-values',
+      describe(
+        fresh.map(([, finding]) => finding),
+        count,
+      ),
     )
-
-    const message =
-      `${found.size} style value(s) are raw css rather than tokens:\n\n${detail}\n\n` +
-      `\`strictValues\` asks every value to come from the theme, so reaching outside it is visible in the ` +
-      `source. Write \`[value]\` to mean one literally, or add it to your tokens.`
-
-    if (this.config.validation === 'error') throw new BambooError('STRICT_VALUES', message)
-    logger.warn('strict-values', message)
   }
+
+  /** The raw values `warn` has already reported, keyed `property:value`, for the life of the context. */
+  private reportedRawValues = new Set<string>()
 
   assertNoUnresolvedTokens = () => {
     const severity = this.utility.unresolvedToken

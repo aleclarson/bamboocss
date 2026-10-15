@@ -61,6 +61,12 @@ const IDENTIFIER = /^[a-zA-Z][\w-]*(?:\.[a-zA-Z0-9][\w-]*)*$/
  */
 const SLASHED_IDENTIFIER = /^[a-zA-Z][\w-]*(?:[/.][a-zA-Z0-9][\w-]*)*$/
 
+/**
+ * Keywords side by side, `center top`, or listed, `opacity, transform` — each one a keyword as
+ * `flex` is. No dots: a token path is not resolved inside a value of several parts.
+ */
+const KEYWORDS = /^[a-zA-Z][\w-]*(?:(?:\s*,\s*|\s+)[a-zA-Z][\w-]*)+$/
+
 /** @see `Utility.matchesCssGrammar` — lowercased, because a CSS keyword is case-insensitive. */
 const DEPRECATED_SYSTEM_COLORS = new Set(
   (
@@ -1079,6 +1085,14 @@ export class Utility {
     // A keyword or an author identifier. `isUnresolvedTokenValue` reports the ones that are
     // neither, so a value reaching here identifier-shaped is one the grammar accepted.
     if (IDENTIFIER.test(bare)) return false
+
+    // Several of them, the whole value: `objectPosition: 'center top'`, `transitionProperty:
+    // 'opacity, transform'`. They were raw for their spaces and commas, and under `validation:
+    // 'error'` failed the build over a value with no other way to be written. Only a list the
+    // property takes: one it does not — a keyword misspelled, token names side by side, which
+    // are not resolved — is no keyword, and is raw as it was.
+    const whole = value.includes('!') ? withoutImportant(value) : value.trim()
+    if (KEYWORDS.test(whole) && this.matchesCssGrammar(this.cssPropertyOf(key), whole)) return false
 
     // Numbers are values. `padding: 4` resolves through the spacing scale and left above.
     return true
