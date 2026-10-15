@@ -22,6 +22,7 @@ import preferAtomicProperties, { RULE_NAME as PreferAtomicProperties } from './p
 import preferCompositeProperties, { RULE_NAME as PreferCompositeProperties } from './prefer-composite-properties'
 import preferLonghandProperties, { RULE_NAME as PreferLonghandProperties } from './prefer-longhand-properties'
 import preferShorthandProperties, { RULE_NAME as PreferShorthandProperties } from './prefer-shorthand-properties'
+import preferToken, { RULE_NAME as PreferToken } from './prefer-token'
 import preferUnifiedPropertyStyle, { RULE_NAME as PreferUnifiedPropertyStyle } from './prefer-unified-property-style'
 
 export const rules = {
@@ -49,5 +50,6 @@ export const rules = {
   [PreferCompositeProperties]: preferCompositeProperties,
   [PreferLonghandProperties]: preferLonghandProperties,
   [PreferShorthandProperties]: preferShorthandProperties,
+  [PreferToken]: preferToken,
   [PreferUnifiedPropertyStyle]: preferUnifiedPropertyStyle,
 }

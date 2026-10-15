@@ -477,6 +477,23 @@ export const getUnresolvedValueMessage = (property: string, value: string, conte
   return message
 }
 
+/** Whether a call is to a recipe, whose argument selects variants rather than styles anything. */
+export const isRecipeCall = (call: TSESTree.CallExpression, context: RuleContext<any, any>) => {
+  if (call.callee.type !== 'Identifier') return false
+  const imports = getImports(context)
+  return imports.length > 0 && Boolean(syncAction('isRecipe', getSyncOptions(context), call.callee.name, imports))
+}
+
+/**
+ * The tokens holding `value` as written, in the category of the first of `properties` that reads
+ * one, innermost first: what to write instead.
+ */
+export const getTokensWithValue = (properties: string[], value: string, context: RuleContext<any, any>) => {
+  return (
+    syncAction('tokensWithValue', getSyncOptions(context), properties, value) ?? { category: undefined, tokens: [] }
+  )
+}
+
 // Caching deprecated tokens to avoid redundant computations
 const deprecatedTokensCache = new Map<string, DeprecatedToken[]>()
 

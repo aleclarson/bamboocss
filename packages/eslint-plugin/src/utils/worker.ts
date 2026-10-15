@@ -5,6 +5,7 @@ import type { ImportResult } from '.'
 import { loadConfig } from '@bamboocss/config'
 import { resolveTsPathPattern } from '@bamboocss/config/ts-path'
 import { Generator } from '@bamboocss/generator'
+import type { TokenDataTypes } from '@bamboocss/types'
 import { logger } from '@bamboocss/logger'
 import micromatch from 'micromatch'
 import { readFileSync, statSync } from 'node:fs'
@@ -170,6 +171,73 @@ const explainUnresolvedValue = (context: Generator, property: string, value: str
   return utility.explainUnresolvedToken(utility.unresolvedTokenRef(key, utility.bareTokenPath(key, value)))
 }
 
+/**
+ * A value as CSS reads it: the spacing between words, and around `/` and `,`, aside; a hex color's
+ * case, and its short form spelled out; a leading zero written. Nothing else's case — a keyframe's
+ * name, a custom property's — is CSS's to fold, and a quoted string or a `url()` is kept as written.
+ */
+const normalizeValue = (value: string) => {
+  const trimmed = value.trim()
+  if (/url\(|["']/i.test(trimmed)) return trimmed
+  return trimmed
+    .replace(/\s+/g, ' ')
+    .replace(/\s*([/,])\s*/g, '$1')
+    .replace(
+      /#([0-9a-f]{3,8})\b/gi,
+      (_, hex: string) =>
+        `#${(hex.length === 3 || hex.length === 4 ? [...hex].map((digit) => digit + digit).join('') : hex).toLowerCase()}`,
+    )
+    .replace(/(^|[\s(,/*+-])\.(\d)/g, '$10.$2')
+}
+
+/**
+ * A keyword, or a name: `currentColor`, `auto`, `normal`, `thin`, `white`. A value of CSS, or a
+ * name a theme gave one, rather than a design value written out — whatever token holds it.
+ */
+const isIdentifier = (value: string) => /^-?[a-z][a-z-]*$/i.test(value)
+
+/** Each category's tokens by their value as CSS reads it, built once per context. */
+const tokensByValue = new WeakMap<Generator, Map<string, Map<string, string[]>>>()
+
+const valuesOf = (context: Generator, category: string) => {
+  let categories = tokensByValue.get(context)
+  if (!categories) tokensByValue.set(context, (categories = new Map()))
+  let byValue = categories.get(category)
+  if (byValue) return byValue
+
+  byValue = new Map()
+  for (const [name, token] of context.utility.tokens.view.categoryMap.get(category as keyof TokenDataTypes) ?? []) {
+    const { condition, isNegative, isVirtual } = token.extensions
+    if (isNegative || isVirtual || token.isConditional || token.isReference) continue
+    if (condition !== undefined && condition !== 'base') continue
+    if (typeof token.value !== 'string' && typeof token.value !== 'number') continue
+    const value = normalizeValue(String(token.value))
+    byValue.set(value, [...(byValue.get(value) ?? []), name])
+  }
+  categories.set(category, byValue)
+  return byValue
+}
+
+/**
+ * The tokens holding `value` as written — `1rem`, `#2f81f7` — in the category of the first of
+ * `properties` that has one, innermost first: `padding: { base: '1rem' }` asks about `base`, then
+ * `padding`. By the name a style writes them, and none for a value that already is one's name,
+ * which reads as the token however it is spelled, or for a keyword. Not a token whose value no
+ * literal is: a reference, a condition's, a negative, or a color palette's stand-in.
+ */
+const tokensWithValue = (context: Generator, properties: string[], value: string) => {
+  for (const property of properties) {
+    const category =
+      context.utility.getTokenType(context.utility.resolveShorthand(property)) ?? getPropertyCategory(context, property)
+    if (!category) continue
+
+    const named = context.utility.tokens.view.categoryMap.get(category as keyof TokenDataTypes)
+    if (!named || named.has(value) || isIdentifier(value.trim())) return { category, tokens: [] }
+    return { category, tokens: valuesOf(context, category).get(normalizeValue(value)) ?? [] }
+  }
+  return { category: undefined, tokens: [] }
+}
+
 // Refactored to arrow function, removed async
 const getPropertyCategory = (context: Generator, _attribute: string) => {
   const longhand = resolveLongHand(context, _attribute)
@@ -217,11 +285,18 @@ export function run(action: 'resolveLongHand', options: Options, name: string): 
 
 export function run(action: 'isValidProperty', options: Options, name: string, patternName?: string): boolean
 export function run(action: 'matchFile', options: Options, name: string, imports: ImportResult[]): boolean
+export function run(action: 'isRecipe', options: Options, name: string, imports: ImportResult[]): boolean
 export function run(action: 'matchImports', options: Options, result: MatchImportResult): boolean
 export function run(action: 'filterImports', options: Options, imports: MatchImportResult[]): MatchImportResult[]
 export function run(action: 'getPropCategory', options: Options, property: string): string
 export function run(action: 'filterDeprecatedTokens', options: Options, tokens: DeprecatedToken[]): DeprecatedToken[]
 export function run(action: 'unresolvedStyles', options: Options, text: string): UnresolvedStyleReport[]
+export function run(
+  action: 'tokensWithValue',
+  options: Options,
+  properties: string[],
+  value: string,
+): { category: string | undefined; tokens: string[] }
 export function run(action: string, options: Options, ...args: any[]): any {
   // @ts-expect-error cast
   return runAsync(action, options, ...args)
@@ -291,6 +366,9 @@ export async function runAsync(action: string, options: Options, ...args: any): 
     case 'isValidProperty':
       // @ts-expect-error cast
       return isValidProperty(context, ...args)
+    case 'isRecipe':
+      // @ts-expect-error cast
+      return isRecipe(context, ...args)
     case 'matchFile':
       // @ts-expect-error cast
       return matchFile(context, ...args)
@@ -300,6 +378,9 @@ export async function runAsync(action: string, options: Options, ...args: any): 
     case 'resolveLongHand':
       // @ts-expect-error cast
       return resolveLongHand(context, ...args)
+    case 'tokensWithValue':
+      // @ts-expect-error cast
+      return tokensWithValue(context, ...args)
     case 'resolveShorthands':
       // @ts-expect-error cast
       return resolveShorthands(context, ...args)
@@ -341,6 +422,11 @@ const isValidProperty = (context: Generator, name: string, patternName?: string)
 const matchFile = (context: Generator, name: string, imports: ImportResult[]) => {
   const file = context.imports.file(imports)
   return file.match(name)
+}
+
+/** Whether `name`, among a file's imports, is a recipe: a call to it selects variants. */
+const isRecipe = (context: Generator, name: string, imports: ImportResult[]) => {
+  return context.imports.file(imports).isValidRecipe(name)
 }
 
 // Refactored to arrow function, removed async
