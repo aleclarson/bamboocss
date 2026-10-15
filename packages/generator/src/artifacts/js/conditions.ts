@@ -32,15 +32,15 @@ export function generateConditions(ctx: Context) {
     export type ConditionalValue<V> =
       | V
       | {
-          [K in keyof Conditions]?: ConditionalValue<V>
+          [K in keyof Conditions]?: ConditionalValue<V> | undefined
         }
 
     export type Nested<P> = P & {
-      [K in Selectors]?: Nested<P>
+      [K in Selectors]?: Nested<P> | undefined
     } & {
-      [K in AnySelector]?: Nested<P>
+      [K in AnySelector]?: Nested<P> | undefined
     } & {
-      [K in keyof Conditions]?: Nested<P>
+      [K in keyof Conditions]?: Nested<P> | undefined
     }
 
   `,

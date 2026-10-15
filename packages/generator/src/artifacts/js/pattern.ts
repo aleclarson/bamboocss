@@ -38,7 +38,7 @@ export function generatePattern(ctx: Context, filters?: ArtifactFilters) {
            .map((key) => {
              const value = properties![key]
              const typeString = ctx.patterns.getPropertyType(value)
-             return `${key}?: ${typeString}`
+             return `${key}?: ${typeString} | undefined`
            })
            .join('\n\t')}
       }

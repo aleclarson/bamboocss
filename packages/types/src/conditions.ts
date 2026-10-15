@@ -59,15 +59,15 @@ export type Condition = string
 export type ConditionalValue<V> =
   | V
   | {
-      [K in keyof Conditions]?: ConditionalValue<V>
+      [K in keyof Conditions]?: ConditionalValue<V> | undefined
     }
 
 export type Nested<P> =
   | (P & {
-      [K in Selectors]?: Nested<P>
+      [K in Selectors]?: Nested<P> | undefined
     } & {
-      [K in AnySelector]?: Nested<P>
+      [K in AnySelector]?: Nested<P> | undefined
     })
   | {
-      [K in Condition]?: Nested<P>
+      [K in Condition]?: Nested<P> | undefined
     }

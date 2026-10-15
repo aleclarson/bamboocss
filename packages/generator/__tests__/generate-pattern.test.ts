@@ -20,13 +20,13 @@ test('should generate pattern', () => {
     import type { Tokens } from '../tokens/index';
 
     export interface FlexProperties {
-       align?: SystemProperties["alignItems"]
-    	justify?: SystemProperties["justifyContent"]
-    	direction?: SystemProperties["flexDirection"]
-    	wrap?: SystemProperties["flexWrap"]
-    	basis?: SystemProperties["flexBasis"]
-    	grow?: SystemProperties["flexGrow"]
-    	shrink?: SystemProperties["flexShrink"]
+       align?: SystemProperties["alignItems"] | undefined
+    	justify?: SystemProperties["justifyContent"] | undefined
+    	direction?: SystemProperties["flexDirection"] | undefined
+    	wrap?: SystemProperties["flexWrap"] | undefined
+    	basis?: SystemProperties["flexBasis"] | undefined
+    	grow?: SystemProperties["flexGrow"] | undefined
+    	shrink?: SystemProperties["flexShrink"] | undefined
     }
 
     interface FlexStyles extends FlexProperties, DistributiveOmit<SystemStyleObject, keyof FlexProperties > {}
@@ -85,7 +85,7 @@ test('should generate pattern', () => {
     import type { Tokens } from '../tokens/index';
 
     export interface SpacerProperties {
-       size?: ConditionalValue<Tokens["spacing"]>
+       size?: ConditionalValue<Tokens["spacing"]> | undefined
     }
 
     interface SpacerStyles extends SpacerProperties, DistributiveOmit<SystemStyleObject, keyof SpacerProperties > {}
@@ -143,8 +143,8 @@ test('should generate pattern', () => {
     import type { Tokens } from '../tokens/index';
 
     export interface CenterProperties {
-       inline?: ConditionalValue<boolean>
-    	size?: SystemProperties["width"]
+       inline?: ConditionalValue<boolean> | undefined
+    	size?: SystemProperties["width"] | undefined
     }
 
     interface CenterStyles extends CenterProperties, DistributiveOmit<SystemStyleObject, keyof CenterProperties > {}
@@ -258,7 +258,7 @@ test('should generate pattern', () => {
     import type { Tokens } from '../tokens/index';
 
     export interface AspectRatioProperties {
-       ratio?: ConditionalValue<number>
+       ratio?: ConditionalValue<number> | undefined
     }
 
     interface AspectRatioStyles extends AspectRatioProperties, DistributiveOmit<SystemStyleObject, keyof AspectRatioProperties | 'aspectRatio'> {}
@@ -329,11 +329,11 @@ test('should generate pattern', () => {
     import type { Tokens } from '../tokens/index';
 
     export interface GridProperties {
-       gap?: SystemProperties["gap"]
-    	columnGap?: SystemProperties["gap"]
-    	rowGap?: SystemProperties["gap"]
-    	columns?: ConditionalValue<number>
-    	minChildWidth?: ConditionalValue<Tokens["sizes"] | Properties["width"]>
+       gap?: SystemProperties["gap"] | undefined
+    	columnGap?: SystemProperties["gap"] | undefined
+    	rowGap?: SystemProperties["gap"] | undefined
+    	columns?: ConditionalValue<number> | undefined
+    	minChildWidth?: ConditionalValue<Tokens["sizes"] | Properties["width"]> | undefined
     }
 
     interface GridStyles extends GridProperties, DistributiveOmit<SystemStyleObject, keyof GridProperties > {}
@@ -393,12 +393,12 @@ test('should generate pattern', () => {
     import type { Tokens } from '../tokens/index';
 
     export interface GridItemProperties {
-       colSpan?: ConditionalValue<number>
-    	rowSpan?: ConditionalValue<number>
-    	colStart?: ConditionalValue<number>
-    	rowStart?: ConditionalValue<number>
-    	colEnd?: ConditionalValue<number>
-    	rowEnd?: ConditionalValue<number>
+       colSpan?: ConditionalValue<number> | undefined
+    	rowSpan?: ConditionalValue<number> | undefined
+    	colStart?: ConditionalValue<number> | undefined
+    	rowStart?: ConditionalValue<number> | undefined
+    	colEnd?: ConditionalValue<number> | undefined
+    	rowEnd?: ConditionalValue<number> | undefined
     }
 
     interface GridItemStyles extends GridItemProperties, DistributiveOmit<SystemStyleObject, keyof GridItemProperties > {}
@@ -510,9 +510,9 @@ test('should generate pattern', () => {
     import type { Tokens } from '../tokens/index';
 
     export interface DividerProperties {
-       orientation?: ConditionalValue<"horizontal" | "vertical">
-    	thickness?: ConditionalValue<Tokens["sizes"] | Properties["borderWidth"]>
-    	color?: ConditionalValue<Tokens["colors"] | Properties["borderColor"]>
+       orientation?: ConditionalValue<"horizontal" | "vertical"> | undefined
+    	thickness?: ConditionalValue<Tokens["sizes"] | Properties["borderWidth"]> | undefined
+    	color?: ConditionalValue<Tokens["colors"] | Properties["borderColor"]> | undefined
     }
 
     interface DividerStyles extends DividerProperties, DistributiveOmit<SystemStyleObject, keyof DividerProperties > {}
@@ -570,10 +570,10 @@ test('should generate pattern', () => {
     import type { Tokens } from '../tokens/index';
 
     export interface FloatProperties {
-       offsetX?: ConditionalValue<Tokens["spacing"] | Properties["left"]>
-    	offsetY?: ConditionalValue<Tokens["spacing"] | Properties["top"]>
-    	offset?: ConditionalValue<Tokens["spacing"] | Properties["top"]>
-    	placement?: ConditionalValue<"bottom-end" | "bottom-start" | "top-end" | "top-start" | "bottom-center" | "top-center" | "middle-center" | "middle-end" | "middle-start">
+       offsetX?: ConditionalValue<Tokens["spacing"] | Properties["left"]> | undefined
+    	offsetY?: ConditionalValue<Tokens["spacing"] | Properties["top"]> | undefined
+    	offset?: ConditionalValue<Tokens["spacing"] | Properties["top"]> | undefined
+    	placement?: ConditionalValue<"bottom-end" | "bottom-start" | "top-end" | "top-start" | "bottom-center" | "top-center" | "middle-center" | "middle-end" | "middle-start"> | undefined
     }
 
     interface FloatStyles extends FloatProperties, DistributiveOmit<SystemStyleObject, keyof FloatProperties > {}
@@ -658,8 +658,8 @@ test('should generate pattern', () => {
     import type { Tokens } from '../tokens/index';
 
     export interface BleedProperties {
-       inline?: SystemProperties["marginInline"]
-    	block?: SystemProperties["marginBlock"]
+       inline?: SystemProperties["marginInline"] | undefined
+    	block?: SystemProperties["marginBlock"] | undefined
     }
 
     interface BleedStyles extends BleedProperties, DistributiveOmit<SystemStyleObject, keyof BleedProperties > {}

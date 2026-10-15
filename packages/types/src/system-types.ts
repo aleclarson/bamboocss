@@ -27,27 +27,27 @@ export interface ModernCssProperties {
   /**
    * Controls whether the entire element should be draggable instead of its contents.
    */
-  WebkitUserDrag?: Globals | 'auto' | 'element' | 'none'
+  WebkitUserDrag?: Globals | 'auto' | 'element' | 'none' | undefined
 
   /**
    * Specifies whether an element can be used to drag the entire app window (Electron).
    */
-  WebkitAppRegion?: Globals | 'drag' | 'no-drag'
+  WebkitAppRegion?: Globals | 'drag' | 'no-drag' | undefined
 
   /**
    * Sets the horizontal spacing between table borders.
    */
-  WebkitBorderHorizontalSpacing?: Globals | String | Number
+  WebkitBorderHorizontalSpacing?: Globals | String | Number | undefined
 
   /**
    * Sets the vertical spacing between table borders.
    */
-  WebkitBorderVerticalSpacing?: Globals | String | Number
+  WebkitBorderVerticalSpacing?: Globals | String | Number | undefined
 
   /**
    * Controls the display of text content for security purposes (e.g., password fields).
    */
-  WebkitTextSecurity?: Globals | 'none' | 'circle' | 'disc' | 'square'
+  WebkitTextSecurity?: Globals | 'none' | 'circle' | 'disc' | 'square' | undefined
 
   /**
    * Specifies the shape of a box's corners within the area defined by the border-radius property.
@@ -61,6 +61,7 @@ export interface ModernCssProperties {
     | `${CornerShapeValue} ${CornerShapeValue} ${CornerShapeValue}`
     | `${CornerShapeValue} ${CornerShapeValue} ${CornerShapeValue} ${CornerShapeValue}`
     | String
+    | undefined
 }
 
 export type CssProperty = keyof Properties
@@ -96,10 +97,10 @@ export type SystemStyleObject = Nested<(SystemProperties | GenericProperties) & 
  * how every other property in a style object is authored.
  */
 export interface ViewTransitionStyleObject {
-  group?: SystemStyleObject
-  imagePair?: SystemStyleObject
-  old?: SystemStyleObject
-  new?: SystemStyleObject
+  group?: SystemStyleObject | undefined
+  imagePair?: SystemStyleObject | undefined
+  old?: SystemStyleObject | undefined
+  new?: SystemStyleObject | undefined
 }
 
 export type ViewTransitionFn = (options: ViewTransitionStyleObject) => string
@@ -117,7 +118,7 @@ export interface ExtendableGlobalStyleObject {
  * -----------------------------------------------------------------------------*/
 
 type FilterStyleObject<P extends string> = {
-  [K in P]?: K extends keyof SystemStyleObject ? SystemStyleObject[K] : unknown
+  [K in P]?: (K extends keyof SystemStyleObject ? SystemStyleObject[K] : unknown) | undefined
 }
 
 export type CompositionStyleObject<Property extends string> = Nested<FilterStyleObject<Property> & CssVarProperties>
@@ -143,16 +144,16 @@ export interface ExtendableGlobalFontface {
  * Jsx style props
  * -----------------------------------------------------------------------------*/
 interface WithCss {
-  css?: SystemStyleObject | SystemStyleObject[]
+  css?: SystemStyleObject | SystemStyleObject[] | undefined
 }
 
 export type JsxStyleProps = SystemStyleObject & WithCss
 
 export interface PatchedHTMLProps {
-  htmlWidth?: string | number
-  htmlHeight?: string | number
+  htmlWidth?: string | number | undefined
+  htmlHeight?: string | number | undefined
   htmlTranslate?: 'yes' | 'no' | undefined
-  htmlContent?: string
+  htmlContent?: string | undefined
 }
 
 export type OmittedHTMLProps = 'color' | 'translate' | 'transition' | 'width' | 'height' | 'content'

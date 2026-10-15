@@ -62,7 +62,7 @@ export interface RecipeDefinition<T extends RecipeVariantRecord = RecipeVariantR
   /**
    * The base styles of the recipe.
    */
-  base?: SystemStyleObject
+  base?: SystemStyleObject | undefined
   /**
    * Semantic recipe name used by extraction-only integrations.
    *
@@ -72,23 +72,23 @@ export interface RecipeDefinition<T extends RecipeVariantRecord = RecipeVariantR
    * The Vite compiler ignores this field when allocating declaration atoms: recipe identity
    * is not style identity, so identical declarations share one class across recipes.
    */
-  className?: string
+  className?: string | undefined
   /**
    * Whether the recipe is deprecated.
    */
-  deprecated?: boolean | string
+  deprecated?: boolean | string | undefined
   /**
    * The multi-variant styles of the recipe.
    */
-  variants?: T
+  variants?: T | undefined
   /**
    * The default variants of the recipe.
    */
-  defaultVariants?: RecipeSelection<T>
+  defaultVariants?: RecipeSelection<T> | undefined
   /**
    * The styles to apply when a combination of variants is selected.
    */
-  compoundVariants?: Pretty<RecipeCompoundVariant<RecipeCompoundSelection<T>>>[]
+  compoundVariants?: Pretty<RecipeCompoundVariant<RecipeCompoundSelection<T>>>[] | undefined
 }
 
 export type RecipeCreatorFn = <T extends RecipeVariantRecord>(config: RecipeDefinition<T>) => RecipeRuntimeFn<T>
@@ -97,18 +97,18 @@ interface RecipeConfigMeta {
   /**
    * The description of the recipe. This will be used in the JSDoc comment.
    */
-  description?: string
+  description?: string | undefined
   /**
    * The jsx elements to track for this recipe. Can be string or Regexp.
    *
    * @default capitalize(recipe.name)
    * @example ['Button', 'Link', /Button$/]
    */
-  jsx?: Array<string | RegExp>
+  jsx?: Array<string | RegExp> | undefined
   /**
    * Variants to pre-generate, will be include in the final `config.staticCss`
    */
-  staticCss?: RecipeRule[]
+  staticCss?: RecipeRule[] | undefined
 }
 
 export interface RecipeConfig<T extends RecipeVariantRecord = RecipeVariantRecord>
@@ -124,7 +124,8 @@ export interface RecipeConfig<T extends RecipeVariantRecord = RecipeVariantRecor
  * Recipe / Slot
  * -----------------------------------------------------------------------------*/
 
-type SlotRecord<S extends string, T> = Partial<Record<S, T>>
+// Not `Partial<Record<S, T>>`, which under `exactOptionalPropertyTypes` takes no `undefined` for a slot.
+type SlotRecord<S extends string, T> = { [K in S]?: T | undefined }
 
 export type SlotRecipeVariantRecord<S extends string> = Record<any, Record<any, SlotRecord<S, SystemStyleObject>>>
 
@@ -162,11 +163,11 @@ export interface SlotRecipeDefinition<
    * The Vite compiler ignores this field when allocating declaration atoms: recipe and slot
    * identity do not enter generated class names.
    */
-  className?: string
+  className?: string | undefined
   /**
    * Whether the recipe is deprecated.
    */
-  deprecated?: boolean | string
+  deprecated?: boolean | string | undefined
   /**
    * The parts/slots of the recipe.
    */
@@ -181,23 +182,23 @@ export interface SlotRecipeDefinition<
    *
    * @deprecated Has no effect on compiled output.
    */
-  scopeRoots?: S[] | Readonly<S[]>
+  scopeRoots?: S[] | Readonly<S[]> | undefined
   /**
    * The base styles of the recipe.
    */
-  base?: SlotRecord<S, SystemStyleObject>
+  base?: SlotRecord<S, SystemStyleObject> | undefined
   /**
    * The multi-variant styles of the recipe.
    */
-  variants?: T
+  variants?: T | undefined
   /**
    * The default variants of the recipe.
    */
-  defaultVariants?: RecipeSelection<T>
+  defaultVariants?: RecipeSelection<T> | undefined
   /**
    * The styles to apply when a combination of variants is selected.
    */
-  compoundVariants?: Pretty<SlotRecipeCompoundVariant<S, RecipeCompoundSelection<T>>>[]
+  compoundVariants?: Pretty<SlotRecipeCompoundVariant<S, RecipeCompoundSelection<T>>>[] | undefined
 }
 
 export type SlotRecipeCreatorFn = <S extends string, T extends SlotRecipeVariantRecord<S>>(

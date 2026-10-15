@@ -17,7 +17,7 @@ describe('generate property types', () => {
       type CssVarKeys = \`--\${string}\` & {}
 
       export type CssVarProperties = {
-        [key in CssVarKeys]?: CssVarValue
+        [key in CssVarKeys]?: CssVarValue | undefined
       }
 
       export interface SystemProperties {
@@ -28,31 +28,31 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`none\` (but this value is overridden in the user agent CSS)
          */
-      WebkitAppearance?: ConditionalValue<CssProperties["WebkitAppearance"] | AnyString>
+      WebkitAppearance?: ConditionalValue<CssProperties["WebkitAppearance"] | AnyString> | undefined
        /**
          * The **\`-webkit-border-before\`** CSS property is a shorthand property for setting the individual logical block start border property values in a single place in the style sheet.
          *
          * **Syntax**: \`<'border-width'> || <'border-style'> || <color>\`
          */
-      WebkitBorderBefore?: ConditionalValue<CssProperties["WebkitBorderBefore"] | AnyString>
+      WebkitBorderBefore?: ConditionalValue<CssProperties["WebkitBorderBefore"] | AnyString> | undefined
        /**
          * **Syntax**: \`<color>\`
          *
          * **Initial value**: \`currentcolor\`
          */
-      WebkitBorderBeforeColor?: ConditionalValue<CssProperties["WebkitBorderBeforeColor"] | AnyString>
+      WebkitBorderBeforeColor?: ConditionalValue<CssProperties["WebkitBorderBeforeColor"] | AnyString> | undefined
        /**
          * **Syntax**: \`<'border-style'>\`
          *
          * **Initial value**: \`none\`
          */
-      WebkitBorderBeforeStyle?: ConditionalValue<CssProperties["WebkitBorderBeforeStyle"] | AnyString>
+      WebkitBorderBeforeStyle?: ConditionalValue<CssProperties["WebkitBorderBeforeStyle"] | AnyString> | undefined
        /**
          * **Syntax**: \`<'border-width'>\`
          *
          * **Initial value**: \`medium\`
          */
-      WebkitBorderBeforeWidth?: ConditionalValue<CssProperties["WebkitBorderBeforeWidth"] | AnyString>
+      WebkitBorderBeforeWidth?: ConditionalValue<CssProperties["WebkitBorderBeforeWidth"] | AnyString> | undefined
        /**
          * The **\`-webkit-box-reflect\`** CSS property lets you reflect the content of an element in one specific direction.
          *
@@ -60,7 +60,7 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`none\`
          */
-      WebkitBoxReflect?: ConditionalValue<CssProperties["WebkitBoxReflect"] | AnyString>
+      WebkitBoxReflect?: ConditionalValue<CssProperties["WebkitBoxReflect"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -68,19 +68,19 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`none\`
          */
-      WebkitLineClamp?: ConditionalValue<CssProperties["WebkitLineClamp"] | AnyString>
+      WebkitLineClamp?: ConditionalValue<CssProperties["WebkitLineClamp"] | AnyString> | undefined
        /**
          * Since December 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
          * **Syntax**: \`[ <mask-reference> || <position> [ / <bg-size> ]? || <repeat-style> || [ <visual-box> | border | padding | content | text ] || [ <visual-box> | border | padding | content ] ]#\`
          */
-      WebkitMask?: ConditionalValue<CssProperties["WebkitMask"] | AnyString>
+      WebkitMask?: ConditionalValue<CssProperties["WebkitMask"] | AnyString> | undefined
        /**
          * **Syntax**: \`<attachment>#\`
          *
          * **Initial value**: \`scroll\`
          */
-      WebkitMaskAttachment?: ConditionalValue<CssProperties["WebkitMaskAttachment"] | AnyString>
+      WebkitMaskAttachment?: ConditionalValue<CssProperties["WebkitMaskAttachment"] | AnyString> | undefined
        /**
          * Since December 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -88,7 +88,7 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`border\`
          */
-      WebkitMaskClip?: ConditionalValue<CssProperties["WebkitMaskClip"] | AnyString>
+      WebkitMaskClip?: ConditionalValue<CssProperties["WebkitMaskClip"] | AnyString> | undefined
        /**
          * The **\`-webkit-mask-composite\`** property specifies the manner in which multiple mask images applied to the same element are composited with one another. Mask images are composited in the opposite order that they are declared with the \`-webkit-mask-image\` property.
          *
@@ -96,7 +96,7 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`source-over\`
          */
-      WebkitMaskComposite?: ConditionalValue<CssProperties["WebkitMaskComposite"] | AnyString>
+      WebkitMaskComposite?: ConditionalValue<CssProperties["WebkitMaskComposite"] | AnyString> | undefined
        /**
          * Since December 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -104,7 +104,7 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`none\`
          */
-      WebkitMaskImage?: ConditionalValue<CssProperties["WebkitMaskImage"] | AnyString>
+      WebkitMaskImage?: ConditionalValue<CssProperties["WebkitMaskImage"] | AnyString> | undefined
        /**
          * Since December 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -112,7 +112,7 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`padding\`
          */
-      WebkitMaskOrigin?: ConditionalValue<CssProperties["WebkitMaskOrigin"] | AnyString>
+      WebkitMaskOrigin?: ConditionalValue<CssProperties["WebkitMaskOrigin"] | AnyString> | undefined
        /**
          * Since December 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -120,7 +120,7 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`0% 0%\`
          */
-      WebkitMaskPosition?: ConditionalValue<CssProperties["WebkitMaskPosition"] | AnyString>
+      WebkitMaskPosition?: ConditionalValue<CssProperties["WebkitMaskPosition"] | AnyString> | undefined
        /**
          * The \`-webkit-mask-position-x\` CSS property sets the initial horizontal position of a mask image.
          *
@@ -128,7 +128,7 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`0%\`
          */
-      WebkitMaskPositionX?: ConditionalValue<CssProperties["WebkitMaskPositionX"] | AnyString>
+      WebkitMaskPositionX?: ConditionalValue<CssProperties["WebkitMaskPositionX"] | AnyString> | undefined
        /**
          * The \`-webkit-mask-position-y\` CSS property sets the initial vertical position of a mask image.
          *
@@ -136,7 +136,7 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`0%\`
          */
-      WebkitMaskPositionY?: ConditionalValue<CssProperties["WebkitMaskPositionY"] | AnyString>
+      WebkitMaskPositionY?: ConditionalValue<CssProperties["WebkitMaskPositionY"] | AnyString> | undefined
        /**
          * Since December 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -144,7 +144,7 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`repeat\`
          */
-      WebkitMaskRepeat?: ConditionalValue<CssProperties["WebkitMaskRepeat"] | AnyString>
+      WebkitMaskRepeat?: ConditionalValue<CssProperties["WebkitMaskRepeat"] | AnyString> | undefined
        /**
          * The \`-webkit-mask-repeat-x\` property specifies whether and how a mask image is repeated (tiled) horizontally.
          *
@@ -152,7 +152,7 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`repeat\`
          */
-      WebkitMaskRepeatX?: ConditionalValue<CssProperties["WebkitMaskRepeatX"] | AnyString>
+      WebkitMaskRepeatX?: ConditionalValue<CssProperties["WebkitMaskRepeatX"] | AnyString> | undefined
        /**
          * The \`-webkit-mask-repeat-y\` property sets whether and how a mask image is repeated (tiled) vertically.
          *
@@ -160,7 +160,7 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`repeat\`
          */
-      WebkitMaskRepeatY?: ConditionalValue<CssProperties["WebkitMaskRepeatY"] | AnyString>
+      WebkitMaskRepeatY?: ConditionalValue<CssProperties["WebkitMaskRepeatY"] | AnyString> | undefined
        /**
          * Since December 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -168,13 +168,13 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`auto auto\`
          */
-      WebkitMaskSize?: ConditionalValue<CssProperties["WebkitMaskSize"] | AnyString>
+      WebkitMaskSize?: ConditionalValue<CssProperties["WebkitMaskSize"] | AnyString> | undefined
        /**
          * **Syntax**: \`auto | touch\`
          *
          * **Initial value**: \`auto\`
          */
-      WebkitOverflowScrolling?: ConditionalValue<CssProperties["WebkitOverflowScrolling"] | AnyString>
+      WebkitOverflowScrolling?: ConditionalValue<CssProperties["WebkitOverflowScrolling"] | AnyString> | undefined
        /**
          * **\`-webkit-tap-highlight-color\`** is a non-standard CSS property that sets the color of the highlight that appears over a link while it's being tapped. The highlighting indicates to the user that their tap is being successfully recognized, and indicates which element they're tapping on.
          *
@@ -182,7 +182,7 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`black\`
          */
-      WebkitTapHighlightColor?: ConditionalValue<CssProperties["WebkitTapHighlightColor"] | AnyString>
+      WebkitTapHighlightColor?: ConditionalValue<CssProperties["WebkitTapHighlightColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2016.
          *
@@ -190,13 +190,13 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`currentcolor\`
          */
-      WebkitTextFillColor?: ConditionalValue<UtilityValues["WebkitTextFillColor"] | CssVars | CssProperties["WebkitTextFillColor"] | AnyString>
+      WebkitTextFillColor?: ConditionalValue<UtilityValues["WebkitTextFillColor"] | CssVars | CssProperties["WebkitTextFillColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
          * **Syntax**: \`<length> || <color>\`
          */
-      WebkitTextStroke?: ConditionalValue<CssProperties["WebkitTextStroke"] | AnyString>
+      WebkitTextStroke?: ConditionalValue<CssProperties["WebkitTextStroke"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -204,7 +204,7 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`currentcolor\`
          */
-      WebkitTextStrokeColor?: ConditionalValue<CssProperties["WebkitTextStrokeColor"] | AnyString>
+      WebkitTextStrokeColor?: ConditionalValue<CssProperties["WebkitTextStrokeColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -212,7 +212,7 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`0\`
          */
-      WebkitTextStrokeWidth?: ConditionalValue<CssProperties["WebkitTextStrokeWidth"] | AnyString>
+      WebkitTextStrokeWidth?: ConditionalValue<CssProperties["WebkitTextStrokeWidth"] | AnyString> | undefined
        /**
          * The \`-webkit-touch-callout\` CSS property controls the display of the default callout shown when you touch and hold a touch target.
          *
@@ -220,13 +220,13 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`default\`
          */
-      WebkitTouchCallout?: ConditionalValue<CssProperties["WebkitTouchCallout"] | AnyString>
+      WebkitTouchCallout?: ConditionalValue<CssProperties["WebkitTouchCallout"] | AnyString> | undefined
        /**
          * **Syntax**: \`read-only | read-write | read-write-plaintext-only\`
          *
          * **Initial value**: \`read-only\`
          */
-      WebkitUserModify?: ConditionalValue<CssProperties["WebkitUserModify"] | AnyString>
+      WebkitUserModify?: ConditionalValue<CssProperties["WebkitUserModify"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -234,7 +234,7 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`auto\`
          */
-      WebkitUserSelect?: ConditionalValue<CssProperties["WebkitUserSelect"] | AnyString>
+      WebkitUserSelect?: ConditionalValue<CssProperties["WebkitUserSelect"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -248,7 +248,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/accent-color
          */
-      accentColor?: ConditionalValue<UtilityValues["accentColor"] | CssVars | CssProperties["accentColor"] | AnyString>
+      accentColor?: ConditionalValue<UtilityValues["accentColor"] | CssVars | CssProperties["accentColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -263,7 +263,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/align-content
          */
-      alignContent?: ConditionalValue<CssVars | CssProperties["alignContent"] | AnyString>
+      alignContent?: ConditionalValue<CssVars | CssProperties["alignContent"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -278,7 +278,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/align-items
          */
-      alignItems?: ConditionalValue<CssVars | CssProperties["alignItems"] | AnyString>
+      alignItems?: ConditionalValue<CssVars | CssProperties["alignItems"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -293,13 +293,13 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/align-self
          */
-      alignSelf?: ConditionalValue<CssVars | CssProperties["alignSelf"] | AnyString>
+      alignSelf?: ConditionalValue<CssVars | CssProperties["alignSelf"] | AnyString> | undefined
        /**
          * **Syntax**: \`[ normal | <baseline-position> | <content-distribution> | <overflow-position>? <content-position> ]#\`
          *
          * **Initial value**: \`normal\`
          */
-      alignTracks?: ConditionalValue<CssProperties["alignTracks"] | AnyString>
+      alignTracks?: ConditionalValue<CssProperties["alignTracks"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -313,7 +313,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/all
          */
-      all?: ConditionalValue<CssVars | CssProperties["all"] | AnyString>
+      all?: ConditionalValue<CssVars | CssProperties["all"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -327,7 +327,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/anchor-name
          */
-      anchorName?: ConditionalValue<CssProperties["anchorName"] | AnyString>
+      anchorName?: ConditionalValue<CssProperties["anchorName"] | AnyString> | undefined
        /**
          * **Syntax**: \`none | all | <dashed-ident>#\`
          *
@@ -337,7 +337,7 @@ describe('generate property types', () => {
          * | :-----: | :---------: | :----: | :-----: | :-: |
          * | **131** | **preview** | **26** | **131** | No  |
          */
-      anchorScope?: ConditionalValue<CssProperties["anchorScope"] | AnyString>
+      anchorScope?: ConditionalValue<CssProperties["anchorScope"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -350,7 +350,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/animation
          */
-      animation?: ConditionalValue<UtilityValues["animation"] | CssVars | CssProperties["animation"] | AnyString>
+      animation?: ConditionalValue<UtilityValues["animation"] | CssVars | CssProperties["animation"] | AnyString> | undefined
        /**
          * Since July 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -364,7 +364,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/animation-composition
          */
-      animationComposition?: ConditionalValue<CssVars | CssProperties["animationComposition"] | AnyString>
+      animationComposition?: ConditionalValue<CssVars | CssProperties["animationComposition"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -379,7 +379,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/animation-delay
          */
-      animationDelay?: ConditionalValue<UtilityValues["animationDelay"] | CssVars | CssProperties["animationDelay"] | AnyString>
+      animationDelay?: ConditionalValue<UtilityValues["animationDelay"] | CssVars | CssProperties["animationDelay"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -394,7 +394,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/animation-direction
          */
-      animationDirection?: ConditionalValue<CssVars | CssProperties["animationDirection"] | AnyString>
+      animationDirection?: ConditionalValue<CssVars | CssProperties["animationDirection"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -409,7 +409,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/animation-duration
          */
-      animationDuration?: ConditionalValue<UtilityValues["animationDuration"] | CssVars | CssProperties["animationDuration"] | AnyString>
+      animationDuration?: ConditionalValue<UtilityValues["animationDuration"] | CssVars | CssProperties["animationDuration"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -424,7 +424,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/animation-fill-mode
          */
-      animationFillMode?: ConditionalValue<CssVars | CssProperties["animationFillMode"] | AnyString>
+      animationFillMode?: ConditionalValue<CssVars | CssProperties["animationFillMode"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -439,7 +439,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/animation-iteration-count
          */
-      animationIterationCount?: ConditionalValue<CssProperties["animationIterationCount"] | AnyString>
+      animationIterationCount?: ConditionalValue<CssProperties["animationIterationCount"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -454,7 +454,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/animation-name
          */
-      animationName?: ConditionalValue<UtilityValues["animationName"] | CssVars | CssProperties["animationName"] | AnyString>
+      animationName?: ConditionalValue<UtilityValues["animationName"] | CssVars | CssProperties["animationName"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -469,7 +469,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/animation-play-state
          */
-      animationPlayState?: ConditionalValue<CssProperties["animationPlayState"] | AnyString>
+      animationPlayState?: ConditionalValue<CssProperties["animationPlayState"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -481,7 +481,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/animation-range
          */
-      animationRange?: ConditionalValue<CssProperties["animationRange"] | AnyString>
+      animationRange?: ConditionalValue<CssProperties["animationRange"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -495,7 +495,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/animation-range-end
          */
-      animationRangeEnd?: ConditionalValue<CssProperties["animationRangeEnd"] | AnyString>
+      animationRangeEnd?: ConditionalValue<CssProperties["animationRangeEnd"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -509,7 +509,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/animation-range-start
          */
-      animationRangeStart?: ConditionalValue<CssProperties["animationRangeStart"] | AnyString>
+      animationRangeStart?: ConditionalValue<CssProperties["animationRangeStart"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -523,7 +523,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/animation-timeline
          */
-      animationTimeline?: ConditionalValue<CssProperties["animationTimeline"] | AnyString>
+      animationTimeline?: ConditionalValue<CssProperties["animationTimeline"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -538,7 +538,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/animation-timing-function
          */
-      animationTimingFunction?: ConditionalValue<UtilityValues["animationTimingFunction"] | CssVars | CssProperties["animationTimingFunction"] | AnyString>
+      animationTimingFunction?: ConditionalValue<UtilityValues["animationTimingFunction"] | CssVars | CssProperties["animationTimingFunction"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2022.
          *
@@ -553,7 +553,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/appearance
          */
-      appearance?: ConditionalValue<CssVars | CssProperties["appearance"] | AnyString>
+      appearance?: ConditionalValue<CssVars | CssProperties["appearance"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -567,7 +567,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/aspect-ratio
          */
-      aspectRatio?: ConditionalValue<UtilityValues["aspectRatio"] | CssVars | CssProperties["aspectRatio"] | AnyString>
+      aspectRatio?: ConditionalValue<UtilityValues["aspectRatio"] | CssVars | CssProperties["aspectRatio"] | AnyString> | undefined
        /**
          * Since September 2024, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -582,7 +582,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/backdrop-filter
          */
-      backdropFilter?: ConditionalValue<UtilityValues["backdropFilter"] | CssVars | CssProperties["backdropFilter"] | AnyString>
+      backdropFilter?: ConditionalValue<UtilityValues["backdropFilter"] | CssVars | CssProperties["backdropFilter"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2022.
          *
@@ -597,7 +597,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/backface-visibility
          */
-      backfaceVisibility?: ConditionalValue<CssVars | CssProperties["backfaceVisibility"] | AnyString>
+      backfaceVisibility?: ConditionalValue<CssVars | CssProperties["backfaceVisibility"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -609,7 +609,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background
          */
-      background?: ConditionalValue<UtilityValues["background"] | CssVars | CssProperties["background"] | AnyString>
+      background?: ConditionalValue<UtilityValues["background"] | CssVars | CssProperties["background"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -623,7 +623,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-attachment
          */
-      backgroundAttachment?: ConditionalValue<CssVars | CssProperties["backgroundAttachment"] | AnyString>
+      backgroundAttachment?: ConditionalValue<CssVars | CssProperties["backgroundAttachment"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -637,7 +637,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-blend-mode
          */
-      backgroundBlendMode?: ConditionalValue<CssProperties["backgroundBlendMode"] | AnyString>
+      backgroundBlendMode?: ConditionalValue<CssProperties["backgroundBlendMode"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -652,7 +652,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-clip
          */
-      backgroundClip?: ConditionalValue<CssVars | CssProperties["backgroundClip"] | AnyString>
+      backgroundClip?: ConditionalValue<CssVars | CssProperties["backgroundClip"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -666,7 +666,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-color
          */
-      backgroundColor?: ConditionalValue<UtilityValues["backgroundColor"] | CssVars | CssProperties["backgroundColor"] | AnyString>
+      backgroundColor?: ConditionalValue<UtilityValues["backgroundColor"] | CssVars | CssProperties["backgroundColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -680,7 +680,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-image
          */
-      backgroundImage?: ConditionalValue<CssProperties["backgroundImage"] | AnyString>
+      backgroundImage?: ConditionalValue<CssProperties["backgroundImage"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -694,7 +694,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-origin
          */
-      backgroundOrigin?: ConditionalValue<CssProperties["backgroundOrigin"] | AnyString>
+      backgroundOrigin?: ConditionalValue<CssProperties["backgroundOrigin"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -708,7 +708,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-position
          */
-      backgroundPosition?: ConditionalValue<CssProperties["backgroundPosition"] | AnyString>
+      backgroundPosition?: ConditionalValue<CssProperties["backgroundPosition"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2016.
          *
@@ -722,7 +722,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-position-x
          */
-      backgroundPositionX?: ConditionalValue<CssProperties["backgroundPositionX"] | AnyString>
+      backgroundPositionX?: ConditionalValue<CssProperties["backgroundPositionX"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2016.
          *
@@ -736,7 +736,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-position-y
          */
-      backgroundPositionY?: ConditionalValue<CssProperties["backgroundPositionY"] | AnyString>
+      backgroundPositionY?: ConditionalValue<CssProperties["backgroundPositionY"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -750,7 +750,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-repeat
          */
-      backgroundRepeat?: ConditionalValue<CssProperties["backgroundRepeat"] | AnyString>
+      backgroundRepeat?: ConditionalValue<CssProperties["backgroundRepeat"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -765,7 +765,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-size
          */
-      backgroundSize?: ConditionalValue<CssProperties["backgroundSize"] | AnyString>
+      backgroundSize?: ConditionalValue<CssProperties["backgroundSize"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -780,7 +780,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/block-size
          */
-      blockSize?: ConditionalValue<UtilityValues["blockSize"] | CssVars | CssProperties["blockSize"] | AnyString>
+      blockSize?: ConditionalValue<UtilityValues["blockSize"] | CssVars | CssProperties["blockSize"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -792,7 +792,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border
          */
-      border?: ConditionalValue<UtilityValues["border"] | CssVars | CssProperties["border"] | AnyString>
+      border?: ConditionalValue<UtilityValues["border"] | CssVars | CssProperties["border"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -804,7 +804,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-block
          */
-      borderBlock?: ConditionalValue<UtilityValues["borderBlock"] | CssVars | CssProperties["borderBlock"] | AnyString>
+      borderBlock?: ConditionalValue<UtilityValues["borderBlock"] | CssVars | CssProperties["borderBlock"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -818,7 +818,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-block-color
          */
-      borderBlockColor?: ConditionalValue<UtilityValues["borderBlockColor"] | CssVars | CssProperties["borderBlockColor"] | AnyString>
+      borderBlockColor?: ConditionalValue<UtilityValues["borderBlockColor"] | CssVars | CssProperties["borderBlockColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -830,7 +830,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-block-end
          */
-      borderBlockEnd?: ConditionalValue<UtilityValues["borderBlockEnd"] | CssVars | CssProperties["borderBlockEnd"] | AnyString>
+      borderBlockEnd?: ConditionalValue<UtilityValues["borderBlockEnd"] | CssVars | CssProperties["borderBlockEnd"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -844,7 +844,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-block-end-color
          */
-      borderBlockEndColor?: ConditionalValue<UtilityValues["borderBlockEndColor"] | CssVars | CssProperties["borderBlockEndColor"] | AnyString>
+      borderBlockEndColor?: ConditionalValue<UtilityValues["borderBlockEndColor"] | CssVars | CssProperties["borderBlockEndColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -858,7 +858,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-block-end-style
          */
-      borderBlockEndStyle?: ConditionalValue<CssVars | CssProperties["borderBlockEndStyle"] | AnyString>
+      borderBlockEndStyle?: ConditionalValue<CssVars | CssProperties["borderBlockEndStyle"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -872,7 +872,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-block-end-width
          */
-      borderBlockEndWidth?: ConditionalValue<CssProperties["borderBlockEndWidth"] | AnyString>
+      borderBlockEndWidth?: ConditionalValue<CssProperties["borderBlockEndWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -884,7 +884,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-block-start
          */
-      borderBlockStart?: ConditionalValue<UtilityValues["borderBlockStart"] | CssVars | CssProperties["borderBlockStart"] | AnyString>
+      borderBlockStart?: ConditionalValue<UtilityValues["borderBlockStart"] | CssVars | CssProperties["borderBlockStart"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -898,7 +898,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-block-start-color
          */
-      borderBlockStartColor?: ConditionalValue<UtilityValues["borderBlockStartColor"] | CssVars | CssProperties["borderBlockStartColor"] | AnyString>
+      borderBlockStartColor?: ConditionalValue<UtilityValues["borderBlockStartColor"] | CssVars | CssProperties["borderBlockStartColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -912,7 +912,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-block-start-style
          */
-      borderBlockStartStyle?: ConditionalValue<CssVars | CssProperties["borderBlockStartStyle"] | AnyString>
+      borderBlockStartStyle?: ConditionalValue<CssVars | CssProperties["borderBlockStartStyle"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -926,7 +926,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-block-start-width
          */
-      borderBlockStartWidth?: ConditionalValue<CssProperties["borderBlockStartWidth"] | AnyString>
+      borderBlockStartWidth?: ConditionalValue<CssProperties["borderBlockStartWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -940,7 +940,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-block-style
          */
-      borderBlockStyle?: ConditionalValue<CssVars | CssProperties["borderBlockStyle"] | AnyString>
+      borderBlockStyle?: ConditionalValue<CssVars | CssProperties["borderBlockStyle"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -954,7 +954,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-block-width
          */
-      borderBlockWidth?: ConditionalValue<CssProperties["borderBlockWidth"] | AnyString>
+      borderBlockWidth?: ConditionalValue<CssProperties["borderBlockWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -966,7 +966,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-bottom
          */
-      borderBottom?: ConditionalValue<UtilityValues["borderBottom"] | CssVars | CssProperties["borderBottom"] | AnyString>
+      borderBottom?: ConditionalValue<UtilityValues["borderBottom"] | CssVars | CssProperties["borderBottom"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -980,7 +980,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-bottom-color
          */
-      borderBottomColor?: ConditionalValue<UtilityValues["borderBottomColor"] | CssVars | CssProperties["borderBottomColor"] | AnyString>
+      borderBottomColor?: ConditionalValue<UtilityValues["borderBottomColor"] | CssVars | CssProperties["borderBottomColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -995,7 +995,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-bottom-left-radius
          */
-      borderBottomLeftRadius?: ConditionalValue<UtilityValues["borderBottomLeftRadius"] | CssVars | CssProperties["borderBottomLeftRadius"] | AnyString>
+      borderBottomLeftRadius?: ConditionalValue<UtilityValues["borderBottomLeftRadius"] | CssVars | CssProperties["borderBottomLeftRadius"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1010,7 +1010,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-bottom-right-radius
          */
-      borderBottomRightRadius?: ConditionalValue<UtilityValues["borderBottomRightRadius"] | CssVars | CssProperties["borderBottomRightRadius"] | AnyString>
+      borderBottomRightRadius?: ConditionalValue<UtilityValues["borderBottomRightRadius"] | CssVars | CssProperties["borderBottomRightRadius"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1024,7 +1024,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-bottom-style
          */
-      borderBottomStyle?: ConditionalValue<CssVars | CssProperties["borderBottomStyle"] | AnyString>
+      borderBottomStyle?: ConditionalValue<CssVars | CssProperties["borderBottomStyle"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1038,7 +1038,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-bottom-width
          */
-      borderBottomWidth?: ConditionalValue<CssProperties["borderBottomWidth"] | AnyString>
+      borderBottomWidth?: ConditionalValue<CssProperties["borderBottomWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1052,7 +1052,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-collapse
          */
-      borderCollapse?: ConditionalValue<CssVars | CssProperties["borderCollapse"] | AnyString>
+      borderCollapse?: ConditionalValue<CssVars | CssProperties["borderCollapse"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1064,7 +1064,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-color
          */
-      borderColor?: ConditionalValue<UtilityValues["borderColor"] | CssVars | CssProperties["borderColor"] | AnyString>
+      borderColor?: ConditionalValue<UtilityValues["borderColor"] | CssVars | CssProperties["borderColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -1078,7 +1078,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-end-end-radius
          */
-      borderEndEndRadius?: ConditionalValue<UtilityValues["borderEndEndRadius"] | CssVars | CssProperties["borderEndEndRadius"] | AnyString>
+      borderEndEndRadius?: ConditionalValue<UtilityValues["borderEndEndRadius"] | CssVars | CssProperties["borderEndEndRadius"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -1092,7 +1092,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-end-start-radius
          */
-      borderEndStartRadius?: ConditionalValue<UtilityValues["borderEndStartRadius"] | CssVars | CssProperties["borderEndStartRadius"] | AnyString>
+      borderEndStartRadius?: ConditionalValue<UtilityValues["borderEndStartRadius"] | CssVars | CssProperties["borderEndStartRadius"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1105,7 +1105,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-image
          */
-      borderImage?: ConditionalValue<CssProperties["borderImage"] | AnyString>
+      borderImage?: ConditionalValue<CssProperties["borderImage"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1119,7 +1119,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-image-outset
          */
-      borderImageOutset?: ConditionalValue<CssProperties["borderImageOutset"] | AnyString>
+      borderImageOutset?: ConditionalValue<CssProperties["borderImageOutset"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2016.
          *
@@ -1133,7 +1133,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-image-repeat
          */
-      borderImageRepeat?: ConditionalValue<CssProperties["borderImageRepeat"] | AnyString>
+      borderImageRepeat?: ConditionalValue<CssProperties["borderImageRepeat"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1147,7 +1147,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-image-slice
          */
-      borderImageSlice?: ConditionalValue<CssProperties["borderImageSlice"] | AnyString>
+      borderImageSlice?: ConditionalValue<CssProperties["borderImageSlice"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1161,7 +1161,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-image-source
          */
-      borderImageSource?: ConditionalValue<CssProperties["borderImageSource"] | AnyString>
+      borderImageSource?: ConditionalValue<CssProperties["borderImageSource"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1175,7 +1175,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-image-width
          */
-      borderImageWidth?: ConditionalValue<CssProperties["borderImageWidth"] | AnyString>
+      borderImageWidth?: ConditionalValue<CssProperties["borderImageWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -1187,7 +1187,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-inline
          */
-      borderInline?: ConditionalValue<UtilityValues["borderInline"] | CssVars | CssProperties["borderInline"] | AnyString>
+      borderInline?: ConditionalValue<UtilityValues["borderInline"] | CssVars | CssProperties["borderInline"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -1201,7 +1201,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-inline-color
          */
-      borderInlineColor?: ConditionalValue<UtilityValues["borderInlineColor"] | CssVars | CssProperties["borderInlineColor"] | AnyString>
+      borderInlineColor?: ConditionalValue<UtilityValues["borderInlineColor"] | CssVars | CssProperties["borderInlineColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -1213,7 +1213,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-inline-end
          */
-      borderInlineEnd?: ConditionalValue<UtilityValues["borderInlineEnd"] | CssVars | CssProperties["borderInlineEnd"] | AnyString>
+      borderInlineEnd?: ConditionalValue<UtilityValues["borderInlineEnd"] | CssVars | CssProperties["borderInlineEnd"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -1228,7 +1228,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-inline-end-color
          */
-      borderInlineEndColor?: ConditionalValue<UtilityValues["borderInlineEndColor"] | CssVars | CssProperties["borderInlineEndColor"] | AnyString>
+      borderInlineEndColor?: ConditionalValue<UtilityValues["borderInlineEndColor"] | CssVars | CssProperties["borderInlineEndColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -1243,7 +1243,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-inline-end-style
          */
-      borderInlineEndStyle?: ConditionalValue<CssVars | CssProperties["borderInlineEndStyle"] | AnyString>
+      borderInlineEndStyle?: ConditionalValue<CssVars | CssProperties["borderInlineEndStyle"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -1258,7 +1258,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-inline-end-width
          */
-      borderInlineEndWidth?: ConditionalValue<CssProperties["borderInlineEndWidth"] | AnyString>
+      borderInlineEndWidth?: ConditionalValue<CssProperties["borderInlineEndWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -1270,7 +1270,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-inline-start
          */
-      borderInlineStart?: ConditionalValue<UtilityValues["borderInlineStart"] | CssVars | CssProperties["borderInlineStart"] | AnyString>
+      borderInlineStart?: ConditionalValue<UtilityValues["borderInlineStart"] | CssVars | CssProperties["borderInlineStart"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -1285,7 +1285,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-inline-start-color
          */
-      borderInlineStartColor?: ConditionalValue<UtilityValues["borderInlineStartColor"] | CssVars | CssProperties["borderInlineStartColor"] | AnyString>
+      borderInlineStartColor?: ConditionalValue<UtilityValues["borderInlineStartColor"] | CssVars | CssProperties["borderInlineStartColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -1300,7 +1300,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-inline-start-style
          */
-      borderInlineStartStyle?: ConditionalValue<CssVars | CssProperties["borderInlineStartStyle"] | AnyString>
+      borderInlineStartStyle?: ConditionalValue<CssVars | CssProperties["borderInlineStartStyle"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -1314,7 +1314,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-inline-start-width
          */
-      borderInlineStartWidth?: ConditionalValue<CssProperties["borderInlineStartWidth"] | AnyString>
+      borderInlineStartWidth?: ConditionalValue<CssProperties["borderInlineStartWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -1328,7 +1328,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-inline-style
          */
-      borderInlineStyle?: ConditionalValue<CssVars | CssProperties["borderInlineStyle"] | AnyString>
+      borderInlineStyle?: ConditionalValue<CssVars | CssProperties["borderInlineStyle"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -1342,7 +1342,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-inline-width
          */
-      borderInlineWidth?: ConditionalValue<CssProperties["borderInlineWidth"] | AnyString>
+      borderInlineWidth?: ConditionalValue<CssProperties["borderInlineWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1354,7 +1354,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-left
          */
-      borderLeft?: ConditionalValue<UtilityValues["borderLeft"] | CssVars | CssProperties["borderLeft"] | AnyString>
+      borderLeft?: ConditionalValue<UtilityValues["borderLeft"] | CssVars | CssProperties["borderLeft"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1368,7 +1368,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-left-color
          */
-      borderLeftColor?: ConditionalValue<UtilityValues["borderLeftColor"] | CssVars | CssProperties["borderLeftColor"] | AnyString>
+      borderLeftColor?: ConditionalValue<UtilityValues["borderLeftColor"] | CssVars | CssProperties["borderLeftColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1382,7 +1382,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-left-style
          */
-      borderLeftStyle?: ConditionalValue<CssVars | CssProperties["borderLeftStyle"] | AnyString>
+      borderLeftStyle?: ConditionalValue<CssVars | CssProperties["borderLeftStyle"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1396,7 +1396,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-left-width
          */
-      borderLeftWidth?: ConditionalValue<CssProperties["borderLeftWidth"] | AnyString>
+      borderLeftWidth?: ConditionalValue<CssProperties["borderLeftWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1409,7 +1409,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-radius
          */
-      borderRadius?: ConditionalValue<UtilityValues["borderRadius"] | CssVars | CssProperties["borderRadius"] | AnyString>
+      borderRadius?: ConditionalValue<UtilityValues["borderRadius"] | CssVars | CssProperties["borderRadius"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1421,7 +1421,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-right
          */
-      borderRight?: ConditionalValue<UtilityValues["borderRight"] | CssVars | CssProperties["borderRight"] | AnyString>
+      borderRight?: ConditionalValue<UtilityValues["borderRight"] | CssVars | CssProperties["borderRight"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1435,7 +1435,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-right-color
          */
-      borderRightColor?: ConditionalValue<UtilityValues["borderRightColor"] | CssVars | CssProperties["borderRightColor"] | AnyString>
+      borderRightColor?: ConditionalValue<UtilityValues["borderRightColor"] | CssVars | CssProperties["borderRightColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1449,7 +1449,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-right-style
          */
-      borderRightStyle?: ConditionalValue<CssVars | CssProperties["borderRightStyle"] | AnyString>
+      borderRightStyle?: ConditionalValue<CssVars | CssProperties["borderRightStyle"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1463,7 +1463,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-right-width
          */
-      borderRightWidth?: ConditionalValue<CssProperties["borderRightWidth"] | AnyString>
+      borderRightWidth?: ConditionalValue<CssProperties["borderRightWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1477,7 +1477,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-spacing
          */
-      borderSpacing?: ConditionalValue<UtilityValues["borderSpacing"] | CssVars | CssProperties["borderSpacing"] | AnyString>
+      borderSpacing?: ConditionalValue<UtilityValues["borderSpacing"] | CssVars | CssProperties["borderSpacing"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -1491,7 +1491,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-start-end-radius
          */
-      borderStartEndRadius?: ConditionalValue<UtilityValues["borderStartEndRadius"] | CssVars | CssProperties["borderStartEndRadius"] | AnyString>
+      borderStartEndRadius?: ConditionalValue<UtilityValues["borderStartEndRadius"] | CssVars | CssProperties["borderStartEndRadius"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -1505,7 +1505,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-start-start-radius
          */
-      borderStartStartRadius?: ConditionalValue<UtilityValues["borderStartStartRadius"] | CssVars | CssProperties["borderStartStartRadius"] | AnyString>
+      borderStartStartRadius?: ConditionalValue<UtilityValues["borderStartStartRadius"] | CssVars | CssProperties["borderStartStartRadius"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1517,7 +1517,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-style
          */
-      borderStyle?: ConditionalValue<CssProperties["borderStyle"] | AnyString>
+      borderStyle?: ConditionalValue<CssProperties["borderStyle"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1529,7 +1529,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-top
          */
-      borderTop?: ConditionalValue<UtilityValues["borderTop"] | CssVars | CssProperties["borderTop"] | AnyString>
+      borderTop?: ConditionalValue<UtilityValues["borderTop"] | CssVars | CssProperties["borderTop"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1543,7 +1543,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-top-color
          */
-      borderTopColor?: ConditionalValue<UtilityValues["borderTopColor"] | CssVars | CssProperties["borderTopColor"] | AnyString>
+      borderTopColor?: ConditionalValue<UtilityValues["borderTopColor"] | CssVars | CssProperties["borderTopColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1558,7 +1558,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-top-left-radius
          */
-      borderTopLeftRadius?: ConditionalValue<UtilityValues["borderTopLeftRadius"] | CssVars | CssProperties["borderTopLeftRadius"] | AnyString>
+      borderTopLeftRadius?: ConditionalValue<UtilityValues["borderTopLeftRadius"] | CssVars | CssProperties["borderTopLeftRadius"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1573,7 +1573,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-top-right-radius
          */
-      borderTopRightRadius?: ConditionalValue<UtilityValues["borderTopRightRadius"] | CssVars | CssProperties["borderTopRightRadius"] | AnyString>
+      borderTopRightRadius?: ConditionalValue<UtilityValues["borderTopRightRadius"] | CssVars | CssProperties["borderTopRightRadius"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1587,7 +1587,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-top-style
          */
-      borderTopStyle?: ConditionalValue<CssVars | CssProperties["borderTopStyle"] | AnyString>
+      borderTopStyle?: ConditionalValue<CssVars | CssProperties["borderTopStyle"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1601,7 +1601,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-top-width
          */
-      borderTopWidth?: ConditionalValue<CssProperties["borderTopWidth"] | AnyString>
+      borderTopWidth?: ConditionalValue<CssProperties["borderTopWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1613,7 +1613,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-width
          */
-      borderWidth?: ConditionalValue<CssProperties["borderWidth"] | AnyString>
+      borderWidth?: ConditionalValue<CssProperties["borderWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1627,8 +1627,8 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/bottom
          */
-      bottom?: ConditionalValue<UtilityValues["bottom"] | CssVars | CssProperties["bottom"] | AnyString>
-       boxAlign?: ConditionalValue<CssProperties["boxAlign"] | AnyString>
+      bottom?: ConditionalValue<UtilityValues["bottom"] | CssVars | CssProperties["bottom"] | AnyString> | undefined
+       boxAlign?: ConditionalValue<CssProperties["boxAlign"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -1643,14 +1643,14 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/box-decoration-break
          */
-      boxDecorationBreak?: ConditionalValue<CssVars | CssProperties["boxDecorationBreak"] | AnyString>
-       boxDirection?: ConditionalValue<CssProperties["boxDirection"] | AnyString>
-       boxFlex?: ConditionalValue<CssProperties["boxFlex"] | AnyString>
-       boxFlexGroup?: ConditionalValue<CssProperties["boxFlexGroup"] | AnyString>
-       boxLines?: ConditionalValue<CssProperties["boxLines"] | AnyString>
-       boxOrdinalGroup?: ConditionalValue<CssProperties["boxOrdinalGroup"] | AnyString>
-       boxOrient?: ConditionalValue<CssProperties["boxOrient"] | AnyString>
-       boxPack?: ConditionalValue<CssProperties["boxPack"] | AnyString>
+      boxDecorationBreak?: ConditionalValue<CssVars | CssProperties["boxDecorationBreak"] | AnyString> | undefined
+       boxDirection?: ConditionalValue<CssProperties["boxDirection"] | AnyString> | undefined
+       boxFlex?: ConditionalValue<CssProperties["boxFlex"] | AnyString> | undefined
+       boxFlexGroup?: ConditionalValue<CssProperties["boxFlexGroup"] | AnyString> | undefined
+       boxLines?: ConditionalValue<CssProperties["boxLines"] | AnyString> | undefined
+       boxOrdinalGroup?: ConditionalValue<CssProperties["boxOrdinalGroup"] | AnyString> | undefined
+       boxOrient?: ConditionalValue<CssProperties["boxOrient"] | AnyString> | undefined
+       boxPack?: ConditionalValue<CssProperties["boxPack"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1665,7 +1665,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/box-shadow
          */
-      boxShadow?: ConditionalValue<UtilityValues["boxShadow"] | CssVars | CssProperties["boxShadow"] | AnyString>
+      boxShadow?: ConditionalValue<UtilityValues["boxShadow"] | CssVars | CssProperties["boxShadow"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1680,7 +1680,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/box-sizing
          */
-      boxSizing?: ConditionalValue<CssVars | CssProperties["boxSizing"] | AnyString>
+      boxSizing?: ConditionalValue<CssVars | CssProperties["boxSizing"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2019.
          *
@@ -1694,7 +1694,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/break-after
          */
-      breakAfter?: ConditionalValue<CssVars | CssProperties["breakAfter"] | AnyString>
+      breakAfter?: ConditionalValue<CssVars | CssProperties["breakAfter"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2019.
          *
@@ -1708,7 +1708,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/break-before
          */
-      breakBefore?: ConditionalValue<CssVars | CssProperties["breakBefore"] | AnyString>
+      breakBefore?: ConditionalValue<CssVars | CssProperties["breakBefore"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2019.
          *
@@ -1722,7 +1722,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/break-inside
          */
-      breakInside?: ConditionalValue<CssVars | CssProperties["breakInside"] | AnyString>
+      breakInside?: ConditionalValue<CssVars | CssProperties["breakInside"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1736,9 +1736,9 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/caption-side
          */
-      captionSide?: ConditionalValue<CssVars | CssProperties["captionSide"] | AnyString>
+      captionSide?: ConditionalValue<CssVars | CssProperties["captionSide"] | AnyString> | undefined
        /** **Syntax**: \`<'caret-color'> || <'caret-shape'>\` */
-      caret?: ConditionalValue<CssProperties["caret"] | AnyString>
+      caret?: ConditionalValue<CssProperties["caret"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -1752,7 +1752,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/caret-color
          */
-      caretColor?: ConditionalValue<UtilityValues["caretColor"] | CssVars | CssProperties["caretColor"] | AnyString>
+      caretColor?: ConditionalValue<UtilityValues["caretColor"] | CssVars | CssProperties["caretColor"] | AnyString> | undefined
        /**
          * **Syntax**: \`auto | bar | block | underscore\`
          *
@@ -1764,7 +1764,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/caret-shape
          */
-      caretShape?: ConditionalValue<CssProperties["caretShape"] | AnyString>
+      caretShape?: ConditionalValue<CssProperties["caretShape"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1778,8 +1778,8 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/clear
          */
-      clear?: ConditionalValue<CssVars | CssProperties["clear"] | AnyString>
-       clip?: ConditionalValue<CssProperties["clip"] | AnyString>
+      clear?: ConditionalValue<CssVars | CssProperties["clear"] | AnyString> | undefined
+       clip?: ConditionalValue<CssProperties["clip"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -1794,7 +1794,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/clip-path
          */
-      clipPath?: ConditionalValue<CssProperties["clipPath"] | AnyString>
+      clipPath?: ConditionalValue<CssProperties["clipPath"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -1808,7 +1808,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/clip-rule
          */
-      clipRule?: ConditionalValue<CssProperties["clipRule"] | AnyString>
+      clipRule?: ConditionalValue<CssProperties["clipRule"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1822,7 +1822,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/color
          */
-      color?: ConditionalValue<UtilityValues["color"] | CssVars | CssProperties["color"] | AnyString>
+      color?: ConditionalValue<UtilityValues["color"] | CssVars | CssProperties["color"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -1836,7 +1836,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/color-interpolation-filters
          */
-      colorInterpolationFilters?: ConditionalValue<CssProperties["colorInterpolationFilters"] | AnyString>
+      colorInterpolationFilters?: ConditionalValue<CssProperties["colorInterpolationFilters"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2022.
          *
@@ -1850,7 +1850,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/color-scheme
          */
-      colorScheme?: ConditionalValue<CssProperties["colorScheme"] | AnyString>
+      colorScheme?: ConditionalValue<CssProperties["colorScheme"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2017.
          *
@@ -1865,7 +1865,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/column-count
          */
-      columnCount?: ConditionalValue<CssProperties["columnCount"] | AnyString>
+      columnCount?: ConditionalValue<CssProperties["columnCount"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2017.
          *
@@ -1880,7 +1880,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/column-fill
          */
-      columnFill?: ConditionalValue<CssVars | CssProperties["columnFill"] | AnyString>
+      columnFill?: ConditionalValue<CssVars | CssProperties["columnFill"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -1894,7 +1894,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/column-gap
          */
-      columnGap?: ConditionalValue<UtilityValues["columnGap"] | CssVars | CssProperties["columnGap"] | AnyString>
+      columnGap?: ConditionalValue<UtilityValues["columnGap"] | CssVars | CssProperties["columnGap"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2017.
          *
@@ -1907,7 +1907,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/column-rule
          */
-      columnRule?: ConditionalValue<CssProperties["columnRule"] | AnyString>
+      columnRule?: ConditionalValue<CssProperties["columnRule"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2017.
          *
@@ -1922,7 +1922,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/column-rule-color
          */
-      columnRuleColor?: ConditionalValue<CssProperties["columnRuleColor"] | AnyString>
+      columnRuleColor?: ConditionalValue<CssProperties["columnRuleColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2017.
          *
@@ -1937,7 +1937,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/column-rule-style
          */
-      columnRuleStyle?: ConditionalValue<CssVars | CssProperties["columnRuleStyle"] | AnyString>
+      columnRuleStyle?: ConditionalValue<CssVars | CssProperties["columnRuleStyle"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2017.
          *
@@ -1952,7 +1952,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/column-rule-width
          */
-      columnRuleWidth?: ConditionalValue<CssProperties["columnRuleWidth"] | AnyString>
+      columnRuleWidth?: ConditionalValue<CssProperties["columnRuleWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2020.
          *
@@ -1967,7 +1967,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/column-span
          */
-      columnSpan?: ConditionalValue<CssProperties["columnSpan"] | AnyString>
+      columnSpan?: ConditionalValue<CssProperties["columnSpan"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since November 2016.
          *
@@ -1982,7 +1982,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/column-width
          */
-      columnWidth?: ConditionalValue<CssProperties["columnWidth"] | AnyString>
+      columnWidth?: ConditionalValue<CssProperties["columnWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2017.
          *
@@ -1995,7 +1995,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/columns
          */
-      columns?: ConditionalValue<CssProperties["columns"] | AnyString>
+      columns?: ConditionalValue<CssProperties["columns"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2022.
          *
@@ -2009,7 +2009,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/contain
          */
-      contain?: ConditionalValue<CssProperties["contain"] | AnyString>
+      contain?: ConditionalValue<CssProperties["contain"] | AnyString> | undefined
        /**
          * Since September 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -2023,7 +2023,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/contain-intrinsic-block-size
          */
-      containIntrinsicBlockSize?: ConditionalValue<CssProperties["containIntrinsicBlockSize"] | AnyString>
+      containIntrinsicBlockSize?: ConditionalValue<CssProperties["containIntrinsicBlockSize"] | AnyString> | undefined
        /**
          * Since September 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -2037,7 +2037,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/contain-intrinsic-height
          */
-      containIntrinsicHeight?: ConditionalValue<CssProperties["containIntrinsicHeight"] | AnyString>
+      containIntrinsicHeight?: ConditionalValue<CssProperties["containIntrinsicHeight"] | AnyString> | undefined
        /**
          * Since September 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -2051,7 +2051,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/contain-intrinsic-inline-size
          */
-      containIntrinsicInlineSize?: ConditionalValue<CssProperties["containIntrinsicInlineSize"] | AnyString>
+      containIntrinsicInlineSize?: ConditionalValue<CssProperties["containIntrinsicInlineSize"] | AnyString> | undefined
        /**
          * Since September 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -2063,7 +2063,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/contain-intrinsic-size
          */
-      containIntrinsicSize?: ConditionalValue<CssProperties["containIntrinsicSize"] | AnyString>
+      containIntrinsicSize?: ConditionalValue<CssProperties["containIntrinsicSize"] | AnyString> | undefined
        /**
          * Since September 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -2077,7 +2077,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/contain-intrinsic-width
          */
-      containIntrinsicWidth?: ConditionalValue<CssProperties["containIntrinsicWidth"] | AnyString>
+      containIntrinsicWidth?: ConditionalValue<CssProperties["containIntrinsicWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since February 2023.
          *
@@ -2089,7 +2089,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/container
          */
-      container?: ConditionalValue<CssProperties["container"] | AnyString>
+      container?: ConditionalValue<CssProperties["container"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since February 2023.
          *
@@ -2103,7 +2103,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/container-name
          */
-      containerName?: ConditionalValue<UtilityValues["containerName"] | CssVars | CssProperties["containerName"] | AnyString>
+      containerName?: ConditionalValue<UtilityValues["containerName"] | CssVars | CssProperties["containerName"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since February 2023.
          *
@@ -2117,7 +2117,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/container-type
          */
-      containerType?: ConditionalValue<CssProperties["containerType"] | AnyString>
+      containerType?: ConditionalValue<CssProperties["containerType"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -2131,7 +2131,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/content
          */
-      content?: ConditionalValue<CssProperties["content"] | AnyString>
+      content?: ConditionalValue<CssProperties["content"] | AnyString> | undefined
        /**
          * Since September 2024, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -2145,8 +2145,8 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/content-visibility
          */
-      contentVisibility?: ConditionalValue<CssVars | CssProperties["contentVisibility"] | AnyString>
-       cornerShape?: ConditionalValue<CssProperties["cornerShape"] | AnyString>
+      contentVisibility?: ConditionalValue<CssVars | CssProperties["contentVisibility"] | AnyString> | undefined
+       cornerShape?: ConditionalValue<CssProperties["cornerShape"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -2160,7 +2160,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/counter-increment
          */
-      counterIncrement?: ConditionalValue<CssProperties["counterIncrement"] | AnyString>
+      counterIncrement?: ConditionalValue<CssProperties["counterIncrement"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -2174,7 +2174,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/counter-reset
          */
-      counterReset?: ConditionalValue<CssProperties["counterReset"] | AnyString>
+      counterReset?: ConditionalValue<CssProperties["counterReset"] | AnyString> | undefined
        /**
          * Since December 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -2188,7 +2188,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/counter-set
          */
-      counterSet?: ConditionalValue<CssProperties["counterSet"] | AnyString>
+      counterSet?: ConditionalValue<CssProperties["counterSet"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since December 2021.
          *
@@ -2202,7 +2202,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/cursor
          */
-      cursor?: ConditionalValue<CssProperties["cursor"] | AnyString>
+      cursor?: ConditionalValue<CssProperties["cursor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2020.
          *
@@ -2216,7 +2216,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/cx
          */
-      cx?: ConditionalValue<CssProperties["cx"] | AnyString>
+      cx?: ConditionalValue<CssProperties["cx"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2020.
          *
@@ -2230,7 +2230,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/cy
          */
-      cy?: ConditionalValue<CssProperties["cy"] | AnyString>
+      cy?: ConditionalValue<CssProperties["cy"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -2244,7 +2244,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/d
          */
-      d?: ConditionalValue<CssProperties["d"] | AnyString>
+      d?: ConditionalValue<CssProperties["d"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -2258,7 +2258,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/direction
          */
-      direction?: ConditionalValue<CssVars | CssProperties["direction"] | AnyString>
+      direction?: ConditionalValue<CssVars | CssProperties["direction"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -2272,7 +2272,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/display
          */
-      display?: ConditionalValue<CssVars | CssProperties["display"] | AnyString>
+      display?: ConditionalValue<CssVars | CssProperties["display"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -2286,7 +2286,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/dominant-baseline
          */
-      dominantBaseline?: ConditionalValue<CssProperties["dominantBaseline"] | AnyString>
+      dominantBaseline?: ConditionalValue<CssProperties["dominantBaseline"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -2300,7 +2300,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/empty-cells
          */
-      emptyCells?: ConditionalValue<CssVars | CssProperties["emptyCells"] | AnyString>
+      emptyCells?: ConditionalValue<CssVars | CssProperties["emptyCells"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -2314,7 +2314,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/field-sizing
          */
-      fieldSizing?: ConditionalValue<CssProperties["fieldSizing"] | AnyString>
+      fieldSizing?: ConditionalValue<CssProperties["fieldSizing"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -2328,7 +2328,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/fill
          */
-      fill?: ConditionalValue<UtilityValues["fill"] | CssVars | CssProperties["fill"] | AnyString>
+      fill?: ConditionalValue<UtilityValues["fill"] | CssVars | CssProperties["fill"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -2342,7 +2342,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/fill-opacity
          */
-      fillOpacity?: ConditionalValue<CssProperties["fillOpacity"] | AnyString>
+      fillOpacity?: ConditionalValue<CssProperties["fillOpacity"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -2356,7 +2356,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/fill-rule
          */
-      fillRule?: ConditionalValue<CssProperties["fillRule"] | AnyString>
+      fillRule?: ConditionalValue<CssProperties["fillRule"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2016.
          *
@@ -2371,7 +2371,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/filter
          */
-      filter?: ConditionalValue<UtilityValues["filter"] | CssVars | CssProperties["filter"] | AnyString>
+      filter?: ConditionalValue<UtilityValues["filter"] | CssVars | CssProperties["filter"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -2384,7 +2384,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/flex
          */
-      flex?: ConditionalValue<UtilityValues["flex"] | CssVars | CssProperties["flex"] | AnyString>
+      flex?: ConditionalValue<UtilityValues["flex"] | CssVars | CssProperties["flex"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -2399,7 +2399,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/flex-basis
          */
-      flexBasis?: ConditionalValue<UtilityValues["flexBasis"] | CssVars | CssProperties["flexBasis"] | AnyString>
+      flexBasis?: ConditionalValue<UtilityValues["flexBasis"] | CssVars | CssProperties["flexBasis"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -2414,7 +2414,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/flex-direction
          */
-      flexDirection?: ConditionalValue<CssVars | CssProperties["flexDirection"] | AnyString>
+      flexDirection?: ConditionalValue<CssVars | CssProperties["flexDirection"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -2427,7 +2427,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/flex-flow
          */
-      flexFlow?: ConditionalValue<CssProperties["flexFlow"] | AnyString>
+      flexFlow?: ConditionalValue<CssProperties["flexFlow"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -2442,7 +2442,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/flex-grow
          */
-      flexGrow?: ConditionalValue<CssProperties["flexGrow"] | AnyString>
+      flexGrow?: ConditionalValue<CssProperties["flexGrow"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -2457,7 +2457,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/flex-shrink
          */
-      flexShrink?: ConditionalValue<CssProperties["flexShrink"] | AnyString>
+      flexShrink?: ConditionalValue<CssProperties["flexShrink"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -2472,7 +2472,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/flex-wrap
          */
-      flexWrap?: ConditionalValue<CssVars | CssProperties["flexWrap"] | AnyString>
+      flexWrap?: ConditionalValue<CssVars | CssProperties["flexWrap"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -2486,7 +2486,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/float
          */
-      float?: ConditionalValue<UtilityValues["float"] | CssVars | AnyString>
+      float?: ConditionalValue<UtilityValues["float"] | CssVars | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -2500,7 +2500,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/flood-color
          */
-      floodColor?: ConditionalValue<CssProperties["floodColor"] | AnyString>
+      floodColor?: ConditionalValue<CssProperties["floodColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -2514,7 +2514,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/flood-opacity
          */
-      floodOpacity?: ConditionalValue<CssProperties["floodOpacity"] | AnyString>
+      floodOpacity?: ConditionalValue<CssProperties["floodOpacity"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -2526,7 +2526,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font
          */
-      font?: ConditionalValue<CssProperties["font"] | AnyString>
+      font?: ConditionalValue<CssProperties["font"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -2540,7 +2540,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-family
          */
-      fontFamily?: ConditionalValue<UtilityValues["fontFamily"] | CssVars | CssProperties["fontFamily"] | AnyString>
+      fontFamily?: ConditionalValue<UtilityValues["fontFamily"] | CssVars | CssProperties["fontFamily"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -2555,7 +2555,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-feature-settings
          */
-      fontFeatureSettings?: ConditionalValue<CssProperties["fontFeatureSettings"] | AnyString>
+      fontFeatureSettings?: ConditionalValue<CssProperties["fontFeatureSettings"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -2570,7 +2570,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-kerning
          */
-      fontKerning?: ConditionalValue<CssVars | CssProperties["fontKerning"] | AnyString>
+      fontKerning?: ConditionalValue<CssVars | CssProperties["fontKerning"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -2585,7 +2585,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-language-override
          */
-      fontLanguageOverride?: ConditionalValue<CssProperties["fontLanguageOverride"] | AnyString>
+      fontLanguageOverride?: ConditionalValue<CssProperties["fontLanguageOverride"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2020.
          *
@@ -2599,7 +2599,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-optical-sizing
          */
-      fontOpticalSizing?: ConditionalValue<CssProperties["fontOpticalSizing"] | AnyString>
+      fontOpticalSizing?: ConditionalValue<CssProperties["fontOpticalSizing"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since November 2022.
          *
@@ -2613,7 +2613,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-palette
          */
-      fontPalette?: ConditionalValue<CssProperties["fontPalette"] | AnyString>
+      fontPalette?: ConditionalValue<CssProperties["fontPalette"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -2627,7 +2627,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-size
          */
-      fontSize?: ConditionalValue<UtilityValues["fontSize"] | CssVars | CssProperties["fontSize"] | AnyString>
+      fontSize?: ConditionalValue<UtilityValues["fontSize"] | CssVars | CssProperties["fontSize"] | AnyString> | undefined
        /**
          * Since July 2024, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -2641,7 +2641,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-size-adjust
          */
-      fontSizeAdjust?: ConditionalValue<CssProperties["fontSizeAdjust"] | AnyString>
+      fontSizeAdjust?: ConditionalValue<CssProperties["fontSizeAdjust"] | AnyString> | undefined
        /**
          * The **\`font-smooth\`** CSS property controls the application of anti-aliasing when fonts are rendered.
          *
@@ -2655,8 +2655,8 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-smooth
          */
-      fontSmooth?: ConditionalValue<CssProperties["fontSmooth"] | AnyString>
-       fontStretch?: ConditionalValue<CssProperties["fontStretch"] | AnyString>
+      fontSmooth?: ConditionalValue<CssProperties["fontSmooth"] | AnyString> | undefined
+       fontStretch?: ConditionalValue<CssProperties["fontStretch"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -2670,7 +2670,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-style
          */
-      fontStyle?: ConditionalValue<CssProperties["fontStyle"] | AnyString>
+      fontStyle?: ConditionalValue<CssProperties["fontStyle"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2022.
          *
@@ -2684,7 +2684,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-synthesis
          */
-      fontSynthesis?: ConditionalValue<CssProperties["fontSynthesis"] | AnyString>
+      fontSynthesis?: ConditionalValue<CssProperties["fontSynthesis"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -2698,7 +2698,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-synthesis-position
          */
-      fontSynthesisPosition?: ConditionalValue<CssProperties["fontSynthesisPosition"] | AnyString>
+      fontSynthesisPosition?: ConditionalValue<CssProperties["fontSynthesisPosition"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2023.
          *
@@ -2712,7 +2712,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-synthesis-small-caps
          */
-      fontSynthesisSmallCaps?: ConditionalValue<CssProperties["fontSynthesisSmallCaps"] | AnyString>
+      fontSynthesisSmallCaps?: ConditionalValue<CssProperties["fontSynthesisSmallCaps"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2023.
          *
@@ -2726,7 +2726,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-synthesis-style
          */
-      fontSynthesisStyle?: ConditionalValue<CssProperties["fontSynthesisStyle"] | AnyString>
+      fontSynthesisStyle?: ConditionalValue<CssProperties["fontSynthesisStyle"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2023.
          *
@@ -2740,7 +2740,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-synthesis-weight
          */
-      fontSynthesisWeight?: ConditionalValue<CssProperties["fontSynthesisWeight"] | AnyString>
+      fontSynthesisWeight?: ConditionalValue<CssProperties["fontSynthesisWeight"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -2754,7 +2754,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-variant
          */
-      fontVariant?: ConditionalValue<CssProperties["fontVariant"] | AnyString>
+      fontVariant?: ConditionalValue<CssProperties["fontVariant"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2023.
          *
@@ -2768,7 +2768,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-variant-alternates
          */
-      fontVariantAlternates?: ConditionalValue<CssProperties["fontVariantAlternates"] | AnyString>
+      fontVariantAlternates?: ConditionalValue<CssProperties["fontVariantAlternates"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -2782,7 +2782,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-variant-caps
          */
-      fontVariantCaps?: ConditionalValue<CssProperties["fontVariantCaps"] | AnyString>
+      fontVariantCaps?: ConditionalValue<CssProperties["fontVariantCaps"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -2796,7 +2796,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-variant-east-asian
          */
-      fontVariantEastAsian?: ConditionalValue<CssProperties["fontVariantEastAsian"] | AnyString>
+      fontVariantEastAsian?: ConditionalValue<CssProperties["fontVariantEastAsian"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -2810,7 +2810,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-variant-emoji
          */
-      fontVariantEmoji?: ConditionalValue<CssProperties["fontVariantEmoji"] | AnyString>
+      fontVariantEmoji?: ConditionalValue<CssProperties["fontVariantEmoji"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -2825,7 +2825,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-variant-ligatures
          */
-      fontVariantLigatures?: ConditionalValue<CssProperties["fontVariantLigatures"] | AnyString>
+      fontVariantLigatures?: ConditionalValue<CssProperties["fontVariantLigatures"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -2839,7 +2839,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-variant-numeric
          */
-      fontVariantNumeric?: ConditionalValue<CssProperties["fontVariantNumeric"] | AnyString>
+      fontVariantNumeric?: ConditionalValue<CssProperties["fontVariantNumeric"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -2853,7 +2853,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-variant-position
          */
-      fontVariantPosition?: ConditionalValue<CssProperties["fontVariantPosition"] | AnyString>
+      fontVariantPosition?: ConditionalValue<CssProperties["fontVariantPosition"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2018.
          *
@@ -2867,7 +2867,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-variation-settings
          */
-      fontVariationSettings?: ConditionalValue<CssProperties["fontVariationSettings"] | AnyString>
+      fontVariationSettings?: ConditionalValue<CssProperties["fontVariationSettings"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -2881,7 +2881,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/font-weight
          */
-      fontWeight?: ConditionalValue<UtilityValues["fontWeight"] | CssVars | CssProperties["fontWeight"] | AnyString>
+      fontWeight?: ConditionalValue<UtilityValues["fontWeight"] | CssVars | CssProperties["fontWeight"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -2896,7 +2896,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/forced-color-adjust
          */
-      forcedColorAdjust?: ConditionalValue<CssVars | CssProperties["forcedColorAdjust"] | AnyString>
+      forcedColorAdjust?: ConditionalValue<CssVars | CssProperties["forcedColorAdjust"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since October 2017.
          *
@@ -2908,7 +2908,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/gap
          */
-      gap?: ConditionalValue<UtilityValues["gap"] | CssVars | CssProperties["gap"] | AnyString>
+      gap?: ConditionalValue<UtilityValues["gap"] | CssVars | CssProperties["gap"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since October 2017.
          *
@@ -2920,7 +2920,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/grid
          */
-      grid?: ConditionalValue<CssProperties["grid"] | AnyString>
+      grid?: ConditionalValue<CssProperties["grid"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since October 2017.
          *
@@ -2932,7 +2932,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/grid-area
          */
-      gridArea?: ConditionalValue<CssProperties["gridArea"] | AnyString>
+      gridArea?: ConditionalValue<CssProperties["gridArea"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2020.
          *
@@ -2946,7 +2946,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/grid-auto-columns
          */
-      gridAutoColumns?: ConditionalValue<UtilityValues["gridAutoColumns"] | CssVars | CssProperties["gridAutoColumns"] | AnyString>
+      gridAutoColumns?: ConditionalValue<UtilityValues["gridAutoColumns"] | CssVars | CssProperties["gridAutoColumns"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since October 2017.
          *
@@ -2960,7 +2960,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/grid-auto-flow
          */
-      gridAutoFlow?: ConditionalValue<CssProperties["gridAutoFlow"] | AnyString>
+      gridAutoFlow?: ConditionalValue<CssProperties["gridAutoFlow"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2020.
          *
@@ -2974,7 +2974,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/grid-auto-rows
          */
-      gridAutoRows?: ConditionalValue<UtilityValues["gridAutoRows"] | CssVars | CssProperties["gridAutoRows"] | AnyString>
+      gridAutoRows?: ConditionalValue<UtilityValues["gridAutoRows"] | CssVars | CssProperties["gridAutoRows"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since October 2017.
          *
@@ -2986,7 +2986,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/grid-column
          */
-      gridColumn?: ConditionalValue<CssProperties["gridColumn"] | AnyString>
+      gridColumn?: ConditionalValue<CssProperties["gridColumn"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since October 2017.
          *
@@ -3000,8 +3000,8 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/grid-column-end
          */
-      gridColumnEnd?: ConditionalValue<CssProperties["gridColumnEnd"] | AnyString>
-       gridColumnGap?: ConditionalValue<UtilityValues["gridColumnGap"] | CssVars | CssProperties["gridColumnGap"] | AnyString>
+      gridColumnEnd?: ConditionalValue<CssProperties["gridColumnEnd"] | AnyString> | undefined
+       gridColumnGap?: ConditionalValue<UtilityValues["gridColumnGap"] | CssVars | CssProperties["gridColumnGap"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since October 2017.
          *
@@ -3015,8 +3015,8 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/grid-column-start
          */
-      gridColumnStart?: ConditionalValue<CssProperties["gridColumnStart"] | AnyString>
-       gridGap?: ConditionalValue<UtilityValues["gridGap"] | CssVars | CssProperties["gridGap"] | AnyString>
+      gridColumnStart?: ConditionalValue<CssProperties["gridColumnStart"] | AnyString> | undefined
+       gridGap?: ConditionalValue<UtilityValues["gridGap"] | CssVars | CssProperties["gridGap"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since October 2017.
          *
@@ -3028,7 +3028,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/grid-row
          */
-      gridRow?: ConditionalValue<CssProperties["gridRow"] | AnyString>
+      gridRow?: ConditionalValue<CssProperties["gridRow"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since October 2017.
          *
@@ -3042,8 +3042,8 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/grid-row-end
          */
-      gridRowEnd?: ConditionalValue<CssProperties["gridRowEnd"] | AnyString>
-       gridRowGap?: ConditionalValue<UtilityValues["gridRowGap"] | CssVars | CssProperties["gridRowGap"] | AnyString>
+      gridRowEnd?: ConditionalValue<CssProperties["gridRowEnd"] | AnyString> | undefined
+       gridRowGap?: ConditionalValue<UtilityValues["gridRowGap"] | CssVars | CssProperties["gridRowGap"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since October 2017.
          *
@@ -3057,7 +3057,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/grid-row-start
          */
-      gridRowStart?: ConditionalValue<CssProperties["gridRowStart"] | AnyString>
+      gridRowStart?: ConditionalValue<CssProperties["gridRowStart"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since October 2017.
          *
@@ -3069,7 +3069,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/grid-template
          */
-      gridTemplate?: ConditionalValue<CssProperties["gridTemplate"] | AnyString>
+      gridTemplate?: ConditionalValue<CssProperties["gridTemplate"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since October 2017.
          *
@@ -3083,7 +3083,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/grid-template-areas
          */
-      gridTemplateAreas?: ConditionalValue<CssProperties["gridTemplateAreas"] | AnyString>
+      gridTemplateAreas?: ConditionalValue<CssProperties["gridTemplateAreas"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since October 2017.
          *
@@ -3097,7 +3097,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/grid-template-columns
          */
-      gridTemplateColumns?: ConditionalValue<CssProperties["gridTemplateColumns"] | AnyString>
+      gridTemplateColumns?: ConditionalValue<CssProperties["gridTemplateColumns"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since October 2017.
          *
@@ -3111,7 +3111,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/grid-template-rows
          */
-      gridTemplateRows?: ConditionalValue<CssProperties["gridTemplateRows"] | AnyString>
+      gridTemplateRows?: ConditionalValue<CssProperties["gridTemplateRows"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -3125,7 +3125,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/hanging-punctuation
          */
-      hangingPunctuation?: ConditionalValue<CssProperties["hangingPunctuation"] | AnyString>
+      hangingPunctuation?: ConditionalValue<CssProperties["hangingPunctuation"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -3139,7 +3139,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/height
          */
-      height?: ConditionalValue<UtilityValues["height"] | CssVars | CssProperties["height"] | AnyString>
+      height?: ConditionalValue<UtilityValues["height"] | CssVars | CssProperties["height"] | AnyString> | undefined
        /**
          * Since September 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -3154,7 +3154,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/hyphenate-character
          */
-      hyphenateCharacter?: ConditionalValue<CssProperties["hyphenateCharacter"] | AnyString>
+      hyphenateCharacter?: ConditionalValue<CssProperties["hyphenateCharacter"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -3168,7 +3168,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/hyphenate-limit-chars
          */
-      hyphenateLimitChars?: ConditionalValue<CssProperties["hyphenateLimitChars"] | AnyString>
+      hyphenateLimitChars?: ConditionalValue<CssProperties["hyphenateLimitChars"] | AnyString> | undefined
        /**
          * Since September 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -3183,7 +3183,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/hyphens
          */
-      hyphens?: ConditionalValue<CssProperties["hyphens"] | AnyString>
+      hyphens?: ConditionalValue<CssProperties["hyphens"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2020.
          *
@@ -3197,7 +3197,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/image-orientation
          */
-      imageOrientation?: ConditionalValue<CssProperties["imageOrientation"] | AnyString>
+      imageOrientation?: ConditionalValue<CssProperties["imageOrientation"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -3211,7 +3211,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/image-rendering
          */
-      imageRendering?: ConditionalValue<CssProperties["imageRendering"] | AnyString>
+      imageRendering?: ConditionalValue<CssProperties["imageRendering"] | AnyString> | undefined
        /**
          * The **\`image-resolution\`** CSS property specifies the intrinsic resolution of all raster images used in or on the element. It affects content images such as replaced elements and generated content, and decorative images such as \`background-image\` images.
          *
@@ -3219,8 +3219,8 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`1dppx\`
          */
-      imageResolution?: ConditionalValue<CssProperties["imageResolution"] | AnyString>
-       imeMode?: ConditionalValue<CssProperties["imeMode"] | AnyString>
+      imageResolution?: ConditionalValue<CssProperties["imageResolution"] | AnyString> | undefined
+       imeMode?: ConditionalValue<CssProperties["imeMode"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -3234,13 +3234,13 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/initial-letter
          */
-      initialLetter?: ConditionalValue<CssProperties["initialLetter"] | AnyString>
+      initialLetter?: ConditionalValue<CssProperties["initialLetter"] | AnyString> | undefined
        /**
          * **Syntax**: \`[ auto | alphabetic | hanging | ideographic ]\`
          *
          * **Initial value**: \`auto\`
          */
-      initialLetterAlign?: ConditionalValue<CssProperties["initialLetterAlign"] | AnyString>
+      initialLetterAlign?: ConditionalValue<CssProperties["initialLetterAlign"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -3255,7 +3255,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/inline-size
          */
-      inlineSize?: ConditionalValue<UtilityValues["inlineSize"] | CssVars | CssProperties["inlineSize"] | AnyString>
+      inlineSize?: ConditionalValue<UtilityValues["inlineSize"] | CssVars | CssProperties["inlineSize"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -3267,7 +3267,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/inset
          */
-      inset?: ConditionalValue<UtilityValues["inset"] | CssVars | CssProperties["inset"] | AnyString>
+      inset?: ConditionalValue<UtilityValues["inset"] | CssVars | CssProperties["inset"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -3279,7 +3279,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/inset-block
          */
-      insetBlock?: ConditionalValue<UtilityValues["insetBlock"] | CssVars | CssProperties["insetBlock"] | AnyString>
+      insetBlock?: ConditionalValue<UtilityValues["insetBlock"] | CssVars | CssProperties["insetBlock"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -3293,7 +3293,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/inset-block-end
          */
-      insetBlockEnd?: ConditionalValue<UtilityValues["insetBlockEnd"] | CssVars | CssProperties["insetBlockEnd"] | AnyString>
+      insetBlockEnd?: ConditionalValue<UtilityValues["insetBlockEnd"] | CssVars | CssProperties["insetBlockEnd"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -3307,7 +3307,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/inset-block-start
          */
-      insetBlockStart?: ConditionalValue<UtilityValues["insetBlockStart"] | CssVars | CssProperties["insetBlockStart"] | AnyString>
+      insetBlockStart?: ConditionalValue<UtilityValues["insetBlockStart"] | CssVars | CssProperties["insetBlockStart"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -3319,7 +3319,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/inset-inline
          */
-      insetInline?: ConditionalValue<UtilityValues["insetInline"] | CssVars | CssProperties["insetInline"] | AnyString>
+      insetInline?: ConditionalValue<UtilityValues["insetInline"] | CssVars | CssProperties["insetInline"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -3333,7 +3333,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/inset-inline-end
          */
-      insetInlineEnd?: ConditionalValue<UtilityValues["insetInlineEnd"] | CssVars | CssProperties["insetInlineEnd"] | AnyString>
+      insetInlineEnd?: ConditionalValue<UtilityValues["insetInlineEnd"] | CssVars | CssProperties["insetInlineEnd"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -3347,7 +3347,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/inset-inline-start
          */
-      insetInlineStart?: ConditionalValue<UtilityValues["insetInlineStart"] | CssVars | CssProperties["insetInlineStart"] | AnyString>
+      insetInlineStart?: ConditionalValue<UtilityValues["insetInlineStart"] | CssVars | CssProperties["insetInlineStart"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -3361,7 +3361,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/interpolate-size
          */
-      interpolateSize?: ConditionalValue<CssProperties["interpolateSize"] | AnyString>
+      interpolateSize?: ConditionalValue<CssProperties["interpolateSize"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -3375,7 +3375,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/isolation
          */
-      isolation?: ConditionalValue<CssVars | CssProperties["isolation"] | AnyString>
+      isolation?: ConditionalValue<CssVars | CssProperties["isolation"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -3390,7 +3390,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/justify-content
          */
-      justifyContent?: ConditionalValue<CssProperties["justifyContent"] | AnyString>
+      justifyContent?: ConditionalValue<CssProperties["justifyContent"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2016.
          *
@@ -3404,7 +3404,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/justify-items
          */
-      justifyItems?: ConditionalValue<CssProperties["justifyItems"] | AnyString>
+      justifyItems?: ConditionalValue<CssProperties["justifyItems"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since October 2017.
          *
@@ -3418,13 +3418,13 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/justify-self
          */
-      justifySelf?: ConditionalValue<CssProperties["justifySelf"] | AnyString>
+      justifySelf?: ConditionalValue<CssProperties["justifySelf"] | AnyString> | undefined
        /**
          * **Syntax**: \`[ normal | <content-distribution> | <overflow-position>? [ <content-position> | left | right ] ]#\`
          *
          * **Initial value**: \`normal\`
          */
-      justifyTracks?: ConditionalValue<CssProperties["justifyTracks"] | AnyString>
+      justifyTracks?: ConditionalValue<CssProperties["justifyTracks"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -3438,7 +3438,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/left
          */
-      left?: ConditionalValue<UtilityValues["left"] | CssVars | CssProperties["left"] | AnyString>
+      left?: ConditionalValue<UtilityValues["left"] | CssVars | CssProperties["left"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -3452,7 +3452,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/letter-spacing
          */
-      letterSpacing?: ConditionalValue<UtilityValues["letterSpacing"] | CssVars | CssProperties["letterSpacing"] | AnyString>
+      letterSpacing?: ConditionalValue<UtilityValues["letterSpacing"] | CssVars | CssProperties["letterSpacing"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -3466,7 +3466,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/lighting-color
          */
-      lightingColor?: ConditionalValue<CssProperties["lightingColor"] | AnyString>
+      lightingColor?: ConditionalValue<CssProperties["lightingColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2020.
          *
@@ -3481,7 +3481,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/line-break
          */
-      lineBreak?: ConditionalValue<CssVars | CssProperties["lineBreak"] | AnyString>
+      lineBreak?: ConditionalValue<CssVars | CssProperties["lineBreak"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -3496,7 +3496,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/line-clamp
          */
-      lineClamp?: ConditionalValue<CssProperties["lineClamp"] | AnyString>
+      lineClamp?: ConditionalValue<CssProperties["lineClamp"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -3510,7 +3510,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/line-height
          */
-      lineHeight?: ConditionalValue<UtilityValues["lineHeight"] | CssVars | CssProperties["lineHeight"] | AnyString>
+      lineHeight?: ConditionalValue<UtilityValues["lineHeight"] | CssVars | CssProperties["lineHeight"] | AnyString> | undefined
        /**
          * The **\`line-height-step\`** CSS property sets the step unit for line box heights. When the property is set, line box heights are rounded up to the closest multiple of the unit.
          *
@@ -3518,7 +3518,7 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`0\`
          */
-      lineHeightStep?: ConditionalValue<CssProperties["lineHeightStep"] | AnyString>
+      lineHeightStep?: ConditionalValue<CssProperties["lineHeightStep"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -3530,7 +3530,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/list-style
          */
-      listStyle?: ConditionalValue<CssProperties["listStyle"] | AnyString>
+      listStyle?: ConditionalValue<CssProperties["listStyle"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -3544,7 +3544,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/list-style-image
          */
-      listStyleImage?: ConditionalValue<CssProperties["listStyleImage"] | AnyString>
+      listStyleImage?: ConditionalValue<CssProperties["listStyleImage"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -3558,7 +3558,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/list-style-position
          */
-      listStylePosition?: ConditionalValue<CssProperties["listStylePosition"] | AnyString>
+      listStylePosition?: ConditionalValue<CssProperties["listStylePosition"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -3572,7 +3572,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/list-style-type
          */
-      listStyleType?: ConditionalValue<CssProperties["listStyleType"] | AnyString>
+      listStyleType?: ConditionalValue<CssProperties["listStyleType"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -3584,7 +3584,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin
          */
-      margin?: ConditionalValue<UtilityValues["margin"] | CssVars | CssProperties["margin"] | AnyString>
+      margin?: ConditionalValue<UtilityValues["margin"] | CssVars | CssProperties["margin"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -3596,7 +3596,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-block
          */
-      marginBlock?: ConditionalValue<UtilityValues["marginBlock"] | CssVars | CssProperties["marginBlock"] | AnyString>
+      marginBlock?: ConditionalValue<UtilityValues["marginBlock"] | CssVars | CssProperties["marginBlock"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -3610,7 +3610,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-block-end
          */
-      marginBlockEnd?: ConditionalValue<UtilityValues["marginBlockEnd"] | CssVars | CssProperties["marginBlockEnd"] | AnyString>
+      marginBlockEnd?: ConditionalValue<UtilityValues["marginBlockEnd"] | CssVars | CssProperties["marginBlockEnd"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -3624,7 +3624,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-block-start
          */
-      marginBlockStart?: ConditionalValue<UtilityValues["marginBlockStart"] | CssVars | CssProperties["marginBlockStart"] | AnyString>
+      marginBlockStart?: ConditionalValue<UtilityValues["marginBlockStart"] | CssVars | CssProperties["marginBlockStart"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -3638,7 +3638,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-bottom
          */
-      marginBottom?: ConditionalValue<UtilityValues["marginBottom"] | CssVars | CssProperties["marginBottom"] | AnyString>
+      marginBottom?: ConditionalValue<UtilityValues["marginBottom"] | CssVars | CssProperties["marginBottom"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -3650,7 +3650,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-inline
          */
-      marginInline?: ConditionalValue<UtilityValues["marginInline"] | CssVars | CssProperties["marginInline"] | AnyString>
+      marginInline?: ConditionalValue<UtilityValues["marginInline"] | CssVars | CssProperties["marginInline"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -3665,7 +3665,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-inline-end
          */
-      marginInlineEnd?: ConditionalValue<UtilityValues["marginInlineEnd"] | CssVars | CssProperties["marginInlineEnd"] | AnyString>
+      marginInlineEnd?: ConditionalValue<UtilityValues["marginInlineEnd"] | CssVars | CssProperties["marginInlineEnd"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -3680,7 +3680,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-inline-start
          */
-      marginInlineStart?: ConditionalValue<UtilityValues["marginInlineStart"] | CssVars | CssProperties["marginInlineStart"] | AnyString>
+      marginInlineStart?: ConditionalValue<UtilityValues["marginInlineStart"] | CssVars | CssProperties["marginInlineStart"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -3694,7 +3694,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-left
          */
-      marginLeft?: ConditionalValue<UtilityValues["marginLeft"] | CssVars | CssProperties["marginLeft"] | AnyString>
+      marginLeft?: ConditionalValue<UtilityValues["marginLeft"] | CssVars | CssProperties["marginLeft"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -3708,7 +3708,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-right
          */
-      marginRight?: ConditionalValue<UtilityValues["marginRight"] | CssVars | CssProperties["marginRight"] | AnyString>
+      marginRight?: ConditionalValue<UtilityValues["marginRight"] | CssVars | CssProperties["marginRight"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -3722,7 +3722,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-top
          */
-      marginTop?: ConditionalValue<UtilityValues["marginTop"] | CssVars | CssProperties["marginTop"] | AnyString>
+      marginTop?: ConditionalValue<UtilityValues["marginTop"] | CssVars | CssProperties["marginTop"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -3736,7 +3736,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-trim
          */
-      marginTrim?: ConditionalValue<CssProperties["marginTrim"] | AnyString>
+      marginTrim?: ConditionalValue<CssProperties["marginTrim"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -3748,7 +3748,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/marker
          */
-      marker?: ConditionalValue<CssProperties["marker"] | AnyString>
+      marker?: ConditionalValue<CssProperties["marker"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -3762,7 +3762,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/marker-end
          */
-      markerEnd?: ConditionalValue<CssProperties["markerEnd"] | AnyString>
+      markerEnd?: ConditionalValue<CssProperties["markerEnd"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -3776,7 +3776,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/marker-mid
          */
-      markerMid?: ConditionalValue<CssProperties["markerMid"] | AnyString>
+      markerMid?: ConditionalValue<CssProperties["markerMid"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -3790,7 +3790,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/marker-start
          */
-      markerStart?: ConditionalValue<CssProperties["markerStart"] | AnyString>
+      markerStart?: ConditionalValue<CssProperties["markerStart"] | AnyString> | undefined
        /**
          * Since December 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -3803,7 +3803,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/mask
          */
-      mask?: ConditionalValue<CssProperties["mask"] | AnyString>
+      mask?: ConditionalValue<CssProperties["mask"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -3816,7 +3816,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/mask-border
          */
-      maskBorder?: ConditionalValue<CssProperties["maskBorder"] | AnyString>
+      maskBorder?: ConditionalValue<CssProperties["maskBorder"] | AnyString> | undefined
        /**
          * The **\`mask-border-mode\`** CSS property specifies the blending mode used in a mask border.
          *
@@ -3824,7 +3824,7 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`alpha\`
          */
-      maskBorderMode?: ConditionalValue<CssProperties["maskBorderMode"] | AnyString>
+      maskBorderMode?: ConditionalValue<CssProperties["maskBorderMode"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -3839,7 +3839,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/mask-border-outset
          */
-      maskBorderOutset?: ConditionalValue<CssProperties["maskBorderOutset"] | AnyString>
+      maskBorderOutset?: ConditionalValue<CssProperties["maskBorderOutset"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -3854,7 +3854,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/mask-border-repeat
          */
-      maskBorderRepeat?: ConditionalValue<CssProperties["maskBorderRepeat"] | AnyString>
+      maskBorderRepeat?: ConditionalValue<CssProperties["maskBorderRepeat"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -3869,7 +3869,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/mask-border-slice
          */
-      maskBorderSlice?: ConditionalValue<CssProperties["maskBorderSlice"] | AnyString>
+      maskBorderSlice?: ConditionalValue<CssProperties["maskBorderSlice"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -3884,7 +3884,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/mask-border-source
          */
-      maskBorderSource?: ConditionalValue<CssProperties["maskBorderSource"] | AnyString>
+      maskBorderSource?: ConditionalValue<CssProperties["maskBorderSource"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -3899,7 +3899,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/mask-border-width
          */
-      maskBorderWidth?: ConditionalValue<CssProperties["maskBorderWidth"] | AnyString>
+      maskBorderWidth?: ConditionalValue<CssProperties["maskBorderWidth"] | AnyString> | undefined
        /**
          * Since December 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -3914,7 +3914,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/mask-clip
          */
-      maskClip?: ConditionalValue<CssProperties["maskClip"] | AnyString>
+      maskClip?: ConditionalValue<CssProperties["maskClip"] | AnyString> | undefined
        /**
          * Since December 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -3928,7 +3928,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/mask-composite
          */
-      maskComposite?: ConditionalValue<CssProperties["maskComposite"] | AnyString>
+      maskComposite?: ConditionalValue<CssProperties["maskComposite"] | AnyString> | undefined
        /**
          * Since December 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -3943,7 +3943,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/mask-image
          */
-      maskImage?: ConditionalValue<CssProperties["maskImage"] | AnyString>
+      maskImage?: ConditionalValue<CssProperties["maskImage"] | AnyString> | undefined
        /**
          * Since December 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -3957,7 +3957,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/mask-mode
          */
-      maskMode?: ConditionalValue<CssProperties["maskMode"] | AnyString>
+      maskMode?: ConditionalValue<CssProperties["maskMode"] | AnyString> | undefined
        /**
          * Since December 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -3972,7 +3972,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/mask-origin
          */
-      maskOrigin?: ConditionalValue<CssProperties["maskOrigin"] | AnyString>
+      maskOrigin?: ConditionalValue<CssProperties["maskOrigin"] | AnyString> | undefined
        /**
          * Since December 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -3987,7 +3987,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/mask-position
          */
-      maskPosition?: ConditionalValue<CssProperties["maskPosition"] | AnyString>
+      maskPosition?: ConditionalValue<CssProperties["maskPosition"] | AnyString> | undefined
        /**
          * Since December 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -4002,7 +4002,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/mask-repeat
          */
-      maskRepeat?: ConditionalValue<CssProperties["maskRepeat"] | AnyString>
+      maskRepeat?: ConditionalValue<CssProperties["maskRepeat"] | AnyString> | undefined
        /**
          * Since December 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -4017,7 +4017,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/mask-size
          */
-      maskSize?: ConditionalValue<CssProperties["maskSize"] | AnyString>
+      maskSize?: ConditionalValue<CssProperties["maskSize"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -4031,7 +4031,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/mask-type
          */
-      maskType?: ConditionalValue<CssProperties["maskType"] | AnyString>
+      maskType?: ConditionalValue<CssProperties["maskType"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since October 2017.
          *
@@ -4039,7 +4039,7 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`pack\`
          */
-      masonryAutoFlow?: ConditionalValue<CssProperties["masonryAutoFlow"] | AnyString>
+      masonryAutoFlow?: ConditionalValue<CssProperties["masonryAutoFlow"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -4053,7 +4053,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/math-depth
          */
-      mathDepth?: ConditionalValue<CssProperties["mathDepth"] | AnyString>
+      mathDepth?: ConditionalValue<CssProperties["mathDepth"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -4067,7 +4067,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/math-shift
          */
-      mathShift?: ConditionalValue<CssProperties["mathShift"] | AnyString>
+      mathShift?: ConditionalValue<CssProperties["mathShift"] | AnyString> | undefined
        /**
          * Since August 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -4081,7 +4081,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/math-style
          */
-      mathStyle?: ConditionalValue<CssProperties["mathStyle"] | AnyString>
+      mathStyle?: ConditionalValue<CssProperties["mathStyle"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -4095,7 +4095,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/max-block-size
          */
-      maxBlockSize?: ConditionalValue<UtilityValues["maxBlockSize"] | CssVars | CssProperties["maxBlockSize"] | AnyString>
+      maxBlockSize?: ConditionalValue<UtilityValues["maxBlockSize"] | CssVars | CssProperties["maxBlockSize"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -4109,7 +4109,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/max-height
          */
-      maxHeight?: ConditionalValue<UtilityValues["maxHeight"] | CssVars | CssProperties["maxHeight"] | AnyString>
+      maxHeight?: ConditionalValue<UtilityValues["maxHeight"] | CssVars | CssProperties["maxHeight"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -4124,13 +4124,13 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/max-inline-size
          */
-      maxInlineSize?: ConditionalValue<UtilityValues["maxInlineSize"] | CssVars | CssProperties["maxInlineSize"] | AnyString>
+      maxInlineSize?: ConditionalValue<UtilityValues["maxInlineSize"] | CssVars | CssProperties["maxInlineSize"] | AnyString> | undefined
        /**
          * **Syntax**: \`none | <integer>\`
          *
          * **Initial value**: \`none\`
          */
-      maxLines?: ConditionalValue<CssProperties["maxLines"] | AnyString>
+      maxLines?: ConditionalValue<CssProperties["maxLines"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -4144,7 +4144,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/max-width
          */
-      maxWidth?: ConditionalValue<UtilityValues["maxWidth"] | CssVars | CssProperties["maxWidth"] | AnyString>
+      maxWidth?: ConditionalValue<UtilityValues["maxWidth"] | CssVars | CssProperties["maxWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -4158,7 +4158,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/min-block-size
          */
-      minBlockSize?: ConditionalValue<UtilityValues["minBlockSize"] | CssVars | CssProperties["minBlockSize"] | AnyString>
+      minBlockSize?: ConditionalValue<UtilityValues["minBlockSize"] | CssVars | CssProperties["minBlockSize"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -4172,7 +4172,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/min-height
          */
-      minHeight?: ConditionalValue<UtilityValues["minHeight"] | CssVars | CssProperties["minHeight"] | AnyString>
+      minHeight?: ConditionalValue<UtilityValues["minHeight"] | CssVars | CssProperties["minHeight"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -4186,7 +4186,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/min-inline-size
          */
-      minInlineSize?: ConditionalValue<UtilityValues["minInlineSize"] | CssVars | CssProperties["minInlineSize"] | AnyString>
+      minInlineSize?: ConditionalValue<UtilityValues["minInlineSize"] | CssVars | CssProperties["minInlineSize"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -4200,7 +4200,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/min-width
          */
-      minWidth?: ConditionalValue<UtilityValues["minWidth"] | CssVars | CssProperties["minWidth"] | AnyString>
+      minWidth?: ConditionalValue<UtilityValues["minWidth"] | CssVars | CssProperties["minWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -4214,7 +4214,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/mix-blend-mode
          */
-      mixBlendMode?: ConditionalValue<CssVars | CssProperties["mixBlendMode"] | AnyString>
+      mixBlendMode?: ConditionalValue<CssVars | CssProperties["mixBlendMode"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -4228,7 +4228,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/object-fit
          */
-      objectFit?: ConditionalValue<CssVars | CssProperties["objectFit"] | AnyString>
+      objectFit?: ConditionalValue<CssVars | CssProperties["objectFit"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -4242,7 +4242,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/object-position
          */
-      objectPosition?: ConditionalValue<CssProperties["objectPosition"] | AnyString>
+      objectPosition?: ConditionalValue<CssProperties["objectPosition"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2022.
          *
@@ -4255,7 +4255,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/offset
          */
-      offset?: ConditionalValue<CssProperties["offset"] | AnyString>
+      offset?: ConditionalValue<CssProperties["offset"] | AnyString> | undefined
        /**
          * Since August 2023, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -4269,7 +4269,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/offset-anchor
          */
-      offsetAnchor?: ConditionalValue<CssProperties["offsetAnchor"] | AnyString>
+      offsetAnchor?: ConditionalValue<CssProperties["offsetAnchor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2022.
          *
@@ -4284,7 +4284,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/offset-distance
          */
-      offsetDistance?: ConditionalValue<CssProperties["offsetDistance"] | AnyString>
+      offsetDistance?: ConditionalValue<CssProperties["offsetDistance"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2022.
          *
@@ -4299,7 +4299,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/offset-path
          */
-      offsetPath?: ConditionalValue<CssProperties["offsetPath"] | AnyString>
+      offsetPath?: ConditionalValue<CssProperties["offsetPath"] | AnyString> | undefined
        /**
          * Since January 2024, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -4313,7 +4313,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/offset-position
          */
-      offsetPosition?: ConditionalValue<CssProperties["offsetPosition"] | AnyString>
+      offsetPosition?: ConditionalValue<CssProperties["offsetPosition"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2022.
          *
@@ -4328,7 +4328,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/offset-rotate
          */
-      offsetRotate?: ConditionalValue<CssProperties["offsetRotate"] | AnyString>
+      offsetRotate?: ConditionalValue<CssProperties["offsetRotate"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -4342,7 +4342,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/opacity
          */
-      opacity?: ConditionalValue<CssProperties["opacity"] | AnyString>
+      opacity?: ConditionalValue<CssProperties["opacity"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -4357,7 +4357,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/order
          */
-      order?: ConditionalValue<CssProperties["order"] | AnyString>
+      order?: ConditionalValue<CssProperties["order"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -4371,7 +4371,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/orphans
          */
-      orphans?: ConditionalValue<CssProperties["orphans"] | AnyString>
+      orphans?: ConditionalValue<CssProperties["orphans"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2023.
          *
@@ -4383,7 +4383,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/outline
          */
-      outline?: ConditionalValue<UtilityValues["outline"] | CssVars | CssProperties["outline"] | AnyString>
+      outline?: ConditionalValue<UtilityValues["outline"] | CssVars | CssProperties["outline"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -4397,7 +4397,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/outline-color
          */
-      outlineColor?: ConditionalValue<UtilityValues["outlineColor"] | CssVars | CssProperties["outlineColor"] | AnyString>
+      outlineColor?: ConditionalValue<UtilityValues["outlineColor"] | CssVars | CssProperties["outlineColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -4411,7 +4411,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/outline-offset
          */
-      outlineOffset?: ConditionalValue<UtilityValues["outlineOffset"] | CssVars | CssProperties["outlineOffset"] | AnyString>
+      outlineOffset?: ConditionalValue<UtilityValues["outlineOffset"] | CssVars | CssProperties["outlineOffset"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -4425,7 +4425,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/outline-style
          */
-      outlineStyle?: ConditionalValue<CssVars | CssProperties["outlineStyle"] | AnyString>
+      outlineStyle?: ConditionalValue<CssVars | CssProperties["outlineStyle"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -4439,7 +4439,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/outline-width
          */
-      outlineWidth?: ConditionalValue<CssProperties["outlineWidth"] | AnyString>
+      outlineWidth?: ConditionalValue<CssProperties["outlineWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -4453,7 +4453,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/overflow
          */
-      overflow?: ConditionalValue<CssVars | CssProperties["overflow"] | AnyString>
+      overflow?: ConditionalValue<CssVars | CssProperties["overflow"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -4467,7 +4467,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/overflow-anchor
          */
-      overflowAnchor?: ConditionalValue<CssProperties["overflowAnchor"] | AnyString>
+      overflowAnchor?: ConditionalValue<CssProperties["overflowAnchor"] | AnyString> | undefined
        /**
          * Since September 2025, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -4481,13 +4481,13 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/overflow-block
          */
-      overflowBlock?: ConditionalValue<CssVars | CssProperties["overflowBlock"] | AnyString>
+      overflowBlock?: ConditionalValue<CssVars | CssProperties["overflowBlock"] | AnyString> | undefined
        /**
          * **Syntax**: \`padding-box | content-box\`
          *
          * **Initial value**: \`padding-box\`
          */
-      overflowClipBox?: ConditionalValue<CssProperties["overflowClipBox"] | AnyString>
+      overflowClipBox?: ConditionalValue<CssProperties["overflowClipBox"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -4501,7 +4501,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/overflow-clip-margin
          */
-      overflowClipMargin?: ConditionalValue<CssProperties["overflowClipMargin"] | AnyString>
+      overflowClipMargin?: ConditionalValue<CssProperties["overflowClipMargin"] | AnyString> | undefined
        /**
          * Since September 2025, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -4515,7 +4515,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/overflow-inline
          */
-      overflowInline?: ConditionalValue<CssVars | CssProperties["overflowInline"] | AnyString>
+      overflowInline?: ConditionalValue<CssVars | CssProperties["overflowInline"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since October 2018.
          *
@@ -4530,7 +4530,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/overflow-wrap
          */
-      overflowWrap?: ConditionalValue<CssVars | CssProperties["overflowWrap"] | AnyString>
+      overflowWrap?: ConditionalValue<CssVars | CssProperties["overflowWrap"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -4544,7 +4544,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/overflow-x
          */
-      overflowX?: ConditionalValue<CssVars | CssProperties["overflowX"] | AnyString>
+      overflowX?: ConditionalValue<CssVars | CssProperties["overflowX"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -4558,7 +4558,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/overflow-y
          */
-      overflowY?: ConditionalValue<CssVars | CssProperties["overflowY"] | AnyString>
+      overflowY?: ConditionalValue<CssVars | CssProperties["overflowY"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -4572,7 +4572,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/overlay
          */
-      overlay?: ConditionalValue<CssProperties["overlay"] | AnyString>
+      overlay?: ConditionalValue<CssProperties["overlay"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2022.
          *
@@ -4586,7 +4586,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/overscroll-behavior
          */
-      overscrollBehavior?: ConditionalValue<CssProperties["overscrollBehavior"] | AnyString>
+      overscrollBehavior?: ConditionalValue<CssProperties["overscrollBehavior"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2022.
          *
@@ -4600,7 +4600,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/overscroll-behavior-block
          */
-      overscrollBehaviorBlock?: ConditionalValue<CssProperties["overscrollBehaviorBlock"] | AnyString>
+      overscrollBehaviorBlock?: ConditionalValue<CssProperties["overscrollBehaviorBlock"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2022.
          *
@@ -4614,7 +4614,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/overscroll-behavior-inline
          */
-      overscrollBehaviorInline?: ConditionalValue<CssProperties["overscrollBehaviorInline"] | AnyString>
+      overscrollBehaviorInline?: ConditionalValue<CssProperties["overscrollBehaviorInline"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2022.
          *
@@ -4628,7 +4628,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/overscroll-behavior-x
          */
-      overscrollBehaviorX?: ConditionalValue<CssProperties["overscrollBehaviorX"] | AnyString>
+      overscrollBehaviorX?: ConditionalValue<CssProperties["overscrollBehaviorX"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2022.
          *
@@ -4642,7 +4642,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/overscroll-behavior-y
          */
-      overscrollBehaviorY?: ConditionalValue<CssProperties["overscrollBehaviorY"] | AnyString>
+      overscrollBehaviorY?: ConditionalValue<CssProperties["overscrollBehaviorY"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -4654,7 +4654,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding
          */
-      padding?: ConditionalValue<UtilityValues["padding"] | CssVars | CssProperties["padding"] | AnyString>
+      padding?: ConditionalValue<UtilityValues["padding"] | CssVars | CssProperties["padding"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -4666,7 +4666,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-block
          */
-      paddingBlock?: ConditionalValue<UtilityValues["paddingBlock"] | CssVars | CssProperties["paddingBlock"] | AnyString>
+      paddingBlock?: ConditionalValue<UtilityValues["paddingBlock"] | CssVars | CssProperties["paddingBlock"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -4680,7 +4680,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-block-end
          */
-      paddingBlockEnd?: ConditionalValue<UtilityValues["paddingBlockEnd"] | CssVars | CssProperties["paddingBlockEnd"] | AnyString>
+      paddingBlockEnd?: ConditionalValue<UtilityValues["paddingBlockEnd"] | CssVars | CssProperties["paddingBlockEnd"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -4694,7 +4694,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-block-start
          */
-      paddingBlockStart?: ConditionalValue<UtilityValues["paddingBlockStart"] | CssVars | CssProperties["paddingBlockStart"] | AnyString>
+      paddingBlockStart?: ConditionalValue<UtilityValues["paddingBlockStart"] | CssVars | CssProperties["paddingBlockStart"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -4708,7 +4708,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-bottom
          */
-      paddingBottom?: ConditionalValue<UtilityValues["paddingBottom"] | CssVars | CssProperties["paddingBottom"] | AnyString>
+      paddingBottom?: ConditionalValue<UtilityValues["paddingBottom"] | CssVars | CssProperties["paddingBottom"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -4720,7 +4720,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-inline
          */
-      paddingInline?: ConditionalValue<UtilityValues["paddingInline"] | CssVars | CssProperties["paddingInline"] | AnyString>
+      paddingInline?: ConditionalValue<UtilityValues["paddingInline"] | CssVars | CssProperties["paddingInline"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -4735,7 +4735,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-inline-end
          */
-      paddingInlineEnd?: ConditionalValue<UtilityValues["paddingInlineEnd"] | CssVars | CssProperties["paddingInlineEnd"] | AnyString>
+      paddingInlineEnd?: ConditionalValue<UtilityValues["paddingInlineEnd"] | CssVars | CssProperties["paddingInlineEnd"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -4750,7 +4750,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-inline-start
          */
-      paddingInlineStart?: ConditionalValue<UtilityValues["paddingInlineStart"] | CssVars | CssProperties["paddingInlineStart"] | AnyString>
+      paddingInlineStart?: ConditionalValue<UtilityValues["paddingInlineStart"] | CssVars | CssProperties["paddingInlineStart"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -4764,7 +4764,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-left
          */
-      paddingLeft?: ConditionalValue<UtilityValues["paddingLeft"] | CssVars | CssProperties["paddingLeft"] | AnyString>
+      paddingLeft?: ConditionalValue<UtilityValues["paddingLeft"] | CssVars | CssProperties["paddingLeft"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -4778,7 +4778,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-right
          */
-      paddingRight?: ConditionalValue<UtilityValues["paddingRight"] | CssVars | CssProperties["paddingRight"] | AnyString>
+      paddingRight?: ConditionalValue<UtilityValues["paddingRight"] | CssVars | CssProperties["paddingRight"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -4792,7 +4792,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-top
          */
-      paddingTop?: ConditionalValue<UtilityValues["paddingTop"] | CssVars | CssProperties["paddingTop"] | AnyString>
+      paddingTop?: ConditionalValue<UtilityValues["paddingTop"] | CssVars | CssProperties["paddingTop"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since February 2023.
          *
@@ -4806,10 +4806,10 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/page
          */
-      page?: ConditionalValue<CssProperties["page"] | AnyString>
-       pageBreakAfter?: ConditionalValue<CssProperties["pageBreakAfter"] | AnyString>
-       pageBreakBefore?: ConditionalValue<CssProperties["pageBreakBefore"] | AnyString>
-       pageBreakInside?: ConditionalValue<CssProperties["pageBreakInside"] | AnyString>
+      page?: ConditionalValue<CssProperties["page"] | AnyString> | undefined
+       pageBreakAfter?: ConditionalValue<CssProperties["pageBreakAfter"] | AnyString> | undefined
+       pageBreakBefore?: ConditionalValue<CssProperties["pageBreakBefore"] | AnyString> | undefined
+       pageBreakInside?: ConditionalValue<CssProperties["pageBreakInside"] | AnyString> | undefined
        /**
          * Since March 2024, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -4823,7 +4823,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/paint-order
          */
-      paintOrder?: ConditionalValue<CssProperties["paintOrder"] | AnyString>
+      paintOrder?: ConditionalValue<CssProperties["paintOrder"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -4838,7 +4838,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/perspective
          */
-      perspective?: ConditionalValue<CssProperties["perspective"] | AnyString>
+      perspective?: ConditionalValue<CssProperties["perspective"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -4853,7 +4853,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/perspective-origin
          */
-      perspectiveOrigin?: ConditionalValue<CssProperties["perspectiveOrigin"] | AnyString>
+      perspectiveOrigin?: ConditionalValue<CssProperties["perspectiveOrigin"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -4865,7 +4865,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/place-content
          */
-      placeContent?: ConditionalValue<CssProperties["placeContent"] | AnyString>
+      placeContent?: ConditionalValue<CssProperties["placeContent"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -4877,7 +4877,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/place-items
          */
-      placeItems?: ConditionalValue<CssProperties["placeItems"] | AnyString>
+      placeItems?: ConditionalValue<CssProperties["placeItems"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -4889,7 +4889,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/place-self
          */
-      placeSelf?: ConditionalValue<CssProperties["placeSelf"] | AnyString>
+      placeSelf?: ConditionalValue<CssProperties["placeSelf"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -4903,7 +4903,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/pointer-events
          */
-      pointerEvents?: ConditionalValue<CssVars | CssProperties["pointerEvents"] | AnyString>
+      pointerEvents?: ConditionalValue<CssVars | CssProperties["pointerEvents"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -4917,7 +4917,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/position
          */
-      position?: ConditionalValue<CssVars | CssProperties["position"] | AnyString>
+      position?: ConditionalValue<CssVars | CssProperties["position"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -4931,7 +4931,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/position-anchor
          */
-      positionAnchor?: ConditionalValue<CssProperties["positionAnchor"] | AnyString>
+      positionAnchor?: ConditionalValue<CssProperties["positionAnchor"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -4945,7 +4945,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/position-area
          */
-      positionArea?: ConditionalValue<CssProperties["positionArea"] | AnyString>
+      positionArea?: ConditionalValue<CssProperties["positionArea"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -4957,7 +4957,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/position-try
          */
-      positionTry?: ConditionalValue<CssProperties["positionTry"] | AnyString>
+      positionTry?: ConditionalValue<CssProperties["positionTry"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -4971,7 +4971,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/position-try-fallbacks
          */
-      positionTryFallbacks?: ConditionalValue<CssProperties["positionTryFallbacks"] | AnyString>
+      positionTryFallbacks?: ConditionalValue<CssProperties["positionTryFallbacks"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -4985,7 +4985,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/position-try-order
          */
-      positionTryOrder?: ConditionalValue<CssProperties["positionTryOrder"] | AnyString>
+      positionTryOrder?: ConditionalValue<CssProperties["positionTryOrder"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -4999,7 +4999,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/position-visibility
          */
-      positionVisibility?: ConditionalValue<CssProperties["positionVisibility"] | AnyString>
+      positionVisibility?: ConditionalValue<CssProperties["positionVisibility"] | AnyString> | undefined
        /**
          * Since May 2025, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -5014,7 +5014,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/print-color-adjust
          */
-      printColorAdjust?: ConditionalValue<CssProperties["printColorAdjust"] | AnyString>
+      printColorAdjust?: ConditionalValue<CssProperties["printColorAdjust"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -5028,7 +5028,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/quotes
          */
-      quotes?: ConditionalValue<CssProperties["quotes"] | AnyString>
+      quotes?: ConditionalValue<CssProperties["quotes"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2020.
          *
@@ -5042,7 +5042,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/r
          */
-      r?: ConditionalValue<CssProperties["r"] | AnyString>
+      r?: ConditionalValue<CssProperties["r"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -5056,7 +5056,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/resize
          */
-      resize?: ConditionalValue<CssVars | CssProperties["resize"] | AnyString>
+      resize?: ConditionalValue<CssVars | CssProperties["resize"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -5070,7 +5070,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/right
          */
-      right?: ConditionalValue<UtilityValues["right"] | CssVars | CssProperties["right"] | AnyString>
+      right?: ConditionalValue<UtilityValues["right"] | CssVars | CssProperties["right"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since August 2022.
          *
@@ -5084,7 +5084,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/rotate
          */
-      rotate?: ConditionalValue<UtilityValues["rotate"] | CssVars | CssProperties["rotate"] | AnyString>
+      rotate?: ConditionalValue<UtilityValues["rotate"] | CssVars | CssProperties["rotate"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since October 2017.
          *
@@ -5098,7 +5098,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/row-gap
          */
-      rowGap?: ConditionalValue<UtilityValues["rowGap"] | CssVars | CssProperties["rowGap"] | AnyString>
+      rowGap?: ConditionalValue<UtilityValues["rowGap"] | CssVars | CssProperties["rowGap"] | AnyString> | undefined
        /**
          * Since December 2024, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -5112,13 +5112,13 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/ruby-align
          */
-      rubyAlign?: ConditionalValue<CssProperties["rubyAlign"] | AnyString>
+      rubyAlign?: ConditionalValue<CssProperties["rubyAlign"] | AnyString> | undefined
        /**
          * **Syntax**: \`separate | collapse | auto\`
          *
          * **Initial value**: \`separate\`
          */
-      rubyMerge?: ConditionalValue<CssProperties["rubyMerge"] | AnyString>
+      rubyMerge?: ConditionalValue<CssProperties["rubyMerge"] | AnyString> | undefined
        /**
          * Since December 2024, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -5133,7 +5133,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/ruby-position
          */
-      rubyPosition?: ConditionalValue<CssProperties["rubyPosition"] | AnyString>
+      rubyPosition?: ConditionalValue<CssProperties["rubyPosition"] | AnyString> | undefined
        /**
          * Since March 2024, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -5147,7 +5147,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/rx
          */
-      rx?: ConditionalValue<CssProperties["rx"] | AnyString>
+      rx?: ConditionalValue<CssProperties["rx"] | AnyString> | undefined
        /**
          * Since March 2024, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -5161,7 +5161,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/ry
          */
-      ry?: ConditionalValue<CssProperties["ry"] | AnyString>
+      ry?: ConditionalValue<CssProperties["ry"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since August 2022.
          *
@@ -5175,7 +5175,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scale
          */
-      scale?: ConditionalValue<UtilityValues["scale"] | CssVars | CssProperties["scale"] | AnyString>
+      scale?: ConditionalValue<UtilityValues["scale"] | CssVars | CssProperties["scale"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2022.
          *
@@ -5189,7 +5189,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-behavior
          */
-      scrollBehavior?: ConditionalValue<CssVars | CssProperties["scrollBehavior"] | AnyString>
+      scrollBehavior?: ConditionalValue<CssVars | CssProperties["scrollBehavior"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2021.
          *
@@ -5202,7 +5202,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-margin
          */
-      scrollMargin?: ConditionalValue<UtilityValues["scrollMargin"] | CssVars | CssProperties["scrollMargin"] | AnyString>
+      scrollMargin?: ConditionalValue<UtilityValues["scrollMargin"] | CssVars | CssProperties["scrollMargin"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -5214,7 +5214,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-margin-block
          */
-      scrollMarginBlock?: ConditionalValue<UtilityValues["scrollMarginBlock"] | CssVars | CssProperties["scrollMarginBlock"] | AnyString>
+      scrollMarginBlock?: ConditionalValue<UtilityValues["scrollMarginBlock"] | CssVars | CssProperties["scrollMarginBlock"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -5228,7 +5228,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-margin-block-end
          */
-      scrollMarginBlockEnd?: ConditionalValue<UtilityValues["scrollMarginBlockEnd"] | CssVars | CssProperties["scrollMarginBlockEnd"] | AnyString>
+      scrollMarginBlockEnd?: ConditionalValue<UtilityValues["scrollMarginBlockEnd"] | CssVars | CssProperties["scrollMarginBlockEnd"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -5242,7 +5242,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-margin-block-start
          */
-      scrollMarginBlockStart?: ConditionalValue<UtilityValues["scrollMarginBlockStart"] | CssVars | CssProperties["scrollMarginBlockStart"] | AnyString>
+      scrollMarginBlockStart?: ConditionalValue<UtilityValues["scrollMarginBlockStart"] | CssVars | CssProperties["scrollMarginBlockStart"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -5257,7 +5257,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-margin-bottom
          */
-      scrollMarginBottom?: ConditionalValue<UtilityValues["scrollMarginBottom"] | CssVars | CssProperties["scrollMarginBottom"] | AnyString>
+      scrollMarginBottom?: ConditionalValue<UtilityValues["scrollMarginBottom"] | CssVars | CssProperties["scrollMarginBottom"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -5269,7 +5269,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-margin-inline
          */
-      scrollMarginInline?: ConditionalValue<UtilityValues["scrollMarginInline"] | CssVars | CssProperties["scrollMarginInline"] | AnyString>
+      scrollMarginInline?: ConditionalValue<UtilityValues["scrollMarginInline"] | CssVars | CssProperties["scrollMarginInline"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -5283,7 +5283,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-margin-inline-end
          */
-      scrollMarginInlineEnd?: ConditionalValue<UtilityValues["scrollMarginInlineEnd"] | CssVars | CssProperties["scrollMarginInlineEnd"] | AnyString>
+      scrollMarginInlineEnd?: ConditionalValue<UtilityValues["scrollMarginInlineEnd"] | CssVars | CssProperties["scrollMarginInlineEnd"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -5297,7 +5297,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-margin-inline-start
          */
-      scrollMarginInlineStart?: ConditionalValue<UtilityValues["scrollMarginInlineStart"] | CssVars | CssProperties["scrollMarginInlineStart"] | AnyString>
+      scrollMarginInlineStart?: ConditionalValue<UtilityValues["scrollMarginInlineStart"] | CssVars | CssProperties["scrollMarginInlineStart"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -5312,7 +5312,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-margin-left
          */
-      scrollMarginLeft?: ConditionalValue<UtilityValues["scrollMarginLeft"] | CssVars | CssProperties["scrollMarginLeft"] | AnyString>
+      scrollMarginLeft?: ConditionalValue<UtilityValues["scrollMarginLeft"] | CssVars | CssProperties["scrollMarginLeft"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -5327,7 +5327,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-margin-right
          */
-      scrollMarginRight?: ConditionalValue<UtilityValues["scrollMarginRight"] | CssVars | CssProperties["scrollMarginRight"] | AnyString>
+      scrollMarginRight?: ConditionalValue<UtilityValues["scrollMarginRight"] | CssVars | CssProperties["scrollMarginRight"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -5342,7 +5342,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-margin-top
          */
-      scrollMarginTop?: ConditionalValue<UtilityValues["scrollMarginTop"] | CssVars | CssProperties["scrollMarginTop"] | AnyString>
+      scrollMarginTop?: ConditionalValue<UtilityValues["scrollMarginTop"] | CssVars | CssProperties["scrollMarginTop"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -5354,7 +5354,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-padding
          */
-      scrollPadding?: ConditionalValue<UtilityValues["scrollPadding"] | CssVars | CssProperties["scrollPadding"] | AnyString>
+      scrollPadding?: ConditionalValue<UtilityValues["scrollPadding"] | CssVars | CssProperties["scrollPadding"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -5366,7 +5366,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-padding-block
          */
-      scrollPaddingBlock?: ConditionalValue<UtilityValues["scrollPaddingBlock"] | CssVars | CssProperties["scrollPaddingBlock"] | AnyString>
+      scrollPaddingBlock?: ConditionalValue<UtilityValues["scrollPaddingBlock"] | CssVars | CssProperties["scrollPaddingBlock"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -5380,7 +5380,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-padding-block-end
          */
-      scrollPaddingBlockEnd?: ConditionalValue<UtilityValues["scrollPaddingBlockEnd"] | CssVars | CssProperties["scrollPaddingBlockEnd"] | AnyString>
+      scrollPaddingBlockEnd?: ConditionalValue<UtilityValues["scrollPaddingBlockEnd"] | CssVars | CssProperties["scrollPaddingBlockEnd"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -5394,7 +5394,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-padding-block-start
          */
-      scrollPaddingBlockStart?: ConditionalValue<UtilityValues["scrollPaddingBlockStart"] | CssVars | CssProperties["scrollPaddingBlockStart"] | AnyString>
+      scrollPaddingBlockStart?: ConditionalValue<UtilityValues["scrollPaddingBlockStart"] | CssVars | CssProperties["scrollPaddingBlockStart"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -5408,7 +5408,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-padding-bottom
          */
-      scrollPaddingBottom?: ConditionalValue<UtilityValues["scrollPaddingBottom"] | CssVars | CssProperties["scrollPaddingBottom"] | AnyString>
+      scrollPaddingBottom?: ConditionalValue<UtilityValues["scrollPaddingBottom"] | CssVars | CssProperties["scrollPaddingBottom"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -5420,7 +5420,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-padding-inline
          */
-      scrollPaddingInline?: ConditionalValue<UtilityValues["scrollPaddingInline"] | CssVars | CssProperties["scrollPaddingInline"] | AnyString>
+      scrollPaddingInline?: ConditionalValue<UtilityValues["scrollPaddingInline"] | CssVars | CssProperties["scrollPaddingInline"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -5434,7 +5434,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-padding-inline-end
          */
-      scrollPaddingInlineEnd?: ConditionalValue<UtilityValues["scrollPaddingInlineEnd"] | CssVars | CssProperties["scrollPaddingInlineEnd"] | AnyString>
+      scrollPaddingInlineEnd?: ConditionalValue<UtilityValues["scrollPaddingInlineEnd"] | CssVars | CssProperties["scrollPaddingInlineEnd"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -5448,7 +5448,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-padding-inline-start
          */
-      scrollPaddingInlineStart?: ConditionalValue<UtilityValues["scrollPaddingInlineStart"] | CssVars | CssProperties["scrollPaddingInlineStart"] | AnyString>
+      scrollPaddingInlineStart?: ConditionalValue<UtilityValues["scrollPaddingInlineStart"] | CssVars | CssProperties["scrollPaddingInlineStart"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -5462,7 +5462,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-padding-left
          */
-      scrollPaddingLeft?: ConditionalValue<UtilityValues["scrollPaddingLeft"] | CssVars | CssProperties["scrollPaddingLeft"] | AnyString>
+      scrollPaddingLeft?: ConditionalValue<UtilityValues["scrollPaddingLeft"] | CssVars | CssProperties["scrollPaddingLeft"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -5476,7 +5476,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-padding-right
          */
-      scrollPaddingRight?: ConditionalValue<UtilityValues["scrollPaddingRight"] | CssVars | CssProperties["scrollPaddingRight"] | AnyString>
+      scrollPaddingRight?: ConditionalValue<UtilityValues["scrollPaddingRight"] | CssVars | CssProperties["scrollPaddingRight"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -5490,7 +5490,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-padding-top
          */
-      scrollPaddingTop?: ConditionalValue<UtilityValues["scrollPaddingTop"] | CssVars | CssProperties["scrollPaddingTop"] | AnyString>
+      scrollPaddingTop?: ConditionalValue<UtilityValues["scrollPaddingTop"] | CssVars | CssProperties["scrollPaddingTop"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -5504,11 +5504,11 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-snap-align
          */
-      scrollSnapAlign?: ConditionalValue<CssProperties["scrollSnapAlign"] | AnyString>
-       scrollSnapCoordinate?: ConditionalValue<CssProperties["scrollSnapCoordinate"] | AnyString>
-       scrollSnapDestination?: ConditionalValue<CssProperties["scrollSnapDestination"] | AnyString>
-       scrollSnapPointsX?: ConditionalValue<CssProperties["scrollSnapPointsX"] | AnyString>
-       scrollSnapPointsY?: ConditionalValue<CssProperties["scrollSnapPointsY"] | AnyString>
+      scrollSnapAlign?: ConditionalValue<CssProperties["scrollSnapAlign"] | AnyString> | undefined
+       scrollSnapCoordinate?: ConditionalValue<CssProperties["scrollSnapCoordinate"] | AnyString> | undefined
+       scrollSnapDestination?: ConditionalValue<CssProperties["scrollSnapDestination"] | AnyString> | undefined
+       scrollSnapPointsX?: ConditionalValue<CssProperties["scrollSnapPointsX"] | AnyString> | undefined
+       scrollSnapPointsY?: ConditionalValue<CssProperties["scrollSnapPointsY"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2022.
          *
@@ -5522,7 +5522,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-snap-stop
          */
-      scrollSnapStop?: ConditionalValue<CssProperties["scrollSnapStop"] | AnyString>
+      scrollSnapStop?: ConditionalValue<CssProperties["scrollSnapStop"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2022.
          *
@@ -5537,9 +5537,9 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-snap-type
          */
-      scrollSnapType?: ConditionalValue<UtilityValues["scrollSnapType"] | CssVars | CssProperties["scrollSnapType"] | AnyString>
-       scrollSnapTypeX?: ConditionalValue<CssProperties["scrollSnapTypeX"] | AnyString>
-       scrollSnapTypeY?: ConditionalValue<CssProperties["scrollSnapTypeY"] | AnyString>
+      scrollSnapType?: ConditionalValue<UtilityValues["scrollSnapType"] | CssVars | CssProperties["scrollSnapType"] | AnyString> | undefined
+       scrollSnapTypeX?: ConditionalValue<CssProperties["scrollSnapTypeX"] | AnyString> | undefined
+       scrollSnapTypeY?: ConditionalValue<CssProperties["scrollSnapTypeY"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -5551,7 +5551,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-timeline
          */
-      scrollTimeline?: ConditionalValue<CssProperties["scrollTimeline"] | AnyString>
+      scrollTimeline?: ConditionalValue<CssProperties["scrollTimeline"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -5565,7 +5565,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-timeline-axis
          */
-      scrollTimelineAxis?: ConditionalValue<CssProperties["scrollTimelineAxis"] | AnyString>
+      scrollTimelineAxis?: ConditionalValue<CssProperties["scrollTimelineAxis"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -5579,7 +5579,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-timeline-name
          */
-      scrollTimelineName?: ConditionalValue<CssProperties["scrollTimelineName"] | AnyString>
+      scrollTimelineName?: ConditionalValue<CssProperties["scrollTimelineName"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -5593,7 +5593,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scrollbar-color
          */
-      scrollbarColor?: ConditionalValue<CssProperties["scrollbarColor"] | AnyString>
+      scrollbarColor?: ConditionalValue<CssProperties["scrollbarColor"] | AnyString> | undefined
        /**
          * Since December 2024, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -5607,7 +5607,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scrollbar-gutter
          */
-      scrollbarGutter?: ConditionalValue<CssProperties["scrollbarGutter"] | AnyString>
+      scrollbarGutter?: ConditionalValue<CssProperties["scrollbarGutter"] | AnyString> | undefined
        /**
          * Since December 2024, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -5621,7 +5621,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scrollbar-width
          */
-      scrollbarWidth?: ConditionalValue<UtilityValues["scrollbarWidth"] | CssVars | CssProperties["scrollbarWidth"] | AnyString>
+      scrollbarWidth?: ConditionalValue<UtilityValues["scrollbarWidth"] | CssVars | CssProperties["scrollbarWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -5635,7 +5635,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/shape-image-threshold
          */
-      shapeImageThreshold?: ConditionalValue<CssProperties["shapeImageThreshold"] | AnyString>
+      shapeImageThreshold?: ConditionalValue<CssProperties["shapeImageThreshold"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -5649,7 +5649,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/shape-margin
          */
-      shapeMargin?: ConditionalValue<CssProperties["shapeMargin"] | AnyString>
+      shapeMargin?: ConditionalValue<CssProperties["shapeMargin"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -5663,7 +5663,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/shape-outside
          */
-      shapeOutside?: ConditionalValue<CssProperties["shapeOutside"] | AnyString>
+      shapeOutside?: ConditionalValue<CssProperties["shapeOutside"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -5677,7 +5677,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/shape-rendering
          */
-      shapeRendering?: ConditionalValue<CssProperties["shapeRendering"] | AnyString>
+      shapeRendering?: ConditionalValue<CssProperties["shapeRendering"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -5691,7 +5691,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/stop-color
          */
-      stopColor?: ConditionalValue<CssProperties["stopColor"] | AnyString>
+      stopColor?: ConditionalValue<CssProperties["stopColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -5705,7 +5705,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/stop-opacity
          */
-      stopOpacity?: ConditionalValue<CssProperties["stopOpacity"] | AnyString>
+      stopOpacity?: ConditionalValue<CssProperties["stopOpacity"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -5717,7 +5717,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/stroke
          */
-      stroke?: ConditionalValue<UtilityValues["stroke"] | CssVars | CssProperties["stroke"] | AnyString>
+      stroke?: ConditionalValue<UtilityValues["stroke"] | CssVars | CssProperties["stroke"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -5731,7 +5731,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/stroke-dasharray
          */
-      strokeDasharray?: ConditionalValue<CssProperties["strokeDasharray"] | AnyString>
+      strokeDasharray?: ConditionalValue<CssProperties["strokeDasharray"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -5745,7 +5745,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/stroke-dashoffset
          */
-      strokeDashoffset?: ConditionalValue<CssProperties["strokeDashoffset"] | AnyString>
+      strokeDashoffset?: ConditionalValue<CssProperties["strokeDashoffset"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -5759,7 +5759,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/stroke-linecap
          */
-      strokeLinecap?: ConditionalValue<CssProperties["strokeLinecap"] | AnyString>
+      strokeLinecap?: ConditionalValue<CssProperties["strokeLinecap"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -5773,7 +5773,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/stroke-linejoin
          */
-      strokeLinejoin?: ConditionalValue<CssProperties["strokeLinejoin"] | AnyString>
+      strokeLinejoin?: ConditionalValue<CssProperties["strokeLinejoin"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -5787,7 +5787,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/stroke-miterlimit
          */
-      strokeMiterlimit?: ConditionalValue<CssProperties["strokeMiterlimit"] | AnyString>
+      strokeMiterlimit?: ConditionalValue<CssProperties["strokeMiterlimit"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -5801,7 +5801,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/stroke-opacity
          */
-      strokeOpacity?: ConditionalValue<CssProperties["strokeOpacity"] | AnyString>
+      strokeOpacity?: ConditionalValue<CssProperties["strokeOpacity"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -5815,7 +5815,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/stroke-width
          */
-      strokeWidth?: ConditionalValue<CssProperties["strokeWidth"] | AnyString>
+      strokeWidth?: ConditionalValue<CssProperties["strokeWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since August 2021.
          *
@@ -5830,7 +5830,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/tab-size
          */
-      tabSize?: ConditionalValue<CssProperties["tabSize"] | AnyString>
+      tabSize?: ConditionalValue<CssProperties["tabSize"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -5844,7 +5844,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/table-layout
          */
-      tableLayout?: ConditionalValue<CssProperties["tableLayout"] | AnyString>
+      tableLayout?: ConditionalValue<CssProperties["tableLayout"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -5858,7 +5858,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-align
          */
-      textAlign?: ConditionalValue<CssProperties["textAlign"] | AnyString>
+      textAlign?: ConditionalValue<CssProperties["textAlign"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2022.
          *
@@ -5872,7 +5872,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-align-last
          */
-      textAlignLast?: ConditionalValue<CssProperties["textAlignLast"] | AnyString>
+      textAlignLast?: ConditionalValue<CssProperties["textAlignLast"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since August 2016.
          *
@@ -5886,7 +5886,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-anchor
          */
-      textAnchor?: ConditionalValue<CssProperties["textAnchor"] | AnyString>
+      textAnchor?: ConditionalValue<CssProperties["textAnchor"] | AnyString> | undefined
        /**
          * **Syntax**: \`normal | <'text-box-trim'> || <'text-box-edge'>\`
          *
@@ -5898,7 +5898,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-box
          */
-      textBox?: ConditionalValue<CssProperties["textBox"] | AnyString>
+      textBox?: ConditionalValue<CssProperties["textBox"] | AnyString> | undefined
        /**
          * **Syntax**: \`auto | <text-edge>\`
          *
@@ -5910,7 +5910,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-box-edge
          */
-      textBoxEdge?: ConditionalValue<CssProperties["textBoxEdge"] | AnyString>
+      textBoxEdge?: ConditionalValue<CssProperties["textBoxEdge"] | AnyString> | undefined
        /**
          * **Syntax**: \`none | trim-start | trim-end | trim-both\`
          *
@@ -5922,7 +5922,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-box-trim
          */
-      textBoxTrim?: ConditionalValue<CssProperties["textBoxTrim"] | AnyString>
+      textBoxTrim?: ConditionalValue<CssProperties["textBoxTrim"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2022.
          *
@@ -5937,7 +5937,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-combine-upright
          */
-      textCombineUpright?: ConditionalValue<CssProperties["textCombineUpright"] | AnyString>
+      textCombineUpright?: ConditionalValue<CssProperties["textCombineUpright"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -5949,7 +5949,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-decoration
          */
-      textDecoration?: ConditionalValue<CssProperties["textDecoration"] | AnyString>
+      textDecoration?: ConditionalValue<CssProperties["textDecoration"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -5964,7 +5964,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-decoration-color
          */
-      textDecorationColor?: ConditionalValue<UtilityValues["textDecorationColor"] | CssVars | CssProperties["textDecorationColor"] | AnyString>
+      textDecorationColor?: ConditionalValue<UtilityValues["textDecorationColor"] | CssVars | CssProperties["textDecorationColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -5979,7 +5979,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-decoration-line
          */
-      textDecorationLine?: ConditionalValue<CssProperties["textDecorationLine"] | AnyString>
+      textDecorationLine?: ConditionalValue<CssProperties["textDecorationLine"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -5994,7 +5994,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-decoration-skip
          */
-      textDecorationSkip?: ConditionalValue<CssProperties["textDecorationSkip"] | AnyString>
+      textDecorationSkip?: ConditionalValue<CssProperties["textDecorationSkip"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2022.
          *
@@ -6008,7 +6008,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-decoration-skip-ink
          */
-      textDecorationSkipInk?: ConditionalValue<CssProperties["textDecorationSkipInk"] | AnyString>
+      textDecorationSkipInk?: ConditionalValue<CssProperties["textDecorationSkipInk"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -6023,7 +6023,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-decoration-style
          */
-      textDecorationStyle?: ConditionalValue<CssProperties["textDecorationStyle"] | AnyString>
+      textDecorationStyle?: ConditionalValue<CssProperties["textDecorationStyle"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2021.
          *
@@ -6037,7 +6037,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-decoration-thickness
          */
-      textDecorationThickness?: ConditionalValue<CssProperties["textDecorationThickness"] | AnyString>
+      textDecorationThickness?: ConditionalValue<CssProperties["textDecorationThickness"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2022.
          *
@@ -6050,7 +6050,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-emphasis
          */
-      textEmphasis?: ConditionalValue<CssProperties["textEmphasis"] | AnyString>
+      textEmphasis?: ConditionalValue<CssProperties["textEmphasis"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2022.
          *
@@ -6065,7 +6065,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-emphasis-color
          */
-      textEmphasisColor?: ConditionalValue<UtilityValues["textEmphasisColor"] | CssVars | CssProperties["textEmphasisColor"] | AnyString>
+      textEmphasisColor?: ConditionalValue<UtilityValues["textEmphasisColor"] | CssVars | CssProperties["textEmphasisColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2022.
          *
@@ -6080,7 +6080,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-emphasis-position
          */
-      textEmphasisPosition?: ConditionalValue<CssProperties["textEmphasisPosition"] | AnyString>
+      textEmphasisPosition?: ConditionalValue<CssProperties["textEmphasisPosition"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2022.
          *
@@ -6095,7 +6095,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-emphasis-style
          */
-      textEmphasisStyle?: ConditionalValue<CssProperties["textEmphasisStyle"] | AnyString>
+      textEmphasisStyle?: ConditionalValue<CssProperties["textEmphasisStyle"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -6109,7 +6109,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-indent
          */
-      textIndent?: ConditionalValue<UtilityValues["textIndent"] | CssVars | CssProperties["textIndent"] | AnyString>
+      textIndent?: ConditionalValue<UtilityValues["textIndent"] | CssVars | CssProperties["textIndent"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -6123,7 +6123,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-justify
          */
-      textJustify?: ConditionalValue<CssProperties["textJustify"] | AnyString>
+      textJustify?: ConditionalValue<CssProperties["textJustify"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2020.
          *
@@ -6138,7 +6138,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-orientation
          */
-      textOrientation?: ConditionalValue<CssProperties["textOrientation"] | AnyString>
+      textOrientation?: ConditionalValue<CssProperties["textOrientation"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -6152,7 +6152,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-overflow
          */
-      textOverflow?: ConditionalValue<CssProperties["textOverflow"] | AnyString>
+      textOverflow?: ConditionalValue<CssProperties["textOverflow"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -6166,7 +6166,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-rendering
          */
-      textRendering?: ConditionalValue<CssProperties["textRendering"] | AnyString>
+      textRendering?: ConditionalValue<CssProperties["textRendering"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -6180,7 +6180,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-shadow
          */
-      textShadow?: ConditionalValue<UtilityValues["textShadow"] | CssVars | CssProperties["textShadow"] | AnyString>
+      textShadow?: ConditionalValue<UtilityValues["textShadow"] | CssVars | CssProperties["textShadow"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -6194,7 +6194,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-size-adjust
          */
-      textSizeAdjust?: ConditionalValue<CssProperties["textSizeAdjust"] | AnyString>
+      textSizeAdjust?: ConditionalValue<CssProperties["textSizeAdjust"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -6208,7 +6208,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-spacing-trim
          */
-      textSpacingTrim?: ConditionalValue<CssProperties["textSpacingTrim"] | AnyString>
+      textSpacingTrim?: ConditionalValue<CssProperties["textSpacingTrim"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -6222,7 +6222,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-transform
          */
-      textTransform?: ConditionalValue<CssProperties["textTransform"] | AnyString>
+      textTransform?: ConditionalValue<CssProperties["textTransform"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since November 2020.
          *
@@ -6236,7 +6236,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-underline-offset
          */
-      textUnderlineOffset?: ConditionalValue<CssProperties["textUnderlineOffset"] | AnyString>
+      textUnderlineOffset?: ConditionalValue<CssProperties["textUnderlineOffset"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2020.
          *
@@ -6251,7 +6251,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-underline-position
          */
-      textUnderlinePosition?: ConditionalValue<CssProperties["textUnderlinePosition"] | AnyString>
+      textUnderlinePosition?: ConditionalValue<CssProperties["textUnderlinePosition"] | AnyString> | undefined
        /**
          * Since March 2024, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -6265,7 +6265,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-wrap
          */
-      textWrap?: ConditionalValue<UtilityValues["textWrap"] | CssVars | CssProperties["textWrap"] | AnyString>
+      textWrap?: ConditionalValue<UtilityValues["textWrap"] | CssVars | CssProperties["textWrap"] | AnyString> | undefined
        /**
          * Since October 2024, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -6279,7 +6279,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-wrap-mode
          */
-      textWrapMode?: ConditionalValue<CssProperties["textWrapMode"] | AnyString>
+      textWrapMode?: ConditionalValue<CssProperties["textWrapMode"] | AnyString> | undefined
        /**
          * Since October 2024, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -6293,7 +6293,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-wrap-style
          */
-      textWrapStyle?: ConditionalValue<CssProperties["textWrapStyle"] | AnyString>
+      textWrapStyle?: ConditionalValue<CssProperties["textWrapStyle"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -6307,7 +6307,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/timeline-scope
          */
-      timelineScope?: ConditionalValue<CssProperties["timelineScope"] | AnyString>
+      timelineScope?: ConditionalValue<CssProperties["timelineScope"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -6321,7 +6321,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/top
          */
-      top?: ConditionalValue<UtilityValues["top"] | CssVars | CssProperties["top"] | AnyString>
+      top?: ConditionalValue<UtilityValues["top"] | CssVars | CssProperties["top"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2019.
          *
@@ -6336,7 +6336,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/touch-action
          */
-      touchAction?: ConditionalValue<CssVars | CssProperties["touchAction"] | AnyString>
+      touchAction?: ConditionalValue<CssVars | CssProperties["touchAction"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -6351,7 +6351,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/transform
          */
-      transform?: ConditionalValue<CssProperties["transform"] | AnyString>
+      transform?: ConditionalValue<CssProperties["transform"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -6365,7 +6365,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/transform-box
          */
-      transformBox?: ConditionalValue<CssVars | CssProperties["transformBox"] | AnyString>
+      transformBox?: ConditionalValue<CssVars | CssProperties["transformBox"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -6380,7 +6380,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/transform-origin
          */
-      transformOrigin?: ConditionalValue<CssProperties["transformOrigin"] | AnyString>
+      transformOrigin?: ConditionalValue<CssProperties["transformOrigin"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -6395,7 +6395,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/transform-style
          */
-      transformStyle?: ConditionalValue<CssVars | CssProperties["transformStyle"] | AnyString>
+      transformStyle?: ConditionalValue<CssVars | CssProperties["transformStyle"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -6408,7 +6408,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/transition
          */
-      transition?: ConditionalValue<UtilityValues["transition"] | CssVars | CssProperties["transition"] | AnyString>
+      transition?: ConditionalValue<UtilityValues["transition"] | CssVars | CssProperties["transition"] | AnyString> | undefined
        /**
          * Since August 2024, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -6422,7 +6422,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/transition-behavior
          */
-      transitionBehavior?: ConditionalValue<CssProperties["transitionBehavior"] | AnyString>
+      transitionBehavior?: ConditionalValue<CssProperties["transitionBehavior"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -6437,7 +6437,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/transition-delay
          */
-      transitionDelay?: ConditionalValue<UtilityValues["transitionDelay"] | CssVars | CssProperties["transitionDelay"] | AnyString>
+      transitionDelay?: ConditionalValue<UtilityValues["transitionDelay"] | CssVars | CssProperties["transitionDelay"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -6452,7 +6452,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/transition-duration
          */
-      transitionDuration?: ConditionalValue<UtilityValues["transitionDuration"] | CssVars | CssProperties["transitionDuration"] | AnyString>
+      transitionDuration?: ConditionalValue<UtilityValues["transitionDuration"] | CssVars | CssProperties["transitionDuration"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -6467,7 +6467,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/transition-property
          */
-      transitionProperty?: ConditionalValue<UtilityValues["transitionProperty"] | CssVars | CssProperties["transitionProperty"] | AnyString>
+      transitionProperty?: ConditionalValue<UtilityValues["transitionProperty"] | CssVars | CssProperties["transitionProperty"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -6482,7 +6482,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/transition-timing-function
          */
-      transitionTimingFunction?: ConditionalValue<UtilityValues["transitionTimingFunction"] | CssVars | CssProperties["transitionTimingFunction"] | AnyString>
+      transitionTimingFunction?: ConditionalValue<UtilityValues["transitionTimingFunction"] | CssVars | CssProperties["transitionTimingFunction"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since August 2022.
          *
@@ -6496,7 +6496,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/translate
          */
-      translate?: ConditionalValue<UtilityValues["translate"] | CssVars | CssProperties["translate"] | AnyString>
+      translate?: ConditionalValue<UtilityValues["translate"] | CssVars | CssProperties["translate"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -6510,7 +6510,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/unicode-bidi
          */
-      unicodeBidi?: ConditionalValue<CssProperties["unicodeBidi"] | AnyString>
+      unicodeBidi?: ConditionalValue<CssProperties["unicodeBidi"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -6525,7 +6525,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/user-select
          */
-      userSelect?: ConditionalValue<CssVars | CssProperties["userSelect"] | AnyString>
+      userSelect?: ConditionalValue<CssVars | CssProperties["userSelect"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -6539,7 +6539,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/vector-effect
          */
-      vectorEffect?: ConditionalValue<CssProperties["vectorEffect"] | AnyString>
+      vectorEffect?: ConditionalValue<CssProperties["vectorEffect"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -6553,7 +6553,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/vertical-align
          */
-      verticalAlign?: ConditionalValue<CssProperties["verticalAlign"] | AnyString>
+      verticalAlign?: ConditionalValue<CssProperties["verticalAlign"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -6565,7 +6565,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/view-timeline
          */
-      viewTimeline?: ConditionalValue<CssProperties["viewTimeline"] | AnyString>
+      viewTimeline?: ConditionalValue<CssProperties["viewTimeline"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -6579,7 +6579,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/view-timeline-axis
          */
-      viewTimelineAxis?: ConditionalValue<CssProperties["viewTimelineAxis"] | AnyString>
+      viewTimelineAxis?: ConditionalValue<CssProperties["viewTimelineAxis"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -6593,7 +6593,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/view-timeline-inset
          */
-      viewTimelineInset?: ConditionalValue<CssProperties["viewTimelineInset"] | AnyString>
+      viewTimelineInset?: ConditionalValue<CssProperties["viewTimelineInset"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -6607,7 +6607,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/view-timeline-name
          */
-      viewTimelineName?: ConditionalValue<CssProperties["viewTimelineName"] | AnyString>
+      viewTimelineName?: ConditionalValue<CssProperties["viewTimelineName"] | AnyString> | undefined
        /**
          * Since October 2025, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -6621,7 +6621,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/view-transition-name
          */
-      viewTransitionName?: ConditionalValue<CssProperties["viewTransitionName"] | AnyString>
+      viewTransitionName?: ConditionalValue<CssProperties["viewTransitionName"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -6635,7 +6635,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/visibility
          */
-      visibility?: ConditionalValue<CssVars | CssProperties["visibility"] | AnyString>
+      visibility?: ConditionalValue<CssVars | CssProperties["visibility"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -6649,7 +6649,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/white-space
          */
-      whiteSpace?: ConditionalValue<CssProperties["whiteSpace"] | AnyString>
+      whiteSpace?: ConditionalValue<CssProperties["whiteSpace"] | AnyString> | undefined
        /**
          * Since March 2024, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -6663,7 +6663,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/white-space-collapse
          */
-      whiteSpaceCollapse?: ConditionalValue<CssProperties["whiteSpaceCollapse"] | AnyString>
+      whiteSpaceCollapse?: ConditionalValue<CssProperties["whiteSpaceCollapse"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -6677,7 +6677,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/widows
          */
-      widows?: ConditionalValue<CssProperties["widows"] | AnyString>
+      widows?: ConditionalValue<CssProperties["widows"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -6691,7 +6691,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/width
          */
-      width?: ConditionalValue<UtilityValues["width"] | CssVars | CssProperties["width"] | AnyString>
+      width?: ConditionalValue<UtilityValues["width"] | CssVars | CssProperties["width"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -6705,7 +6705,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/will-change
          */
-      willChange?: ConditionalValue<CssProperties["willChange"] | AnyString>
+      willChange?: ConditionalValue<CssProperties["willChange"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -6719,7 +6719,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/word-break
          */
-      wordBreak?: ConditionalValue<CssVars | CssProperties["wordBreak"] | AnyString>
+      wordBreak?: ConditionalValue<CssVars | CssProperties["wordBreak"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -6733,7 +6733,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/word-spacing
          */
-      wordSpacing?: ConditionalValue<CssProperties["wordSpacing"] | AnyString>
+      wordSpacing?: ConditionalValue<CssProperties["wordSpacing"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since October 2018.
          *
@@ -6741,7 +6741,7 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`normal\`
          */
-      wordWrap?: ConditionalValue<CssProperties["wordWrap"] | AnyString>
+      wordWrap?: ConditionalValue<CssProperties["wordWrap"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2017.
          *
@@ -6756,9 +6756,9 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/writing-mode
          */
-      writingMode?: ConditionalValue<CssVars | CssProperties["writingMode"] | AnyString>
-       x?: ConditionalValue<UtilityValues["translateX"] | CssVars | AnyString>
-       y?: ConditionalValue<UtilityValues["translateY"] | CssVars | AnyString>
+      writingMode?: ConditionalValue<CssVars | CssProperties["writingMode"] | AnyString> | undefined
+       x?: ConditionalValue<UtilityValues["translateX"] | CssVars | AnyString> | undefined
+       y?: ConditionalValue<UtilityValues["translateY"] | CssVars | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -6772,7 +6772,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/z-index
          */
-      zIndex?: ConditionalValue<UtilityValues["zIndex"] | CssVars | CssProperties["zIndex"] | AnyString>
+      zIndex?: ConditionalValue<UtilityValues["zIndex"] | CssVars | CssProperties["zIndex"] | AnyString> | undefined
        /**
          * Since May 2024, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *
@@ -6786,7 +6786,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/zoom
          */
-      zoom?: ConditionalValue<CssProperties["zoom"] | AnyString>
+      zoom?: ConditionalValue<CssProperties["zoom"] | AnyString> | undefined
        /**
          * This feature is not Baseline because it does not work in some of the most widely-used browsers.
          *
@@ -6800,7 +6800,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/alignment-baseline
          */
-      alignmentBaseline?: ConditionalValue<CssProperties["alignmentBaseline"] | AnyString>
+      alignmentBaseline?: ConditionalValue<CssProperties["alignmentBaseline"] | AnyString> | undefined
        /**
          * **Syntax**: \`<length-percentage> | sub | super | baseline\`
          *
@@ -6810,10 +6810,10 @@ describe('generate property types', () => {
          * | :----: | :-----: | :----: | :----: | :-: |
          * | **1**  |   No    | **4**  | **79** | No  |
          */
-      baselineShift?: ConditionalValue<CssProperties["baselineShift"] | AnyString>
-       colorInterpolation?: ConditionalValue<CssProperties["colorInterpolation"] | AnyString>
-       colorRendering?: ConditionalValue<CssProperties["colorRendering"] | AnyString>
-       glyphOrientationVertical?: ConditionalValue<CssProperties["glyphOrientationVertical"] | AnyString>
+      baselineShift?: ConditionalValue<CssProperties["baselineShift"] | AnyString> | undefined
+       colorInterpolation?: ConditionalValue<CssProperties["colorInterpolation"] | AnyString> | undefined
+       colorRendering?: ConditionalValue<CssProperties["colorRendering"] | AnyString> | undefined
+       glyphOrientationVertical?: ConditionalValue<CssProperties["glyphOrientationVertical"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -6827,7 +6827,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/position
          */
-      pos?: ConditionalValue<CssProperties["position"] | AnyString>
+      pos?: ConditionalValue<CssProperties["position"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -6839,7 +6839,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/inset-inline
          */
-      insetX?: ConditionalValue<UtilityValues["insetInline"] | CssVars | CssProperties["insetInline"] | AnyString>
+      insetX?: ConditionalValue<UtilityValues["insetInline"] | CssVars | CssProperties["insetInline"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -6851,7 +6851,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/inset-block
          */
-      insetY?: ConditionalValue<UtilityValues["insetBlock"] | CssVars | CssProperties["insetBlock"] | AnyString>
+      insetY?: ConditionalValue<UtilityValues["insetBlock"] | CssVars | CssProperties["insetBlock"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -6865,7 +6865,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/inset-inline-end
          */
-      insetEnd?: ConditionalValue<UtilityValues["insetInlineEnd"] | CssVars | CssProperties["insetInlineEnd"] | AnyString>
+      insetEnd?: ConditionalValue<UtilityValues["insetInlineEnd"] | CssVars | CssProperties["insetInlineEnd"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -6879,7 +6879,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/inset-inline-end
          */
-      end?: ConditionalValue<UtilityValues["insetInlineEnd"] | CssVars | CssProperties["insetInlineEnd"] | AnyString>
+      end?: ConditionalValue<UtilityValues["insetInlineEnd"] | CssVars | CssProperties["insetInlineEnd"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -6893,7 +6893,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/inset-inline-start
          */
-      insetStart?: ConditionalValue<UtilityValues["insetInlineStart"] | CssVars | CssProperties["insetInlineStart"] | AnyString>
+      insetStart?: ConditionalValue<UtilityValues["insetInlineStart"] | CssVars | CssProperties["insetInlineStart"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -6907,7 +6907,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/inset-inline-start
          */
-      start?: ConditionalValue<UtilityValues["insetInlineStart"] | CssVars | CssProperties["insetInlineStart"] | AnyString>
+      start?: ConditionalValue<UtilityValues["insetInlineStart"] | CssVars | CssProperties["insetInlineStart"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2015.
          *
@@ -6922,7 +6922,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/flex-direction
          */
-      flexDir?: ConditionalValue<CssProperties["flexDirection"] | AnyString>
+      flexDir?: ConditionalValue<CssProperties["flexDirection"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -6934,7 +6934,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding
          */
-      p?: ConditionalValue<UtilityValues["padding"] | CssVars | CssProperties["padding"] | AnyString>
+      p?: ConditionalValue<UtilityValues["padding"] | CssVars | CssProperties["padding"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -6948,7 +6948,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-left
          */
-      pl?: ConditionalValue<UtilityValues["paddingLeft"] | CssVars | CssProperties["paddingLeft"] | AnyString>
+      pl?: ConditionalValue<UtilityValues["paddingLeft"] | CssVars | CssProperties["paddingLeft"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -6962,7 +6962,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-right
          */
-      pr?: ConditionalValue<UtilityValues["paddingRight"] | CssVars | CssProperties["paddingRight"] | AnyString>
+      pr?: ConditionalValue<UtilityValues["paddingRight"] | CssVars | CssProperties["paddingRight"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -6976,7 +6976,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-top
          */
-      pt?: ConditionalValue<UtilityValues["paddingTop"] | CssVars | CssProperties["paddingTop"] | AnyString>
+      pt?: ConditionalValue<UtilityValues["paddingTop"] | CssVars | CssProperties["paddingTop"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -6990,7 +6990,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-bottom
          */
-      pb?: ConditionalValue<UtilityValues["paddingBottom"] | CssVars | CssProperties["paddingBottom"] | AnyString>
+      pb?: ConditionalValue<UtilityValues["paddingBottom"] | CssVars | CssProperties["paddingBottom"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -7002,7 +7002,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-block
          */
-      py?: ConditionalValue<UtilityValues["paddingBlock"] | CssVars | CssProperties["paddingBlock"] | AnyString>
+      py?: ConditionalValue<UtilityValues["paddingBlock"] | CssVars | CssProperties["paddingBlock"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -7014,7 +7014,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-block
          */
-      paddingY?: ConditionalValue<UtilityValues["paddingBlock"] | CssVars | CssProperties["paddingBlock"] | AnyString>
+      paddingY?: ConditionalValue<UtilityValues["paddingBlock"] | CssVars | CssProperties["paddingBlock"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -7026,7 +7026,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-inline
          */
-      paddingX?: ConditionalValue<UtilityValues["paddingInline"] | CssVars | CssProperties["paddingInline"] | AnyString>
+      paddingX?: ConditionalValue<UtilityValues["paddingInline"] | CssVars | CssProperties["paddingInline"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -7038,7 +7038,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-inline
          */
-      px?: ConditionalValue<UtilityValues["paddingInline"] | CssVars | CssProperties["paddingInline"] | AnyString>
+      px?: ConditionalValue<UtilityValues["paddingInline"] | CssVars | CssProperties["paddingInline"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -7053,7 +7053,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-inline-end
          */
-      pe?: ConditionalValue<UtilityValues["paddingInlineEnd"] | CssVars | CssProperties["paddingInlineEnd"] | AnyString>
+      pe?: ConditionalValue<UtilityValues["paddingInlineEnd"] | CssVars | CssProperties["paddingInlineEnd"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -7068,7 +7068,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-inline-end
          */
-      paddingEnd?: ConditionalValue<UtilityValues["paddingInlineEnd"] | CssVars | CssProperties["paddingInlineEnd"] | AnyString>
+      paddingEnd?: ConditionalValue<UtilityValues["paddingInlineEnd"] | CssVars | CssProperties["paddingInlineEnd"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -7083,7 +7083,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-inline-start
          */
-      ps?: ConditionalValue<UtilityValues["paddingInlineStart"] | CssVars | CssProperties["paddingInlineStart"] | AnyString>
+      ps?: ConditionalValue<UtilityValues["paddingInlineStart"] | CssVars | CssProperties["paddingInlineStart"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -7098,7 +7098,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/padding-inline-start
          */
-      paddingStart?: ConditionalValue<UtilityValues["paddingInlineStart"] | CssVars | CssProperties["paddingInlineStart"] | AnyString>
+      paddingStart?: ConditionalValue<UtilityValues["paddingInlineStart"] | CssVars | CssProperties["paddingInlineStart"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7112,7 +7112,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-left
          */
-      ml?: ConditionalValue<UtilityValues["marginLeft"] | CssVars | CssProperties["marginLeft"] | AnyString>
+      ml?: ConditionalValue<UtilityValues["marginLeft"] | CssVars | CssProperties["marginLeft"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7126,7 +7126,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-right
          */
-      mr?: ConditionalValue<UtilityValues["marginRight"] | CssVars | CssProperties["marginRight"] | AnyString>
+      mr?: ConditionalValue<UtilityValues["marginRight"] | CssVars | CssProperties["marginRight"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7140,7 +7140,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-top
          */
-      mt?: ConditionalValue<UtilityValues["marginTop"] | CssVars | CssProperties["marginTop"] | AnyString>
+      mt?: ConditionalValue<UtilityValues["marginTop"] | CssVars | CssProperties["marginTop"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7154,7 +7154,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-bottom
          */
-      mb?: ConditionalValue<UtilityValues["marginBottom"] | CssVars | CssProperties["marginBottom"] | AnyString>
+      mb?: ConditionalValue<UtilityValues["marginBottom"] | CssVars | CssProperties["marginBottom"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7166,7 +7166,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin
          */
-      m?: ConditionalValue<UtilityValues["margin"] | CssVars | CssProperties["margin"] | AnyString>
+      m?: ConditionalValue<UtilityValues["margin"] | CssVars | CssProperties["margin"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -7178,7 +7178,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-block
          */
-      my?: ConditionalValue<UtilityValues["marginBlock"] | CssVars | CssProperties["marginBlock"] | AnyString>
+      my?: ConditionalValue<UtilityValues["marginBlock"] | CssVars | CssProperties["marginBlock"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -7190,7 +7190,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-block
          */
-      marginY?: ConditionalValue<UtilityValues["marginBlock"] | CssVars | CssProperties["marginBlock"] | AnyString>
+      marginY?: ConditionalValue<UtilityValues["marginBlock"] | CssVars | CssProperties["marginBlock"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -7202,7 +7202,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-inline
          */
-      mx?: ConditionalValue<UtilityValues["marginInline"] | CssVars | CssProperties["marginInline"] | AnyString>
+      mx?: ConditionalValue<UtilityValues["marginInline"] | CssVars | CssProperties["marginInline"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -7214,7 +7214,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-inline
          */
-      marginX?: ConditionalValue<UtilityValues["marginInline"] | CssVars | CssProperties["marginInline"] | AnyString>
+      marginX?: ConditionalValue<UtilityValues["marginInline"] | CssVars | CssProperties["marginInline"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -7229,7 +7229,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-inline-end
          */
-      me?: ConditionalValue<UtilityValues["marginInlineEnd"] | CssVars | CssProperties["marginInlineEnd"] | AnyString>
+      me?: ConditionalValue<UtilityValues["marginInlineEnd"] | CssVars | CssProperties["marginInlineEnd"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -7244,7 +7244,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-inline-end
          */
-      marginEnd?: ConditionalValue<UtilityValues["marginInlineEnd"] | CssVars | CssProperties["marginInlineEnd"] | AnyString>
+      marginEnd?: ConditionalValue<UtilityValues["marginInlineEnd"] | CssVars | CssProperties["marginInlineEnd"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -7259,7 +7259,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-inline-start
          */
-      ms?: ConditionalValue<UtilityValues["marginInlineStart"] | CssVars | CssProperties["marginInlineStart"] | AnyString>
+      ms?: ConditionalValue<UtilityValues["marginInlineStart"] | CssVars | CssProperties["marginInlineStart"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -7274,7 +7274,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/margin-inline-start
          */
-      marginStart?: ConditionalValue<UtilityValues["marginInlineStart"] | CssVars | CssProperties["marginInlineStart"] | AnyString>
+      marginStart?: ConditionalValue<UtilityValues["marginInlineStart"] | CssVars | CssProperties["marginInlineStart"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7288,7 +7288,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/outline-width
          */
-      ringWidth?: ConditionalValue<CssProperties["outlineWidth"] | AnyString>
+      ringWidth?: ConditionalValue<CssProperties["outlineWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7302,7 +7302,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/outline-color
          */
-      ringColor?: ConditionalValue<UtilityValues["outlineColor"] | CssVars | CssProperties["outlineColor"] | AnyString>
+      ringColor?: ConditionalValue<UtilityValues["outlineColor"] | CssVars | CssProperties["outlineColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since March 2023.
          *
@@ -7314,7 +7314,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/outline
          */
-      ring?: ConditionalValue<UtilityValues["outline"] | CssVars | CssProperties["outline"] | AnyString>
+      ring?: ConditionalValue<UtilityValues["outline"] | CssVars | CssProperties["outline"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2017.
          *
@@ -7328,7 +7328,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/outline-offset
          */
-      ringOffset?: ConditionalValue<UtilityValues["outlineOffset"] | CssVars | CssProperties["outlineOffset"] | AnyString>
+      ringOffset?: ConditionalValue<UtilityValues["outlineOffset"] | CssVars | CssProperties["outlineOffset"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7342,7 +7342,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/width
          */
-      w?: ConditionalValue<UtilityValues["width"] | CssVars | CssProperties["width"] | AnyString>
+      w?: ConditionalValue<UtilityValues["width"] | CssVars | CssProperties["width"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7356,7 +7356,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/min-width
          */
-      minW?: ConditionalValue<UtilityValues["minWidth"] | CssVars | CssProperties["minWidth"] | AnyString>
+      minW?: ConditionalValue<UtilityValues["minWidth"] | CssVars | CssProperties["minWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7370,7 +7370,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/max-width
          */
-      maxW?: ConditionalValue<UtilityValues["maxWidth"] | CssVars | CssProperties["maxWidth"] | AnyString>
+      maxW?: ConditionalValue<UtilityValues["maxWidth"] | CssVars | CssProperties["maxWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7384,7 +7384,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/height
          */
-      h?: ConditionalValue<UtilityValues["height"] | CssVars | CssProperties["height"] | AnyString>
+      h?: ConditionalValue<UtilityValues["height"] | CssVars | CssProperties["height"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7398,7 +7398,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/min-height
          */
-      minH?: ConditionalValue<UtilityValues["minHeight"] | CssVars | CssProperties["minHeight"] | AnyString>
+      minH?: ConditionalValue<UtilityValues["minHeight"] | CssVars | CssProperties["minHeight"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7412,8 +7412,8 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/max-height
          */
-      maxH?: ConditionalValue<UtilityValues["maxHeight"] | CssVars | CssProperties["maxHeight"] | AnyString>
-       textShadowColor?: ConditionalValue<UtilityValues["textShadowColor"] | CssVars | AnyString>
+      maxH?: ConditionalValue<UtilityValues["maxHeight"] | CssVars | CssProperties["maxHeight"] | AnyString> | undefined
+       textShadowColor?: ConditionalValue<UtilityValues["textShadowColor"] | CssVars | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7427,7 +7427,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-position
          */
-      bgPosition?: ConditionalValue<CssProperties["backgroundPosition"] | AnyString>
+      bgPosition?: ConditionalValue<CssProperties["backgroundPosition"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2016.
          *
@@ -7441,7 +7441,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-position-x
          */
-      bgPositionX?: ConditionalValue<CssProperties["backgroundPositionX"] | AnyString>
+      bgPositionX?: ConditionalValue<CssProperties["backgroundPositionX"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2016.
          *
@@ -7455,7 +7455,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-position-y
          */
-      bgPositionY?: ConditionalValue<CssProperties["backgroundPositionY"] | AnyString>
+      bgPositionY?: ConditionalValue<CssProperties["backgroundPositionY"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7469,7 +7469,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-attachment
          */
-      bgAttachment?: ConditionalValue<CssProperties["backgroundAttachment"] | AnyString>
+      bgAttachment?: ConditionalValue<CssProperties["backgroundAttachment"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7484,7 +7484,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-clip
          */
-      bgClip?: ConditionalValue<CssProperties["backgroundClip"] | AnyString>
+      bgClip?: ConditionalValue<CssProperties["backgroundClip"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7496,7 +7496,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background
          */
-      bg?: ConditionalValue<UtilityValues["background"] | CssVars | CssProperties["background"] | AnyString>
+      bg?: ConditionalValue<UtilityValues["background"] | CssVars | CssProperties["background"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7510,7 +7510,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-color
          */
-      bgColor?: ConditionalValue<UtilityValues["backgroundColor"] | CssVars | CssProperties["backgroundColor"] | AnyString>
+      bgColor?: ConditionalValue<UtilityValues["backgroundColor"] | CssVars | CssProperties["backgroundColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7524,7 +7524,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-origin
          */
-      bgOrigin?: ConditionalValue<CssProperties["backgroundOrigin"] | AnyString>
+      bgOrigin?: ConditionalValue<CssProperties["backgroundOrigin"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7538,7 +7538,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-image
          */
-      bgImage?: ConditionalValue<CssProperties["backgroundImage"] | AnyString>
+      bgImage?: ConditionalValue<CssProperties["backgroundImage"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7552,7 +7552,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-repeat
          */
-      bgRepeat?: ConditionalValue<CssProperties["backgroundRepeat"] | AnyString>
+      bgRepeat?: ConditionalValue<CssProperties["backgroundRepeat"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -7566,7 +7566,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-blend-mode
          */
-      bgBlendMode?: ConditionalValue<CssProperties["backgroundBlendMode"] | AnyString>
+      bgBlendMode?: ConditionalValue<CssProperties["backgroundBlendMode"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7581,11 +7581,11 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/background-size
          */
-      bgSize?: ConditionalValue<CssProperties["backgroundSize"] | AnyString>
-       bgGradient?: ConditionalValue<UtilityValues["backgroundGradient"] | CssVars | AnyString>
-       bgLinear?: ConditionalValue<UtilityValues["backgroundLinear"] | CssVars | AnyString>
-       bgRadial?: ConditionalValue<string | number | AnyString>
-       bgConic?: ConditionalValue<string | number | AnyString>
+      bgSize?: ConditionalValue<CssProperties["backgroundSize"] | AnyString> | undefined
+       bgGradient?: ConditionalValue<UtilityValues["backgroundGradient"] | CssVars | AnyString> | undefined
+       bgLinear?: ConditionalValue<UtilityValues["backgroundLinear"] | CssVars | AnyString> | undefined
+       bgRadial?: ConditionalValue<string | number | AnyString> | undefined
+       bgConic?: ConditionalValue<string | number | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7598,7 +7598,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-radius
          */
-      rounded?: ConditionalValue<UtilityValues["borderRadius"] | CssVars | CssProperties["borderRadius"] | AnyString>
+      rounded?: ConditionalValue<UtilityValues["borderRadius"] | CssVars | CssProperties["borderRadius"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7613,7 +7613,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-top-left-radius
          */
-      roundedTopLeft?: ConditionalValue<UtilityValues["borderTopLeftRadius"] | CssVars | CssProperties["borderTopLeftRadius"] | AnyString>
+      roundedTopLeft?: ConditionalValue<UtilityValues["borderTopLeftRadius"] | CssVars | CssProperties["borderTopLeftRadius"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7628,7 +7628,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-top-right-radius
          */
-      roundedTopRight?: ConditionalValue<UtilityValues["borderTopRightRadius"] | CssVars | CssProperties["borderTopRightRadius"] | AnyString>
+      roundedTopRight?: ConditionalValue<UtilityValues["borderTopRightRadius"] | CssVars | CssProperties["borderTopRightRadius"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7643,7 +7643,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-bottom-right-radius
          */
-      roundedBottomRight?: ConditionalValue<UtilityValues["borderBottomRightRadius"] | CssVars | CssProperties["borderBottomRightRadius"] | AnyString>
+      roundedBottomRight?: ConditionalValue<UtilityValues["borderBottomRightRadius"] | CssVars | CssProperties["borderBottomRightRadius"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7658,11 +7658,11 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-bottom-left-radius
          */
-      roundedBottomLeft?: ConditionalValue<UtilityValues["borderBottomLeftRadius"] | CssVars | CssProperties["borderBottomLeftRadius"] | AnyString>
-       roundedTop?: ConditionalValue<UtilityValues["borderTopRadius"] | CssVars | AnyString>
-       roundedRight?: ConditionalValue<UtilityValues["borderRightRadius"] | CssVars | AnyString>
-       roundedBottom?: ConditionalValue<UtilityValues["borderBottomRadius"] | CssVars | AnyString>
-       roundedLeft?: ConditionalValue<UtilityValues["borderLeftRadius"] | CssVars | AnyString>
+      roundedBottomLeft?: ConditionalValue<UtilityValues["borderBottomLeftRadius"] | CssVars | CssProperties["borderBottomLeftRadius"] | AnyString> | undefined
+       roundedTop?: ConditionalValue<UtilityValues["borderTopRadius"] | CssVars | AnyString> | undefined
+       roundedRight?: ConditionalValue<UtilityValues["borderRightRadius"] | CssVars | AnyString> | undefined
+       roundedBottom?: ConditionalValue<UtilityValues["borderBottomRadius"] | CssVars | AnyString> | undefined
+       roundedLeft?: ConditionalValue<UtilityValues["borderLeftRadius"] | CssVars | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -7676,7 +7676,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-start-start-radius
          */
-      roundedStartStart?: ConditionalValue<UtilityValues["borderStartStartRadius"] | CssVars | CssProperties["borderStartStartRadius"] | AnyString>
+      roundedStartStart?: ConditionalValue<UtilityValues["borderStartStartRadius"] | CssVars | CssProperties["borderStartStartRadius"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -7690,8 +7690,8 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-start-end-radius
          */
-      roundedStartEnd?: ConditionalValue<UtilityValues["borderStartEndRadius"] | CssVars | CssProperties["borderStartEndRadius"] | AnyString>
-       roundedStart?: ConditionalValue<UtilityValues["borderStartRadius"] | CssVars | AnyString>
+      roundedStartEnd?: ConditionalValue<UtilityValues["borderStartEndRadius"] | CssVars | CssProperties["borderStartEndRadius"] | AnyString> | undefined
+       roundedStart?: ConditionalValue<UtilityValues["borderStartRadius"] | CssVars | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -7705,7 +7705,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-end-start-radius
          */
-      roundedEndStart?: ConditionalValue<UtilityValues["borderEndStartRadius"] | CssVars | CssProperties["borderEndStartRadius"] | AnyString>
+      roundedEndStart?: ConditionalValue<UtilityValues["borderEndStartRadius"] | CssVars | CssProperties["borderEndStartRadius"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -7719,8 +7719,8 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-end-end-radius
          */
-      roundedEndEnd?: ConditionalValue<UtilityValues["borderEndEndRadius"] | CssVars | CssProperties["borderEndEndRadius"] | AnyString>
-       roundedEnd?: ConditionalValue<UtilityValues["borderEndRadius"] | CssVars | AnyString>
+      roundedEndEnd?: ConditionalValue<UtilityValues["borderEndEndRadius"] | CssVars | CssProperties["borderEndEndRadius"] | AnyString> | undefined
+       roundedEnd?: ConditionalValue<UtilityValues["borderEndRadius"] | CssVars | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -7732,7 +7732,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-inline
          */
-      borderX?: ConditionalValue<UtilityValues["borderInline"] | CssVars | CssProperties["borderInline"] | AnyString>
+      borderX?: ConditionalValue<UtilityValues["borderInline"] | CssVars | CssProperties["borderInline"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -7746,7 +7746,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-inline-width
          */
-      borderXWidth?: ConditionalValue<CssProperties["borderInlineWidth"] | AnyString>
+      borderXWidth?: ConditionalValue<CssProperties["borderInlineWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -7760,7 +7760,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-inline-color
          */
-      borderXColor?: ConditionalValue<UtilityValues["borderInlineColor"] | CssVars | CssProperties["borderInlineColor"] | AnyString>
+      borderXColor?: ConditionalValue<UtilityValues["borderInlineColor"] | CssVars | CssProperties["borderInlineColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -7772,7 +7772,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-block
          */
-      borderY?: ConditionalValue<UtilityValues["borderBlock"] | CssVars | CssProperties["borderBlock"] | AnyString>
+      borderY?: ConditionalValue<UtilityValues["borderBlock"] | CssVars | CssProperties["borderBlock"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -7786,7 +7786,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-block-width
          */
-      borderYWidth?: ConditionalValue<CssProperties["borderBlockWidth"] | AnyString>
+      borderYWidth?: ConditionalValue<CssProperties["borderBlockWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -7800,7 +7800,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-block-color
          */
-      borderYColor?: ConditionalValue<UtilityValues["borderBlockColor"] | CssVars | CssProperties["borderBlockColor"] | AnyString>
+      borderYColor?: ConditionalValue<UtilityValues["borderBlockColor"] | CssVars | CssProperties["borderBlockColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -7812,7 +7812,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-inline-start
          */
-      borderStart?: ConditionalValue<UtilityValues["borderInlineStart"] | CssVars | CssProperties["borderInlineStart"] | AnyString>
+      borderStart?: ConditionalValue<UtilityValues["borderInlineStart"] | CssVars | CssProperties["borderInlineStart"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -7826,7 +7826,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-inline-start-width
          */
-      borderStartWidth?: ConditionalValue<CssProperties["borderInlineStartWidth"] | AnyString>
+      borderStartWidth?: ConditionalValue<CssProperties["borderInlineStartWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -7841,7 +7841,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-inline-start-color
          */
-      borderStartColor?: ConditionalValue<UtilityValues["borderInlineStartColor"] | CssVars | CssProperties["borderInlineStartColor"] | AnyString>
+      borderStartColor?: ConditionalValue<UtilityValues["borderInlineStartColor"] | CssVars | CssProperties["borderInlineStartColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -7853,7 +7853,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-inline-end
          */
-      borderEnd?: ConditionalValue<UtilityValues["borderInlineEnd"] | CssVars | CssProperties["borderInlineEnd"] | AnyString>
+      borderEnd?: ConditionalValue<UtilityValues["borderInlineEnd"] | CssVars | CssProperties["borderInlineEnd"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -7868,7 +7868,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-inline-end-width
          */
-      borderEndWidth?: ConditionalValue<CssProperties["borderInlineEndWidth"] | AnyString>
+      borderEndWidth?: ConditionalValue<CssProperties["borderInlineEndWidth"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since January 2020.
          *
@@ -7883,7 +7883,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/border-inline-end-color
          */
-      borderEndColor?: ConditionalValue<UtilityValues["borderInlineEndColor"] | CssVars | CssProperties["borderInlineEndColor"] | AnyString>
+      borderEndColor?: ConditionalValue<UtilityValues["borderInlineEndColor"] | CssVars | CssProperties["borderInlineEndColor"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2015.
          *
@@ -7898,9 +7898,9 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/box-shadow
          */
-      shadow?: ConditionalValue<UtilityValues["boxShadow"] | CssVars | CssProperties["boxShadow"] | AnyString>
-       shadowColor?: ConditionalValue<UtilityValues["boxShadowColor"] | CssVars | AnyString>
-       z?: ConditionalValue<UtilityValues["translateZ"] | CssVars | AnyString>
+      shadow?: ConditionalValue<UtilityValues["boxShadow"] | CssVars | CssProperties["boxShadow"] | AnyString> | undefined
+       shadowColor?: ConditionalValue<UtilityValues["boxShadowColor"] | CssVars | AnyString> | undefined
+       z?: ConditionalValue<UtilityValues["translateZ"] | CssVars | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -7912,7 +7912,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-margin-block
          */
-      scrollMarginY?: ConditionalValue<UtilityValues["scrollMarginBlock"] | CssVars | CssProperties["scrollMarginBlock"] | AnyString>
+      scrollMarginY?: ConditionalValue<UtilityValues["scrollMarginBlock"] | CssVars | CssProperties["scrollMarginBlock"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -7924,7 +7924,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-margin-inline
          */
-      scrollMarginX?: ConditionalValue<UtilityValues["scrollMarginInline"] | CssVars | CssProperties["scrollMarginInline"] | AnyString>
+      scrollMarginX?: ConditionalValue<UtilityValues["scrollMarginInline"] | CssVars | CssProperties["scrollMarginInline"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -7936,7 +7936,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-padding-block
          */
-      scrollPaddingY?: ConditionalValue<UtilityValues["scrollPaddingBlock"] | CssVars | CssProperties["scrollPaddingBlock"] | AnyString>
+      scrollPaddingY?: ConditionalValue<UtilityValues["scrollPaddingBlock"] | CssVars | CssProperties["scrollPaddingBlock"] | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since September 2021.
          *
@@ -7948,73 +7948,73 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-padding-inline
          */
-      scrollPaddingX?: ConditionalValue<UtilityValues["scrollPaddingInline"] | CssVars | CssProperties["scrollPaddingInline"] | AnyString>
-       spaceX?: ConditionalValue<UtilityValues["spaceX"] | CssVars | AnyString>
-       spaceY?: ConditionalValue<UtilityValues["spaceY"] | CssVars | AnyString>
-       focusRing?: ConditionalValue<UtilityValues["focusRing"] | CssVars | AnyString>
-       focusVisibleRing?: ConditionalValue<UtilityValues["focusVisibleRing"] | CssVars | AnyString>
-       focusRingColor?: ConditionalValue<UtilityValues["focusRingColor"] | CssVars | AnyString>
-       focusRingOffset?: ConditionalValue<UtilityValues["focusRingOffset"] | CssVars | AnyString>
-       focusRingWidth?: ConditionalValue<UtilityValues["focusRingWidth"] | CssVars | AnyString>
-       focusRingStyle?: ConditionalValue<UtilityValues["focusRingStyle"] | CssVars | AnyString>
-       divideX?: ConditionalValue<string | number | AnyString>
-       divideY?: ConditionalValue<string | number | AnyString>
-       divideColor?: ConditionalValue<UtilityValues["divideColor"] | CssVars | AnyString>
-       divideStyle?: ConditionalValue<UtilityValues["divideStyle"] | CssVars | AnyString>
-       boxSize?: ConditionalValue<UtilityValues["boxSize"] | CssVars | AnyString>
-       fontSmoothing?: ConditionalValue<UtilityValues["fontSmoothing"] | CssVars | AnyString>
-       truncate?: ConditionalValue<UtilityValues["truncate"] | CssVars | AnyString>
-       backgroundGradient?: ConditionalValue<UtilityValues["backgroundGradient"] | CssVars | AnyString>
-       backgroundLinear?: ConditionalValue<UtilityValues["backgroundLinear"] | CssVars | AnyString>
-       backgroundRadial?: ConditionalValue<string | number | AnyString>
-       backgroundConic?: ConditionalValue<string | number | AnyString>
-       textGradient?: ConditionalValue<UtilityValues["textGradient"] | CssVars | AnyString>
-       gradientFromPosition?: ConditionalValue<string | number | AnyString>
-       gradientToPosition?: ConditionalValue<string | number | AnyString>
-       gradientFrom?: ConditionalValue<UtilityValues["gradientFrom"] | CssVars | AnyString>
-       gradientTo?: ConditionalValue<UtilityValues["gradientTo"] | CssVars | AnyString>
-       gradientVia?: ConditionalValue<UtilityValues["gradientVia"] | CssVars | AnyString>
-       gradientViaPosition?: ConditionalValue<string | number | AnyString>
-       borderTopRadius?: ConditionalValue<UtilityValues["borderTopRadius"] | CssVars | AnyString>
-       borderRightRadius?: ConditionalValue<UtilityValues["borderRightRadius"] | CssVars | AnyString>
-       borderBottomRadius?: ConditionalValue<UtilityValues["borderBottomRadius"] | CssVars | AnyString>
-       borderLeftRadius?: ConditionalValue<UtilityValues["borderLeftRadius"] | CssVars | AnyString>
-       borderStartRadius?: ConditionalValue<UtilityValues["borderStartRadius"] | CssVars | AnyString>
-       borderEndRadius?: ConditionalValue<UtilityValues["borderEndRadius"] | CssVars | AnyString>
-       boxShadowColor?: ConditionalValue<UtilityValues["boxShadowColor"] | CssVars | AnyString>
-       brightness?: ConditionalValue<string | number | AnyString>
-       contrast?: ConditionalValue<string | number | AnyString>
-       grayscale?: ConditionalValue<string | number | AnyString>
-       hueRotate?: ConditionalValue<string | number | AnyString>
-       invert?: ConditionalValue<string | number | AnyString>
-       saturate?: ConditionalValue<string | number | AnyString>
-       sepia?: ConditionalValue<string | number | AnyString>
-       dropShadow?: ConditionalValue<string | number | AnyString>
-       blur?: ConditionalValue<UtilityValues["blur"] | CssVars | AnyString>
-       backdropBlur?: ConditionalValue<UtilityValues["backdropBlur"] | CssVars | AnyString>
-       backdropBrightness?: ConditionalValue<string | number | AnyString>
-       backdropContrast?: ConditionalValue<string | number | AnyString>
-       backdropGrayscale?: ConditionalValue<string | number | AnyString>
-       backdropHueRotate?: ConditionalValue<string | number | AnyString>
-       backdropInvert?: ConditionalValue<string | number | AnyString>
-       backdropOpacity?: ConditionalValue<string | number | AnyString>
-       backdropSaturate?: ConditionalValue<string | number | AnyString>
-       backdropSepia?: ConditionalValue<string | number | AnyString>
-       borderSpacingX?: ConditionalValue<UtilityValues["borderSpacingX"] | CssVars | AnyString>
-       borderSpacingY?: ConditionalValue<UtilityValues["borderSpacingY"] | CssVars | AnyString>
-       animationState?: ConditionalValue<string | number | AnyString>
-       rotateX?: ConditionalValue<string | number | AnyString>
-       rotateY?: ConditionalValue<string | number | AnyString>
-       rotateZ?: ConditionalValue<string | number | AnyString>
-       scaleX?: ConditionalValue<string | number | AnyString>
-       scaleY?: ConditionalValue<string | number | AnyString>
-       translateX?: ConditionalValue<UtilityValues["translateX"] | CssVars | AnyString>
-       translateY?: ConditionalValue<UtilityValues["translateY"] | CssVars | AnyString>
-       translateZ?: ConditionalValue<UtilityValues["translateZ"] | CssVars | AnyString>
-       scrollbar?: ConditionalValue<UtilityValues["scrollbar"] | CssVars | AnyString>
-       scrollbarThumb?: ConditionalValue<UtilityValues["scrollbarThumb"] | CssVars | AnyString>
-       scrollbarTrack?: ConditionalValue<UtilityValues["scrollbarTrack"] | CssVars | AnyString>
-       scrollSnapStrictness?: ConditionalValue<UtilityValues["scrollSnapStrictness"] | CssVars | AnyString>
+      scrollPaddingX?: ConditionalValue<UtilityValues["scrollPaddingInline"] | CssVars | CssProperties["scrollPaddingInline"] | AnyString> | undefined
+       spaceX?: ConditionalValue<UtilityValues["spaceX"] | CssVars | AnyString> | undefined
+       spaceY?: ConditionalValue<UtilityValues["spaceY"] | CssVars | AnyString> | undefined
+       focusRing?: ConditionalValue<UtilityValues["focusRing"] | CssVars | AnyString> | undefined
+       focusVisibleRing?: ConditionalValue<UtilityValues["focusVisibleRing"] | CssVars | AnyString> | undefined
+       focusRingColor?: ConditionalValue<UtilityValues["focusRingColor"] | CssVars | AnyString> | undefined
+       focusRingOffset?: ConditionalValue<UtilityValues["focusRingOffset"] | CssVars | AnyString> | undefined
+       focusRingWidth?: ConditionalValue<UtilityValues["focusRingWidth"] | CssVars | AnyString> | undefined
+       focusRingStyle?: ConditionalValue<UtilityValues["focusRingStyle"] | CssVars | AnyString> | undefined
+       divideX?: ConditionalValue<string | number | AnyString> | undefined
+       divideY?: ConditionalValue<string | number | AnyString> | undefined
+       divideColor?: ConditionalValue<UtilityValues["divideColor"] | CssVars | AnyString> | undefined
+       divideStyle?: ConditionalValue<UtilityValues["divideStyle"] | CssVars | AnyString> | undefined
+       boxSize?: ConditionalValue<UtilityValues["boxSize"] | CssVars | AnyString> | undefined
+       fontSmoothing?: ConditionalValue<UtilityValues["fontSmoothing"] | CssVars | AnyString> | undefined
+       truncate?: ConditionalValue<UtilityValues["truncate"] | CssVars | AnyString> | undefined
+       backgroundGradient?: ConditionalValue<UtilityValues["backgroundGradient"] | CssVars | AnyString> | undefined
+       backgroundLinear?: ConditionalValue<UtilityValues["backgroundLinear"] | CssVars | AnyString> | undefined
+       backgroundRadial?: ConditionalValue<string | number | AnyString> | undefined
+       backgroundConic?: ConditionalValue<string | number | AnyString> | undefined
+       textGradient?: ConditionalValue<UtilityValues["textGradient"] | CssVars | AnyString> | undefined
+       gradientFromPosition?: ConditionalValue<string | number | AnyString> | undefined
+       gradientToPosition?: ConditionalValue<string | number | AnyString> | undefined
+       gradientFrom?: ConditionalValue<UtilityValues["gradientFrom"] | CssVars | AnyString> | undefined
+       gradientTo?: ConditionalValue<UtilityValues["gradientTo"] | CssVars | AnyString> | undefined
+       gradientVia?: ConditionalValue<UtilityValues["gradientVia"] | CssVars | AnyString> | undefined
+       gradientViaPosition?: ConditionalValue<string | number | AnyString> | undefined
+       borderTopRadius?: ConditionalValue<UtilityValues["borderTopRadius"] | CssVars | AnyString> | undefined
+       borderRightRadius?: ConditionalValue<UtilityValues["borderRightRadius"] | CssVars | AnyString> | undefined
+       borderBottomRadius?: ConditionalValue<UtilityValues["borderBottomRadius"] | CssVars | AnyString> | undefined
+       borderLeftRadius?: ConditionalValue<UtilityValues["borderLeftRadius"] | CssVars | AnyString> | undefined
+       borderStartRadius?: ConditionalValue<UtilityValues["borderStartRadius"] | CssVars | AnyString> | undefined
+       borderEndRadius?: ConditionalValue<UtilityValues["borderEndRadius"] | CssVars | AnyString> | undefined
+       boxShadowColor?: ConditionalValue<UtilityValues["boxShadowColor"] | CssVars | AnyString> | undefined
+       brightness?: ConditionalValue<string | number | AnyString> | undefined
+       contrast?: ConditionalValue<string | number | AnyString> | undefined
+       grayscale?: ConditionalValue<string | number | AnyString> | undefined
+       hueRotate?: ConditionalValue<string | number | AnyString> | undefined
+       invert?: ConditionalValue<string | number | AnyString> | undefined
+       saturate?: ConditionalValue<string | number | AnyString> | undefined
+       sepia?: ConditionalValue<string | number | AnyString> | undefined
+       dropShadow?: ConditionalValue<string | number | AnyString> | undefined
+       blur?: ConditionalValue<UtilityValues["blur"] | CssVars | AnyString> | undefined
+       backdropBlur?: ConditionalValue<UtilityValues["backdropBlur"] | CssVars | AnyString> | undefined
+       backdropBrightness?: ConditionalValue<string | number | AnyString> | undefined
+       backdropContrast?: ConditionalValue<string | number | AnyString> | undefined
+       backdropGrayscale?: ConditionalValue<string | number | AnyString> | undefined
+       backdropHueRotate?: ConditionalValue<string | number | AnyString> | undefined
+       backdropInvert?: ConditionalValue<string | number | AnyString> | undefined
+       backdropOpacity?: ConditionalValue<string | number | AnyString> | undefined
+       backdropSaturate?: ConditionalValue<string | number | AnyString> | undefined
+       backdropSepia?: ConditionalValue<string | number | AnyString> | undefined
+       borderSpacingX?: ConditionalValue<UtilityValues["borderSpacingX"] | CssVars | AnyString> | undefined
+       borderSpacingY?: ConditionalValue<UtilityValues["borderSpacingY"] | CssVars | AnyString> | undefined
+       animationState?: ConditionalValue<string | number | AnyString> | undefined
+       rotateX?: ConditionalValue<string | number | AnyString> | undefined
+       rotateY?: ConditionalValue<string | number | AnyString> | undefined
+       rotateZ?: ConditionalValue<string | number | AnyString> | undefined
+       scaleX?: ConditionalValue<string | number | AnyString> | undefined
+       scaleY?: ConditionalValue<string | number | AnyString> | undefined
+       translateX?: ConditionalValue<UtilityValues["translateX"] | CssVars | AnyString> | undefined
+       translateY?: ConditionalValue<UtilityValues["translateY"] | CssVars | AnyString> | undefined
+       translateZ?: ConditionalValue<UtilityValues["translateZ"] | CssVars | AnyString> | undefined
+       scrollbar?: ConditionalValue<UtilityValues["scrollbar"] | CssVars | AnyString> | undefined
+       scrollbarThumb?: ConditionalValue<UtilityValues["scrollbarThumb"] | CssVars | AnyString> | undefined
+       scrollbarTrack?: ConditionalValue<UtilityValues["scrollbarTrack"] | CssVars | AnyString> | undefined
+       scrollSnapStrictness?: ConditionalValue<UtilityValues["scrollSnapStrictness"] | CssVars | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since July 2021.
          *
@@ -8027,7 +8027,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-margin
          */
-      scrollSnapMargin?: ConditionalValue<UtilityValues["scrollSnapMargin"] | CssVars | AnyString>
+      scrollSnapMargin?: ConditionalValue<UtilityValues["scrollSnapMargin"] | CssVars | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -8042,7 +8042,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-margin-top
          */
-      scrollSnapMarginTop?: ConditionalValue<UtilityValues["scrollSnapMarginTop"] | CssVars | AnyString>
+      scrollSnapMarginTop?: ConditionalValue<UtilityValues["scrollSnapMarginTop"] | CssVars | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -8057,7 +8057,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-margin-bottom
          */
-      scrollSnapMarginBottom?: ConditionalValue<UtilityValues["scrollSnapMarginBottom"] | CssVars | AnyString>
+      scrollSnapMarginBottom?: ConditionalValue<UtilityValues["scrollSnapMarginBottom"] | CssVars | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -8072,7 +8072,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-margin-left
          */
-      scrollSnapMarginLeft?: ConditionalValue<UtilityValues["scrollSnapMarginLeft"] | CssVars | AnyString>
+      scrollSnapMarginLeft?: ConditionalValue<UtilityValues["scrollSnapMarginLeft"] | CssVars | AnyString> | undefined
        /**
          * This feature is well established and works across many devices and browser versions. It’s been available across browsers since April 2021.
          *
@@ -8087,11 +8087,11 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/scroll-margin-right
          */
-      scrollSnapMarginRight?: ConditionalValue<UtilityValues["scrollSnapMarginRight"] | CssVars | AnyString>
-       srOnly?: ConditionalValue<UtilityValues["srOnly"] | CssVars | AnyString>
-       debug?: ConditionalValue<UtilityValues["debug"] | CssVars | AnyString>
-       colorPalette?: ConditionalValue<UtilityValues["colorPalette"] | CssVars | AnyString>
-       mixin?: ConditionalValue<UtilityValues["mixin"] | CssVars | AnyString>
+      scrollSnapMarginRight?: ConditionalValue<UtilityValues["scrollSnapMarginRight"] | CssVars | AnyString> | undefined
+       srOnly?: ConditionalValue<UtilityValues["srOnly"] | CssVars | AnyString> | undefined
+       debug?: ConditionalValue<UtilityValues["debug"] | CssVars | AnyString> | undefined
+       colorPalette?: ConditionalValue<UtilityValues["colorPalette"] | CssVars | AnyString> | undefined
+       mixin?: ConditionalValue<UtilityValues["mixin"] | CssVars | AnyString> | undefined
       }"
     `)
   })
@@ -8135,7 +8135,7 @@ describe('generate property types', () => {
       type CssVarKeys = "--random-color" | "--button-color" | \`--\${string}\` & {}
 
       export type CssVarProperties = {
-        [key in CssVarKeys]?: CssVarValue
+        [key in CssVarKeys]?: CssVarValue | undefined
       }
 
       export interface SystemProperties {
@@ -8146,7 +8146,7 @@ describe('generate property types', () => {
          *
          * **Initial value**: \`none\` (but this value is overridden in the user agent CSS)
          */
-      WebkitAppearance?: ConditionalValue<CssProperties["WebkitAppearance"] | AnyString>
+      WebkitAppearance?: ConditionalValue<CssProperties["WebkitAppearance"] | AnyString> | undefined
        /**
          * The **\`-webkit-border-before\`** CSS property is a shorthand property for setting the individual logical block start border property values in a single place in the style sheet.
          *

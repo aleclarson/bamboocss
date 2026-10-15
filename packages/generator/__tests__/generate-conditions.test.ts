@@ -16,9 +16,25 @@ describe('generate conditions', () => {
       "export type ConditionalValue<V> =
         | V
         | {
-            [K in keyof Conditions]?: ConditionalValue<V>
+            [K in keyof Conditions]?: ConditionalValue<V> | undefined
           }
 
+      "
+    `)
+  })
+
+  // As a block is written under `exactOptionalPropertyTypes` when it is left out: `_hover: active ? { … } : undefined`.
+  test('a nested block may be undefined', () => {
+    const { dts } = generateConditions(createContext())
+
+    expect(dts.slice(dts.indexOf('export type Nested'))).toMatchInlineSnapshot(`
+      "export type Nested<P> = P & {
+        [K in Selectors]?: Nested<P> | undefined
+      } & {
+        [K in AnySelector]?: Nested<P> | undefined
+      } & {
+        [K in keyof Conditions]?: Nested<P> | undefined
+      }
       "
     `)
   })

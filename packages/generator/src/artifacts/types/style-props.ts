@@ -25,7 +25,7 @@ export function generateStyleProps(ctx: Context) {
     type CssVarKeys = ${[...ctx.globalVars.names.map((name) => `"--${name}"`), '`--${string}` & {}'].filter(Boolean).join(' | ')}
 
     export type CssVarProperties = {
-      [key in CssVarKeys]?: CssVarValue
+      [key in CssVarKeys]?: CssVarValue | undefined
     }
 
     export interface SystemProperties {
@@ -77,7 +77,7 @@ export function generateStyleProps(ctx: Context) {
           }
 
           const value = filtered.filter(Boolean).join(' | ')
-          const line = `${key}?: ${restrict(prop, value, ctx.config)}`
+          const line = `${key}?: ${restrict(prop, value, ctx.config)} | undefined`
 
           return ' ' + [comment, line].filter(Boolean).join('\n')
         })
