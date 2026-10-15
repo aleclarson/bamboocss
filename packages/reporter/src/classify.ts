@@ -1,5 +1,5 @@
 import type { ParserOptions } from '@bamboocss/core'
-import { compact, createPatternFns, isObject } from '@bamboocss/shared'
+import { compact, createPatternFns, isBaseCondition, isObject } from '@bamboocss/shared'
 import type {
   ClassifyReport,
   ComponentReportItem,
@@ -12,6 +12,20 @@ import type {
 } from '@bamboocss/types'
 
 type ParserResultMap = Map<string, ParserResultInterface>
+
+/** The style objects of a recipe config: `base`, each variant's, each compound variant's `css`. */
+function recipeStyles(config: Record<string, any>, slotted: boolean): Record<string, any>[] {
+  const styles = (value: unknown) => (slotted && isObject(value) ? Object.values(value) : [value]).filter(isObject)
+  return [
+    ...styles(config.base),
+    ...Object.values(config.variants ?? {}).flatMap((variant) =>
+      isObject(variant) ? Object.values(variant).flatMap(styles) : [],
+    ),
+    ...(Array.isArray(config.compoundVariants) ? config.compoundVariants : []).flatMap((compound) =>
+      styles(compound?.css),
+    ),
+  ]
+}
 
 function addTo(map: Map<string, Set<any>>, key: string, value: any) {
   const set = map.get(key) ?? new Set()
@@ -73,7 +87,9 @@ export function classifyProject(ctx: ParserOptions, resultMap: ParserResultMap):
   // has to resolve a token exactly as `Context` does or the two disagree about what was written.
   const patternHelpers = createPatternFns((path, fallback) => ctx.tokens.view.getVar(path) ?? fallback)
 
-  const conditions = new Map(Object.entries(ctx.conditions.values))
+  // A named condition, an arbitrary one — `'&:hover'`, `'@media (…)'` — or `base`.
+  const isConditionKey = ctx.conditions.isCondition
+  const isConditionName = (key: string) => isConditionKey(key) && !isBaseCondition(key)
 
   const { groupByProp } = getPropertyGroupMap(ctx)
 
@@ -146,7 +162,7 @@ export function classifyProject(ctx: ParserOptions, resultMap: ParserResultMap):
 
     // `tokenValue` lives in the token bucket, and a token call resolves to a value rather than
     // to a set of properties to walk. Unreachable in practice — the walk below only visits the
-    // css, cva, pattern and recipe buckets — but stated, so `ReportItemType` need not carry a
+    // css, cva, sva, pattern and recipe buckets — but stated, so `ReportItemType` need not carry a
     // member no report can contain.
     if (item.type === 'tokenValue') {
       return
@@ -182,18 +198,23 @@ export function classifyProject(ctx: ParserOptions, resultMap: ParserResultMap):
     }
 
     // Every argument object is walked. Extraction emits a fragment per statically enumerable
-    // branch — `cond ? a : b` gives both — and each is a real use of its properties.
+    // branch — `cond ? a : b` gives both — and each is a real use of its properties. Of a `cva`
+    // or `sva` config, the styles in it, as of a config recipe: not `defaultVariants`, whose
+    // variant names read as properties, nor `className`, and `compoundVariants` too.
     addTo(byComponentInFilepath, filepath, componentReportItem.componentIndex)
     for (const data of item.data) {
       if (!isObject(data)) continue
-      processMap({
-        map: data,
-        range: componentReportItem.range,
-        current: [],
-        componentReportItem,
-        filepath,
-        localMaps,
-      })
+      const styles = item.type === 'cva' || item.type === 'sva' ? recipeStyles(data, item.type === 'sva') : [data]
+      for (const map of styles) {
+        processMap({
+          map,
+          range: componentReportItem.range,
+          current: [],
+          componentReportItem,
+          filepath,
+          localMaps,
+        })
+      }
     }
     return componentReportItem
   }
@@ -241,55 +262,56 @@ export function classifyProject(ctx: ParserOptions, resultMap: ParserResultMap):
 
         componentReportItem.contains.push(propReportItem.index)
 
-        if (conditions.has(attrName)) {
-          addTo(globalMaps.byConditionName, attrName, propReportItem.index)
-          addTo(localMaps.byConditionName, attrName, propReportItem.index)
-          propReportItem.propName = current[0] ?? attrName
-          propReportItem.isKnownValue = isKnownUtility(propReportItem, componentReportItem)
-          propReportItem.conditionName = attrName
-        } else {
-          if (current.length && conditions.has(current[0])) {
-            propReportItem.conditionName = current[0]
+        // The condition a value is under: its own key, `{ md: value }`, or the first one above it.
+        // TODO: when using nested conditions
+        // should we add the reportItem.id for each of them or just the first one?
+        // (currently just the first one)
+        const conditionName = isConditionName(attrName) ? attrName : current.find(isConditionName)
+        if (conditionName) {
+          propReportItem.conditionName = conditionName
+          addTo(globalMaps.byConditionName, conditionName, propReportItem.index)
+          addTo(localMaps.byConditionName, conditionName, propReportItem.index)
+        }
 
-            // TODO: when using nested conditions
-            // should we add the reportItem.id for each of them or just the first one?
-            // (currently just the first one)
-            addTo(globalMaps.byConditionName, current[0], propReportItem.index)
-            addTo(localMaps.byConditionName, current[0], propReportItem.index)
-          }
+        // A value keyed by a condition — `{ base: value, md: value }` — is the value of the
+        // nearest property above it, as `prop: value` is. One keyed `base` was counted as a
+        // property named `base`, and one keyed by a condition as the outermost key, with no
+        // shorthand resolved and no token type, so the tokens it named went uncounted.
+        const property = isConditionKey(attrName)
+          ? (current.findLast((key) => !isConditionKey(key)) ?? current[0] ?? attrName)
+          : attrName
 
-          // TODO: Split this to new function
-          const propName = ctx.utility.resolveShorthand(attrName)
-          const tokenType = ctx.utility.getTokenType(propName)
-          if (tokenType) {
-            propReportItem.reportItemKind = 'token'
-            propReportItem.tokenType = tokenType
-          }
+        // TODO: Split this to new function
+        const propName = ctx.utility.resolveShorthand(property)
+        const tokenType = ctx.utility.getTokenType(propName)
+        if (tokenType) {
+          propReportItem.reportItemKind = 'token'
+          propReportItem.tokenType = tokenType
+        }
 
-          propReportItem.propName = propName
-          propReportItem.isKnownValue = isKnownUtility(propReportItem, componentReportItem)
+        propReportItem.propName = propName
+        propReportItem.isKnownValue = isKnownUtility(propReportItem, componentReportItem)
 
-          addTo(globalMaps.byPropertyName, propName, propReportItem.index)
-          addTo(localMaps.byPropertyName, propName, propReportItem.index)
+        addTo(globalMaps.byPropertyName, propName, propReportItem.index)
+        addTo(localMaps.byPropertyName, propName, propReportItem.index)
 
-          if (tokenType) {
-            addTo(globalMaps.byTokenType, tokenType, propReportItem.index)
-            addTo(localMaps.byTokenType, tokenType, propReportItem.index)
-          }
+        if (tokenType) {
+          addTo(globalMaps.byTokenType, tokenType, propReportItem.index)
+          addTo(localMaps.byTokenType, tokenType, propReportItem.index)
+        }
 
-          if (
-            propName.toLowerCase().includes('color') ||
-            groupByProp.get(propName) === 'Color' ||
-            tokenType === 'colors'
-          ) {
-            addTo(globalMaps.colorsUsed, value as string, propReportItem.index)
-            addTo(localMaps.colorsUsed, value as string, propReportItem.index)
-          }
+        if (
+          propName.toLowerCase().includes('color') ||
+          groupByProp.get(propName) === 'Color' ||
+          tokenType === 'colors'
+        ) {
+          addTo(globalMaps.colorsUsed, value as string, propReportItem.index)
+          addTo(localMaps.colorsUsed, value as string, propReportItem.index)
+        }
 
-          if (ctx.utility.shorthands.has(attrName)) {
-            addTo(globalMaps.byShorthand, attrName, propReportItem.index)
-            addTo(localMaps.byShorthand, attrName, propReportItem.index)
-          }
+        if (ctx.utility.shorthands.has(property)) {
+          addTo(globalMaps.byShorthand, property, propReportItem.index)
+          addTo(localMaps.byShorthand, property, propReportItem.index)
         }
 
         if (current.length) {
@@ -344,6 +366,7 @@ export function classifyProject(ctx: ParserOptions, resultMap: ParserResultMap):
 
     parserResult.css.forEach(functionFn)
     parserResult.cva.forEach(functionFn)
+    parserResult.sva.forEach(functionFn)
     parserResult.pattern.forEach((itemList) => {
       itemList.forEach(functionFn)
     })

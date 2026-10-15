@@ -34,6 +34,12 @@ export async function analyze(ctx: BambooContext, options: AnalysisOptions = {})
       const report = reporter.getTokenReport()
       return { report, formatted: formatTokenReport(report.getSummary(), format) }
     },
+    /** Every pattern the config defines, and how often each is called. */
+    getPatternReport: () => reporter.getPatternReport(),
+    /** Every style property written, and how often. */
+    getUtilityReport: () => reporter.getUtilityReport(),
+    /** Every keyframe the theme defines, and how often an animation names it. */
+    getKeyframeReport: () => reporter.getKeyframeReport(),
     writeReport(filePath: string) {
       const dirname = ctx.runtime.path.dirname(filePath)
       ctx.runtime.fs.ensureDirSync(dirname)

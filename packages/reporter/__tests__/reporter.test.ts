@@ -18,6 +18,19 @@ const ctx = createContext({
   },
 })
 
+const reporterFor = (code: string) => {
+  ctx.project.addSourceFile('code.tsx', code)
+  const reporter = new Reporter(ctx, {
+    parserOptions: ctx.parserOptions,
+    parseFile: (file) => ctx.parseFile(file),
+    prepare: (files) => ctx.prepareNativeExtraction(files),
+    getRelativePath: ctx.runtime.path.relative,
+    getFiles: () => ['code.tsx'],
+  })
+  reporter.init()
+  return reporter
+}
+
 const tokenReport = (code: string) => {
   ctx.project.addSourceFile('code.tsx', code)
   const reporter = new Reporter(ctx, {
@@ -91,6 +104,59 @@ describe('reporter', () => {
         },
       ]
     `)
+  })
+
+  /**
+   * A value keyed by a condition — `{ base, md }` — is the value of the property above it. One
+   * keyed `base` was counted as a property named `base`, and one keyed `md` with no token type, so
+   * a token used only at a breakpoint was reported unused. And `sva()` was never read at all.
+   */
+  it('counts the tokens a value names under a condition, and in sva', () => {
+    const summary = tokenReport(`
+    import { css, sva } from "styled-system/css"
+
+    css({ color: { base: 'red.200', md: 'blue.200' }, _hover: { bg: { md: 'green.200' } } })
+    sva({ slots: ['root'], base: { root: { color: 'yellow.200' } } })
+    `)
+    const colors = summary.find((entry) => entry.category === 'colors')
+
+    expect(colors?.usedCount).toBe(4)
+    expect([...(colors?.mostUsedNames ?? [])].sort()).toEqual(['blue.200', 'green.200', 'red.200', 'yellow.200'])
+  })
+
+  // An arbitrary condition is as much one as a named one.
+  it('counts the token a value names under an arbitrary selector', () => {
+    const summary = tokenReport(`
+    import { css } from "styled-system/css"
+
+    css({ color: { '&:hover': 'red.200', '@media (min-width: 40em)': 'blue.200' } })
+    `)
+    const colors = summary.find((entry) => entry.category === 'colors')
+
+    expect([...(colors?.mostUsedNames ?? [])].sort()).toEqual(['blue.200', 'red.200'])
+  })
+
+  /**
+   * A `cva()` config is read for its styles, as a config recipe is: `defaultVariants` names
+   * variants, not properties, and a compound variant's `css` is styles like any other.
+   */
+  it('reads the styles of a cva config, and the conditions in them', () => {
+    const { report } = reporterFor(`
+    import { cva } from "styled-system/css"
+
+    export const card = cva({
+      base: { _hover: { color: 'red.200' } },
+      variants: { size: { sm: { fontSize: 'lg' } } },
+      compoundVariants: [{ size: 'sm', css: { color: 'green.200' } }],
+      defaultVariants: { size: 'sm' },
+    })
+    `)
+    const [, maps] = [...report.derived.byFilePathMaps].find(([file]) => file.endsWith('code.tsx'))!
+    const { byPropertyName, byConditionName, byTokenName } = maps
+
+    expect([...byPropertyName.keys()].sort()).toEqual(['color', 'fontSize'])
+    expect([...byConditionName.keys()]).toEqual(['_hover'])
+    expect(byTokenName.has('green.200')).toBe(true)
   })
 
   /**

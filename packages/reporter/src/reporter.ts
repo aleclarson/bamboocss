@@ -6,6 +6,14 @@ import { version } from '../package.json'
 import { classifyProject } from './classify'
 import { analyzeRecipes, type RecipeReportEntry } from './reporter-recipe'
 import { analyzeTokens, type TokenAnalysisReport } from './reporter-token'
+import {
+  analyzeKeyframes,
+  analyzePatterns,
+  analyzeUtilities,
+  type KeyframeReportEntry,
+  type PatternReportEntry,
+  type UtilityReportEntry,
+} from './reporter-usage'
 
 export class Reporter {
   #parserResults = new Map<string, ParserResultInterface>()
@@ -34,7 +42,7 @@ export class Reporter {
     const { getFiles, prepare } = this.options
 
     const files = getFiles()
-    logger.info('analyze', `Analyzing ${files.length} file(s) for token and recipe usage...`)
+    logger.info('analyze', `Analyzing ${files.length} file(s) for usage...`)
 
     // One native pass for the whole set, rather than one per file.
     prepare?.(files)
@@ -79,6 +87,16 @@ export class Reporter {
   getTokenReport = (): TokenAnalysisReport => analyzeTokens(this.options.parserOptions, this.#report)
 
   getRecipeReport = (): RecipeReportEntry[] => analyzeRecipes(this.options.parserOptions, this.#report)
+
+  getPatternReport = (): PatternReportEntry[] => analyzePatterns(this.options.parserOptions, this.#parserResults)
+
+  getUtilityReport = (): UtilityReportEntry[] =>
+    analyzeUtilities(
+      this.#report,
+      (name) => this.ctx.isValidProperty(name) && !this.ctx.conditions.isCondition(name) && name !== 'css',
+    )
+
+  getKeyframeReport = (): KeyframeReportEntry[] => analyzeKeyframes(this.options.parserOptions, this.#report)
 }
 
 export interface ReporterOptions {
