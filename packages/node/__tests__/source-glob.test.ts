@@ -1,0 +1,174 @@
+import glob from 'fast-glob'
+import { execFileSync } from 'node:child_process'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
+import picomatch from 'picomatch'
+import { afterAll, beforeAll, describe, expect, test } from 'vitest'
+import { globIgnore, nodeRuntime } from '../src/node-runtime'
+
+const root = realpathSync(mkdtempSync(join(tmpdir(), 'bamboo-source-glob-')))
+afterAll(() => rmSync(root, { force: true, recursive: true }))
+
+const link = process.platform === 'win32' ? 'junction' : 'dir'
+/** As the glob spells a path, which is with `/` on every platform. */
+const path = (...segments: string[]) => join(...segments).replaceAll('\\', '/')
+
+const files = (cwd: string, entries: string[]) => {
+  for (const entry of entries) {
+    mkdirSync(join(cwd, entry, '..'), { recursive: true })
+    writeFileSync(join(cwd, entry), '')
+  }
+  return cwd
+}
+
+/**
+ * Globs over a loop, each in a process of its own. The glob is synchronous, so a walk that never
+ * ended would hang this worker — and a CI job with it, until the job's own limit — not fail it.
+ */
+const globApart = (inputs: Record<string, { cwd: string; include: string[] }>): Record<string, string[]> => {
+  const { BAMBOO_DEBUG: _, ...env } = process.env
+  const script = `
+    import { nodeRuntime } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, '../src/node-runtime.ts')).href)}
+    const inputs = ${JSON.stringify(inputs)}
+    process.stdout.write(JSON.stringify(Object.fromEntries(
+      Object.entries(inputs).map(([name, input]) => [name, nodeRuntime.fs.glob(input)]),
+    )))
+  `
+  const cli = createRequire(import.meta.url).resolve('tsx/cli')
+  return JSON.parse(execFileSync(process.execPath, [cli, '-e', script], { encoding: 'utf8', env, timeout: 30_000 }))
+}
+
+/**
+ * The source glob follows symbolic links — a workspace package, a folder linked into `src` — and a
+ * link back into a folder it was reading took it round again, lap after lap, until the system would
+ * resolve no longer a chain of links: each file returned some thirty times. Two such links on the
+ * way doubled the laps each time round, and the build hung at the glob, with nothing to say why.
+ */
+describe('the source glob, round a loop', () => {
+  const cycle = files(join(root, 'cycle'), ['src/a/app.tsx', 'x.css'])
+  symlinkSync(join(cycle, 'src'), join(cycle, 'src/a/loop'), link)
+  symlinkSync(join(cycle, 'src/a'), join(cycle, 'src/alias'), link)
+
+  const mutual = files(join(root, 'mutual'), ['src/a/a.tsx', 'src/b/b.tsx'])
+  symlinkSync(join(mutual, 'src/b'), join(mutual, 'src/a/to-b'), link)
+  symlinkSync(join(mutual, 'src/a'), join(mutual, 'src/b/to-a'), link)
+
+  // Every project under `tmpdir()` on macOS is reached through a link: `/var` is `/private/var`.
+  const project = files(join(root, 'real-project'), ['src/a/app.tsx'])
+  symlinkSync(join(project, 'src'), join(project, 'src/a/loop'), link)
+  const linked = join(root, 'linked-project')
+  symlinkSync(project, linked, link)
+
+  const above = files(join(root, 'above'), ['src/app.tsx'])
+  symlinkSync(above, join(above, 'src/up'), link)
+
+  let results: Record<string, string[]>
+  beforeAll(() => {
+    results = globApart({
+      above: { cwd: above, include: ['src/**/*.tsx'] },
+      beside: { cwd: cycle, include: ['src/*/*.tsx', 'src/a/loop/**/*.tsx'] },
+      cycle: { cwd: cycle, include: ['src/**/*.tsx'] },
+      cycleOnly: { cwd: cycle, include: ['src/*/loop/**/*.tsx'] },
+      fromLoop: { cwd: cycle, include: ['src/a/loop/**/*.tsx'] },
+      linked: { cwd: linked, include: ['src/**/*.tsx'] },
+      merged: { cwd: cycle, include: ['*.css', 'src/a/loop/**/*.tsx'] },
+      mutual: { cwd: mutual, include: ['src/**/*.tsx'] },
+      shallow: { cwd: cycle, include: ['src/*/*.tsx'] },
+    })
+  }, 60_000)
+
+  test('ends at a link back into a folder it is reading, with every path short of the loop', () => {
+    expect(results.cycle).toEqual([path(cycle, 'src/a/app.tsx'), path(cycle, 'src/alias/app.tsx')])
+  })
+
+  test('ends at two links into one another', () => {
+    expect(results.mutual).toEqual([
+      path(mutual, 'src/a/a.tsx'),
+      path(mutual, 'src/a/to-b/b.tsx'),
+      path(mutual, 'src/b/b.tsx'),
+      path(mutual, 'src/b/to-a/a.tsx'),
+    ])
+  })
+
+  // Closed where a real one's is, not a lap later.
+  test('ends as soon from a cwd reached through a link', () => {
+    expect(results.linked).toEqual([path(linked, 'src/a/app.tsx')])
+  })
+
+  // Above where the walk began, so the loop closes a lap later, on the link's second showing.
+  test('ends at a link to a folder above the one it began at', () => {
+    expect(results.above).toEqual([path(above, 'src/app.tsx'), path(above, 'src/up/src/app.tsx')])
+  })
+
+  // Through the link that closes the loop, which is not followed: a pattern only a path round it
+  // can meet matches nothing, as with `find -L`. It met a lap's worth of paths, some thirty.
+  test('matches nothing for a pattern only a path round the loop meets', () => {
+    expect(results.cycleOnly).toEqual([])
+  })
+
+  // Begun inside the loop, a walk goes round it once from there.
+  test('goes round once from a walk begun inside the loop', () => {
+    expect(results.fromLoop).toEqual([path(cycle, 'src/a/loop/a/app.tsx'), path(cycle, 'src/a/loop/alias/app.tsx')])
+  })
+
+  // Each pattern is walked from its own folder: one that reads the folder another begins at, and
+  // lists that as a link, takes nothing from what the other matches — nor does one that would have
+  // `fast-glob` begin a single walk for both at `.`.
+  test('matches for each pattern what it matches alone', () => {
+    expect(results.beside).toEqual([...new Set([...results.shallow!, ...results.fromLoop!])].sort())
+    expect(results.beside).toHaveLength(4)
+    expect(results.merged).toEqual([...results.fromLoop!, path(cycle, 'x.css')])
+  })
+})
+
+/**
+ * No loop, so every path is the one `fast-glob` gives: a folder only a link reaches, two links to
+ * one folder, a link to nothing, and a link inside a linked folder to a sibling whose name begins
+ * with that folder's — no loop, though a check by prefix would take it for one and lose what is in
+ * it.
+ */
+test('the source glob returns what fast-glob does wherever no link loops', () => {
+  const cwd = files(join(root, 'acyclic'), ['src/app.tsx'])
+  files(root, ['packages/ui/button.tsx', 'packages/ui-theme/theme.tsx'])
+  symlinkSync(join(root, 'packages/ui'), join(cwd, 'src/ui'), link)
+  symlinkSync(join(root, 'packages/ui'), join(cwd, 'src/ui-again'), link)
+  symlinkSync(join(root, 'packages/ui-theme'), join(root, 'packages/ui/theme'), link)
+  symlinkSync(join(cwd, 'src/missing'), join(cwd, 'src/gone'), link)
+  const include = ['src/**/*.tsx']
+
+  const result = nodeRuntime.fs.glob({ cwd, include })
+
+  expect(result).toEqual(glob.sync(include, { absolute: true, cwd, ignore: globIgnore(undefined) }).sort())
+  expect(result).toContain(path(cwd, 'src/ui/theme/theme.tsx'))
+})
+
+/**
+ * The glob finds the inventory, and `Builder.isPotentialSourceFile` — this matcher — decides
+ * whether a file that appears later belongs to it, and whether the compiler reads a module at all.
+ * Where the two disagree, a module is compiled into classes the stylesheet was never built from.
+ */
+describe('the source glob, against membership', () => {
+  const cwd = join(root, 'membership')
+  const entries = ['src/app.tsx', 'src/legacy/old.tsx', 'src/ui/button.tsx']
+  files(cwd, entries)
+
+  test.each<[string[], string[]?]>([
+    // A glob matches files, so a directory alone matches nothing — not everything under it.
+    [['src']],
+    [['src/']],
+    // A trailing slash names only a directory, kept or ignored.
+    [['src/*/']],
+    [['src/**/*.tsx'], ['src/legacy/']],
+    [['src/**/*.tsx', '!src/legacy/']],
+    [['src/**/*.tsx'], ['src/legacy/**']],
+  ])('%j, excluding %j', (include, exclude) => {
+    const member = picomatch(include, { ignore: globIgnore(exclude) })
+
+    expect(nodeRuntime.fs.glob({ cwd, exclude, include })).toEqual(
+      entries.filter((entry) => member(entry)).map((entry) => path(cwd, entry)),
+    )
+  })
+})

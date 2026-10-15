@@ -3,6 +3,7 @@ import type { Runtime } from '@bamboocss/types'
 import chokidar from 'chokidar'
 import glob from 'fast-glob'
 import fsExtra from 'fs-extra'
+import { readdirSync, realpathSync, statSync, type Stats, type StatSyncOptions } from 'node:fs'
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'path'
 import picomatch from 'picomatch'
 import { globDirname } from './glob-dirname'
@@ -43,6 +44,129 @@ export const globIgnore = (exclude: string[] | undefined) => ['**/*.d.ts', ...(e
  */
 export const sortSources = (files: string[]) => files.sort()
 
+const slashes = (path: string) => path.replaceAll('\\', '/')
+
+/**
+ * A folder's entry, joined as the walk joins it — onto the path it read, with `/` unless that path
+ * ends in one already — and spelled as every path here is, with `/`.
+ */
+const entryPath = (directory: string, name: string) =>
+  slashes(directory.endsWith('/') ? directory + name : `${directory}/${name}`)
+
+interface WalkedDirectory {
+  /** The folder it was listed in, when this walk read that one as well. */
+  parent: string | undefined
+  /** Whether it was listed as a symbolic link. */
+  link: boolean
+  /** The device and inode behind it, once known. */
+  identity?: string
+  /** Where it really is, once asked. */
+  real?: string
+}
+
+const identify = (stats: { dev: number; ino: number }) => `${stats.dev}:${stats.ino}`
+
+/**
+ * One walk's `readdirSync` and `statSync`, which end the walk where a link leads back into it.
+ *
+ * The glob follows symbolic links — how a workspace package or a folder linked into `src` is read
+ * at all — and a link to a folder the walk was inside took it round that folder again, and again:
+ * once per lap until the system would resolve no deeper a chain of links, some thirty of them, with
+ * every file returned once per lap — and with two such links on the way, the laps doubled each
+ * time round, and the build hung at the glob with nothing to say why. Every folder the walk reads
+ * is listed here, so a link whose folder is one the walk is already inside is read as empty, as
+ * `find -L` reads it: all of it is being read already, by the path that reached it first. A link
+ * that closes no loop is followed, and every path through it returned, as before.
+ *
+ * Only a link is asked, since only a link can close a loop, and by what the walk already learns of
+ * it: listing a link, the walk stats it, which names the folder behind it by device and inode. The
+ * folders above it are stat'd once each — mostly, just the one the walk began at — and a real path
+ * is resolved only where two of those match, to tell apart inodes too large to be told apart.
+ */
+const stopAtCycles = () => {
+  const directories = new Map<string, WalkedDirectory>()
+  /** Every entry listed that is a symbolic link, by its path, and what the walk's stat of it found. */
+  const links = new Map<string, string | undefined>()
+
+  const identityOf = (directory: string): string => {
+    const walked = directories.get(directory)!
+    if (walked.identity === undefined) {
+      try {
+        walked.identity = (walked.link && links.get(directory)) || identify(statSync(directory))
+      } catch {
+        walked.identity = directory
+      }
+    }
+    return walked.identity
+  }
+
+  const realDirectory = (directory: string): string => {
+    const walked = directories.get(directory)!
+    if (walked.real === undefined) {
+      try {
+        walked.real = slashes(realpathSync.native(directory))
+      } catch {
+        walked.real = directory
+      }
+    }
+    return walked.real
+  }
+
+  const readdir = ((path: string, options?: { withFileTypes?: boolean }) => {
+    const directory = slashes(String(path))
+    // Its folder as the walk spelled it, which keeps its separator for a root.
+    const cut = directory.lastIndexOf('/')
+    const above = directory.slice(0, cut)
+    const parent = directories.has(above)
+      ? above
+      : directories.has(directory.slice(0, cut + 1))
+        ? directory.slice(0, cut + 1)
+        : undefined
+    const link = links.has(directory)
+    directories.set(directory, { link, parent })
+
+    if (link) {
+      for (let ancestor = parent; ancestor !== undefined; ancestor = directories.get(ancestor)!.parent) {
+        if (identityOf(ancestor) !== identityOf(directory)) continue
+        if (realDirectory(ancestor) !== realDirectory(directory)) continue
+        logger.debug('glob', `${directory} leads back into ${ancestor}, which is read already`)
+        return []
+      }
+    }
+
+    const entries = readdirSync(path, { withFileTypes: true })
+    for (const entry of entries) if (entry.isSymbolicLink()) links.set(entryPath(String(path), entry.name), undefined)
+    return options?.withFileTypes ? entries : entries.map((entry) => entry.name)
+  }) as unknown as typeof readdirSync
+
+  const stat = ((path: string, options?: StatSyncOptions) => {
+    const stats = statSync(path, options)
+    const key = slashes(String(path))
+    if (stats && links.has(key)) links.set(key, identify(stats as Stats))
+    return stats
+  }) as typeof statSync
+
+  return { readdirSync: readdir, statSync: stat }
+}
+
+/**
+ * A task's patterns, by the folder each is walked from when it is alone.
+ *
+ * `fast-glob` walks every pattern inside `cwd` from `.` once any of them starts there, which saves
+ * reading folders twice — and would make where a loop closes, and so what a pattern behind a link
+ * matches, hang on its neighbours: `src/a/loop/**` matches through `src/a/loop` when walked from
+ * there, and nothing once `*.css` beside it has the walk start at `.` and meet `src` first.
+ */
+const byOwnBase = (task: glob.Task, cwd: string | undefined) => {
+  if (task.base !== '.' || task.positive.length < 2) return [task.positive]
+  const groups = new Map<string, string[]>()
+  for (const pattern of task.positive) {
+    const base = glob.generateTasks([pattern], { cwd })[0]?.base ?? '.'
+    groups.set(base, [...(groups.get(base) ?? []), pattern])
+  }
+  return [...groups.values()]
+}
+
 export const nodeRuntime: Runtime = {
   cwd() {
     return process.cwd()
@@ -70,7 +194,20 @@ export const nodeRuntime: Runtime = {
     glob(opts) {
       if (!opts.include) return []
 
-      return sortSources(glob.sync(opts.include, { cwd: opts.cwd, ignore: globIgnore(opts.exclude), absolute: true }))
+      // One walk per folder a pattern starts from, each watched on its own and given the negatives
+      // once — they come back in every task, `ignore` among them.
+      const { cwd } = opts
+      const walks: string[][] = []
+      for (const task of glob.generateTasks(opts.include, { cwd, ignore: globIgnore(opts.exclude) })) {
+        const negatives = task.negative.map((pattern) => `!${pattern}`)
+        for (const patterns of byOwnBase(task, cwd)) {
+          walks.push(glob.sync([...patterns, ...negatives], { absolute: true, cwd, fs: stopAtCycles() }))
+        }
+      }
+      const files = sortSources(walks.length === 1 ? walks[0]! : walks.flat())
+      // A path two walks both reach — `src/**` and `src/ui/**` — once, as `fast-glob` gives it; sorted
+      // already, so a repeat sits beside its first.
+      return walks.length > 1 ? files.filter((file, index) => index === 0 || file !== files[index - 1]) : files
     },
     writeFile: fsExtra.writeFile,
     writeFileSync: fsExtra.writeFileSync,
