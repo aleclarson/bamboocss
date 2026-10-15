@@ -37,7 +37,7 @@ node scripts/generate-theme.mjs --clean
    - `typography/fonts.ts` - Font families (`Tokens['fonts']`)
    - `typography/weights.ts` - Font weights (`Tokens['fontWeights']`)
    - `typography/lineHeights.ts` - Line heights (`Tokens['lineHeights']`)
-   - `textStyles.ts` - Semantic typography presets combining font properties (`Theme['textStyles']`)
+   - `mixins.ts` - Semantic typography presets combining font properties (`Theme['mixins']`)
    - `radii.ts` - Border radii (`Tokens['radii']`)
    - `shadows.ts` - Box shadows with `_light`/`_dark` variants (`SemanticTokens['shadows']`)
    - `durations.ts` - Animation durations from @atlaskit/motion (`Tokens['durations']`)
@@ -98,9 +98,9 @@ The generation script uses raw token data from multiple sources:
 - **Light/Dark themes**: Colors, opacity, spacing, typography, shape, shadows
   - Semantic tokens use `_light`/`_dark` pattern (not `base`/`_dark`)
   - Regular tokens for values that are the same in both themes
-- **Typography**: Font shorthand parsed into fonts, sizes, weights, lineHeights, and textStyles
+- **Typography**: Font shorthand parsed into fonts, sizes, weights, lineHeights, and mixins
   - Standalone weight/family tokens extracted separately
-  - TextStyles combine all font properties for semantic usage
+  - Mixins combine all font properties for semantic usage
 - **Shadow tokens**: Converted from array format to CSS box-shadow strings
 - **Shape tokens**: Only `radius.*` used; `border.width` excluded
 
@@ -181,7 +181,7 @@ The preset includes comprehensive token coverage from Atlassian Design System:
 - ✅ **Opacity** - `disabled`, `loading`
 - ✅ **Spacing** - Full scale including negative values
 - ✅ **Typography** - Sizes, fonts, weights, lineHeights
-- ✅ **TextStyles** - Semantic presets (heading, body, code, metric)
+- ✅ **Mixins** - Semantic typography presets (heading, body, code, metric)
 - ✅ **Radii** - Border radius values
 - ✅ **Shadows** - Elevation shadows with theme variants
 - ✅ **Durations** - Animation timing (none, small, medium, large)

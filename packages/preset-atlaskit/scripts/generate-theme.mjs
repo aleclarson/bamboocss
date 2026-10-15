@@ -665,10 +665,11 @@ function generateTheme() {
   generateFile('typography/weights.ts', 'fontWeights', typography.fontWeights, 'Tokens')
   generateFile('typography/lineHeights.ts', 'lineHeights', typography.lineHeights, 'Tokens')
 
-  // Process text styles
+  // Process text styles, which a preset declares as mixins: `theme.mixins` replaced
+  // `textStyles`, and `css({ mixin: 'heading.large' })` applies one.
   console.log('📦 Processing text styles...')
-  const textStyles = processTextStyles(atlassianTypography)
-  generateFile('textStyles.ts', 'textStyles', textStyles, 'Theme')
+  const mixins = processTextStyles(atlassianTypography)
+  generateFile('mixins.ts', 'mixins', mixins, 'Theme')
 
   // Process radii (only radius tokens, not border.width)
   console.log('📦 Processing shape/radii tokens...')
@@ -711,7 +712,7 @@ function generateTheme() {
     `import { fonts } from './typography/fonts'`,
     `import { fontWeights } from './typography/weights'`,
     `import { lineHeights } from './typography/lineHeights'`,
-    `import { textStyles } from './textStyles'`,
+    `import { mixins } from './mixins'`,
   ]
 
   const tokenEntries = [
@@ -747,7 +748,7 @@ ${tokenEntries.join('\n')}
       colors: semanticColors,
       shadows: semanticShadows,
     },
-    textStyles: textStyles,
+    mixins,
   },
 })
 
