@@ -1,3 +1,7 @@
+// @vitest-environment node
+// Loads a `bamboo.config.mjs` written outside the project, and an ES module config is imported from a
+// temporary file. happy-dom reads modules as a browser would and cannot resolve one outside the
+// project; a build loads its config in Node, which is what this pins.
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
