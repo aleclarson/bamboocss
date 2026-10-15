@@ -272,7 +272,7 @@ describe('generateSemanticTokensSpec', () => {
           {
             "cssVar": "var(--colors-text)",
             "deprecated": undefined,
-            "description": undefined,
+            "description": "Text color that adapts to theme",
             "name": "text",
             "values": [
               {

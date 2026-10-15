@@ -204,12 +204,13 @@ export class TokenDictionary {
       // A number is a value in its own right, as it is for a plain token, so it is wrapped like a
       // string. Unwrapped, it was read as a map of conditions with no `base`, and a base of `0` was
       // dropped as falsy; either way the variable was never declared.
-      const normalizedToken =
-        isString(token.value) || typeof token.value === 'number' || isCompositeTokenValue(token.value)
-          ? { value: { base: token.value } }
-          : token
-
-      const { value, ...restData } = normalizedToken
+      //
+      // Only the value is: the rest of the token is the token's, however its value is written. A
+      // whole token was built around a wrapped value, which lost its `description`, `deprecated`
+      // and `extensions` — all of which a condition map, used as written, kept.
+      const { value: written, ...restData } = token
+      const value =
+        isString(written) || typeof written === 'number' || isCompositeTokenValue(written) ? { base: written } : written
 
       const node = new Token({
         ...restData,
@@ -218,8 +219,11 @@ export class TokenDictionary {
         path,
       })
 
+      // `condition` is the dictionary's to set: the token declared is the base one, whatever its
+      // `extensions` say, and each of its conditions is a token of its own.
       node.setExtensions({
         category,
+        condition: 'base',
         conditions: value,
         rawValue: value,
         prop: this.formatTokenName(path.slice(1)),
@@ -255,12 +259,22 @@ export class TokenDictionary {
     Object.entries(themes).forEach(([theme, themeVariant]) => {
       const condName = '_theme' + capitalize(theme)
 
-      // Treat theme.tokens as semanticTokens wrapped under the theme condition (e.g. _themeDark)
+      // Treat theme.tokens as semanticTokens wrapped under the theme condition (e.g. _themeDark).
+      // What the theme says of the token goes with it, for its spec, but not its `extensions`:
+      // the token registered is a virtual one, named as the token it overrides.
+      // Typed as `processSemantic` takes a token: as the recursive map a theme walks, which a token
+      // with a `description` beside its `value` does not fit.
+      const themeToken = (token: Pick<Token, 'value' | 'description' | 'deprecated'>) =>
+        ({
+          value: { [condName]: token.value },
+          ...(token.description !== undefined && { description: token.description }),
+          ...(token.deprecated !== undefined && { deprecated: token.deprecated }),
+        }) as unknown as SemanticTokens[keyof SemanticTokens]
+
       walkObject(
         themeVariant.tokens ?? {},
         (token, path) => {
-          const themeToken = { value: { [condName]: token.value } }
-          const node = processSemantic(themeToken, path)
+          const node = processSemantic(themeToken(token), path)
           node.setExtensions({ theme, isVirtual: true })
           this.registerToken(node)
         },
@@ -270,8 +284,7 @@ export class TokenDictionary {
       walkObject(
         themeVariant.semanticTokens ?? {},
         (token, path) => {
-          const themeToken = { value: { [condName]: token.value } }
-          const node = processSemantic(themeToken, path)
+          const node = processSemantic(themeToken(token), path)
           node.setExtensions({ theme, isSemantic: true, isVirtual: true })
           this.registerToken(node)
         },

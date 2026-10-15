@@ -62,7 +62,9 @@ export class Token {
       this.description = input.description
     }
 
-    this.extensions = input.extensions ?? {}
+    // A copy: the input's is the config's own object, which may be frozen, and which a token's
+    // bookkeeping has no business writing into.
+    this.extensions = { ...input.extensions }
     this.extensions.condition = input.extensions?.condition ?? 'base'
     this.deprecated = input.deprecated
 
@@ -146,6 +148,7 @@ export class Token {
       type: this.type,
       path: [...this.path],
       description: this.description,
+      deprecated: this.deprecated,
       extensions: cloneDeep(this.extensions),
     })
   }
