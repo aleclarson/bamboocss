@@ -87,7 +87,8 @@ export interface BambooVitePluginOptions {
 }
 
 const DEFAULT_EXTENSIONS = /\.(?:[cm]?[jt]sx?|tsrx)$/
-const SFC_EXTENSIONS = /\.(?:vue|svelte|astro)$/i
+/** Sources a framework plugin compiles to JavaScript, which the post plugin folds. MDX is one too. */
+const SFC_EXTENSIONS = /\.(?:vue|svelte|astro|mdx)$/i
 /**
  * Framework script submodules. Vue spells `lang.ts` as a bare query key; Svelte uses
  * `lang=ts`; both set `type=script`. The compiler must see that JS, not the wrapping SFC —
@@ -96,6 +97,12 @@ const SFC_EXTENSIONS = /\.(?:vue|svelte|astro)$/i
 const SFC_SCRIPT_QUERY = /[?&](?:type=script(?:&|$)|lang\.tsx?(?:&|$)|lang=tsx?(?:&|$)|lang\.jsx?(?:&|$))/i
 const SFC_JSX_QUERY = /[?&](?:lang\.tsx|lang=tsx|lang\.jsx|lang=jsx)(?:&|$)/i
 const SFC_SCRIPT_TAG = /<script[\s>/]/i
+/**
+ * What MDX compiles a document to: its content as a function, whichever JSX runtime it calls,
+ * declared at the start of a line. A document that reaches this uncompiled, with no MDX plugin
+ * ahead of it, fails in Vite whichever this answers.
+ */
+const COMPILED_MDX = /^(?:export default )?function (?:_createMdxContent|MDXContent)\b/m
 const NODE_MODULES = /node_modules/
 const TRANSFORM_META_KEY = 'bamboocss:transform'
 const TRANSFORM_ARTIFACT_VERSION = 5 as const
@@ -162,6 +169,9 @@ export const shouldTransform = (id: string) => {
  *
  * Returns `null` when the module is still a raw SFC and must be left to the framework plugin.
  * Astro frontmatter is `---`, not `<script>`, so a tag check alone would parse the template.
+ *
+ * An `.mdx` id is the document or MDX's JavaScript for it, which is JSX calls and the document's
+ * own imports and exports — parsed as TSX, since MDX can be told to keep JSX as it is.
  */
 /** The module specifiers that reach bamboo — the `styled-system` paths and any `importMap` — per context. */
 const entrypointNeedles = new WeakMap<object, string[]>()
@@ -240,6 +250,7 @@ export const compilerParsePath = (id: string, code: string): string | null => {
   // so it parses JSX while leaving the original module ID intact for Vite and extraction.
   if (/\.tsrx$/i.test(filePath)) return `${filePath}.__bamboo__.tsx`
   if (!SFC_EXTENSIONS.test(filePath)) return filePath
+  if (/\.mdx$/i.test(filePath)) return COMPILED_MDX.test(code) ? `${filePath}.__bamboo__.tsx` : null
   const normalizedQuery = `?${query}`
   if (SFC_SCRIPT_QUERY.test(normalizedQuery)) {
     return `${filePath}.__bamboo__.${SFC_JSX_QUERY.test(normalizedQuery) ? 'tsx' : 'ts'}`
@@ -369,7 +380,7 @@ const formatSkipped = (id: string, skipped: SkippedCall[], root: string) => {
  *
  * Three plugins. The first emits the stylesheet as a virtual module. The second compiles
  * JavaScript and TypeScript with `enforce: 'pre'` so it sees source close to what the CSS
- * extractor reads off disk. The third compiles Vue, Svelte and Astro with `enforce: 'post'`
+ * extractor reads off disk. The third compiles Vue, Svelte, Astro and MDX with `enforce: 'post'`
  * so it folds the framework's compiled JavaScript — a `pre` hook that skipped the raw SFC
  * would never run again on the same id. Script submodules (`type=script`) are SFC paths and
  * therefore fold in the post plugin, after the framework has extracted them.
@@ -607,7 +618,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     /**
      * Exact bytes and parser identity used by the last successful dev transform.
      *
-     * SFC source on disk is not what Bamboo folds: Vue, Svelte and Astro hand the post
+     * SFC source on disk is not what Bamboo folds: Vue, Svelte, Astro and MDX hand the post
      * plugin compiled JavaScript. Retaining that input lets the unchanged-output HMR check
      * re-fold the same module without reading and parsing the raw template.
      */

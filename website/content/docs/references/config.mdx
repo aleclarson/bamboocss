@@ -422,6 +422,11 @@ List of files glob to watch for changes.
 }
 ```
 
+Besides JavaScript and TypeScript, `.vue`, `.svelte`, `.astro` and `.mdx` files are read, each through a conversion. Of
+an MDX document, what MDX runs is read — its imports and exports, its JSX and `{expressions}` — and its prose and code
+examples are not, so a `css()` in a code block is never a style. Under the Vite plugin, the module MDX's own plugin
+(`@mdx-js/rollup`) compiles a document to is compiled in turn.
+
 ### exclude
 
 **Type**: `string[]`

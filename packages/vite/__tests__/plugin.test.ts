@@ -93,6 +93,16 @@ describe('plugin contract', () => {
     expect(
       compilerParsePath('/app/src/Page.astro', 'import { css } from "s"\nexport const x = css({ color: "red.300" })'),
     ).toBe('/app/src/Page.astro.__bamboo__.ts')
+
+    // MDX's, once MDX has compiled the document. @see fold-mdx.test.ts
+    expect(shouldTransform('/app/src/Doc.mdx')).toBe(true)
+    expect(compilerParsePath('/app/src/Doc.mdx', 'import { css } from "s"\n\n# Title\n')).toBeNull()
+    expect(
+      compilerParsePath(
+        '/app/src/Doc.mdx',
+        'function _createMdxContent(props) {}\nexport default function MDXContent() {}',
+      ),
+    ).toBe('/app/src/Doc.mdx.__bamboo__.tsx')
   })
 
   test('SFC compilation runs after framework plugins', () => {
