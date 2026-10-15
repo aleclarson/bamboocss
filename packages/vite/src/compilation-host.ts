@@ -154,6 +154,13 @@ export const createCompilationHost = (options: CompilationHostOptions = {}): Com
     return changes
   }
 
+  /**
+   * A changed file as Vite named it — by where it really is — and, where the inventory read it
+   * through a link, as the inventory spells it, each way it does. All are kept: the inventory's
+   * spellings are what extraction re-reads, and the real one is what the compiler's resolution read.
+   */
+  const spellingsOf = (filePath: string) => [filePath, ...(builder?.context ? builder.toSourcePaths(filePath) : [])]
+
   const restoreSourceChanges = (changes: {
     files: readonly string[]
     needsInventoryScan?: boolean
@@ -279,20 +286,25 @@ export const createCompilationHost = (options: CompilationHostOptions = {}): Com
     noteSourceChange(filePath, event, options) {
       // Production watch retains Builder's filesystem discovery. The journal is authoritative
       // only where configureServer installs the complementary add/delete watcher.
-      if (command === 'serve') recordSourceChange(filePath, event, options)
+      if (command !== 'serve') return
+      for (const path of spellingsOf(filePath)) recordSourceChange(path, event, options)
     },
 
     reloadSource(filePath) {
-      recordSourceChange(filePath, 'update')
-      builder?.reloadSource(filePath)
+      for (const path of spellingsOf(filePath)) {
+        recordSourceChange(path, 'update')
+        builder?.reloadSource(path)
+      }
     },
 
     removeSource(filePath) {
       // configureServer owns the membership verdict for add/delete events. Treat the compiler's
       // Project mutation as an exact-path edit so an unrelated transformable deletion cannot
       // force a full inventory scan; a relevant deletion is separately journaled as `delete`.
-      recordSourceChange(filePath, 'update')
-      builder?.removeSource(filePath)
+      for (const path of spellingsOf(filePath)) {
+        recordSourceChange(path, 'update')
+        builder?.removeSource(path)
+      }
     },
   }
 }

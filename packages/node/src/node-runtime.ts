@@ -62,6 +62,8 @@ interface WalkedDirectory {
   identity?: string
   /** Where it really is, once asked. */
   real?: string
+  /** Whether it was read as empty, closing a loop. */
+  cut?: boolean
 }
 
 const identify = (stats: { dev: number; ino: number }) => `${stats.dev}:${stats.ino}`
@@ -130,6 +132,7 @@ const stopAtCycles = () => {
         if (identityOf(ancestor) !== identityOf(directory)) continue
         if (realDirectory(ancestor) !== realDirectory(directory)) continue
         logger.debug('glob', `${directory} leads back into ${ancestor}, which is read already`)
+        directories.get(directory)!.cut = true
         return []
       }
     }
@@ -139,14 +142,31 @@ const stopAtCycles = () => {
     return options?.withFileTypes ? entries : entries.map((entry) => entry.name)
   }) as unknown as typeof readdirSync
 
+  /** Every entry listed as a link that is one to a file. */
+  const fileLinks = new Set<string>()
+
   const stat = ((path: string, options?: StatSyncOptions) => {
     const stats = statSync(path, options)
     const key = slashes(String(path))
-    if (stats && links.has(key)) links.set(key, identify(stats as Stats))
+    if (stats && links.has(key)) {
+      links.set(key, identify(stats as Stats))
+      if ((stats as Stats).isFile()) fileLinks.add(key)
+    }
     return stats
   }) as typeof statSync
 
-  return { readdirSync: readdir, statSync: stat }
+  /**
+   * Where this walk began, and the folders and files it reached through a link, as it spelled them —
+   * not a folder it read as empty, which is really one above it.
+   */
+  const linked = () => [
+    ...[...directories].flatMap(([directory, walked]) =>
+      (walked.parent === undefined || walked.link) && !walked.cut ? [directory] : [],
+    ),
+    ...fileLinks,
+  ]
+
+  return { linked, fs: { readdirSync: readdir, statSync: stat } }
 }
 
 /**
@@ -201,7 +221,12 @@ export const nodeRuntime: Runtime = {
       for (const task of glob.generateTasks(opts.include, { cwd, ignore: globIgnore(opts.exclude) })) {
         const negatives = task.negative.map((pattern) => `!${pattern}`)
         for (const patterns of byOwnBase(task, cwd)) {
-          walks.push(glob.sync([...patterns, ...negatives], { absolute: true, cwd, fs: stopAtCycles() }))
+          const walk = stopAtCycles()
+          const found = glob.sync([...patterns, ...negatives], { absolute: true, cwd, fs: walk.fs })
+          walks.push(found)
+          // A pattern without a glob is looked up, not walked: what it found is all there is to tell,
+          // and may be a link, or under one.
+          opts.linked?.push(...walk.linked(), ...(task.dynamic ? [] : found))
         }
       }
       const files = sortSources(walks.length === 1 ? walks[0]! : walks.flat())

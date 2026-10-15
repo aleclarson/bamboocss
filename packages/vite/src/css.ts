@@ -428,6 +428,9 @@ const realPath = (path: string) => {
   }
 }
 
+/** Whether Vite's watcher passes over `path`, as it does everything under `node_modules`. */
+const inNodeModules = (path: string) => path.split(/[\\/]/).includes('node_modules')
+
 /** Whether `path` is `root` or inside it. */
 const within = (root: string, path: string) => {
   const fromRoot = relative(root, path)
@@ -472,6 +475,9 @@ export const bamboocssCss = (options: BambooCssPluginOptions): Plugin => {
       ...new Set(
         [
           ...activeBuilder.getSourceFiles(),
+          // By where each really is too, as Vite names a module: one read through a link is
+          // compiled, edited and reported under that path, not the inventory's.
+          ...activeBuilder.getRealSourceFiles(),
           ...activeBuilder.getResolutionReadFiles(),
           ...activeBuilder.getResolutionConfigurationFiles(),
           ...context.explicitDeps,
@@ -492,16 +498,18 @@ export const bamboocssCss = (options: BambooCssPluginOptions): Plugin => {
    * restarted.
    *
    * Asked as each pass begins — just after it has globbed them, so a file landing in the moment
-   * between is left to the next — since a config reload can move `include`, and as a restarted
-   * server is configured, since its watcher is new and may serve the sheet it remembers without a
-   * pass. A folder is handed to each watcher once, whether or not it is there yet: the watcher
+   * between is left to the next — since a config reload can move `include`; again once it has
+   * extracted, for the links the glob went through; and as a restarted server is configured, since
+   * its watcher is new and may serve the sheet it remembers without a pass. A folder is handed to each watcher once, whether or not it is there yet: the watcher
    * looks for one that is not, and for one deleted and made again, as a package's `dist` is. One a
    * reload no longer names stays watched, its events turned away like any other file's, since
    * unwatching it would also unwatch the modules Vite watches inside it.
    *
-   * Outside means outside the root however either is spelled: Vite's own watch follows a link
-   * inside the root, and a root handed over through a link still holds its real folders. An
-   * `include` above the root — `../**` — watches the folder above, which is what it asks to be read.
+   * Outside means outside the root however either is spelled — Vite's own watch follows a link
+   * inside the root, and a root handed over through a link still holds its real folders — or
+   * under `node_modules`, which that watch passes over: a workspace package `include` names
+   * through its link there is watched where it really is. An `include` above the root — `../**` —
+   * watches the folder above, which is what it asks to be read.
    */
   const watchedDirectories = new WeakMap<object, { root: string; added: Set<string> }>()
   const watchOutsideRoot = (devServer: ViteDevServer, activeBuilder: CompilationBuilder) => {
@@ -511,13 +519,18 @@ export const bamboocssCss = (options: BambooCssPluginOptions): Plugin => {
       watchedDirectories.set(devServer.watcher, watched)
     }
     for (const directory of activeBuilder.getWatchDirectories()) {
-      if (watched.added.has(directory)) continue
-      watched.added.add(directory)
+      // By both, so a folder whose link appears — or is pointed elsewhere — once it was watched is
+      // handed over again where it now really is.
+      const real = realPath(directory)
+      const key = `${directory}\0${real}`
+      if (watched.added.has(key)) continue
+      watched.added.add(key)
       const watchedByVite =
-        within(devServer.config.root, directory) ||
-        within(watched.root, directory) ||
-        within(watched.root, realPath(directory))
-      if (!watchedByVite) devServer.watcher.add(directory)
+        ((within(devServer.config.root, directory) || within(watched.root, directory)) && !inNodeModules(directory)) ||
+        (within(watched.root, real) && !inNodeModules(real))
+      // By where it really is: a folder read through a link under `node_modules`, which Vite's
+      // watcher ignores, is seen there, and its events name files as Vite names their modules.
+      if (!watchedByVite) devServer.watcher.add(real)
     }
   }
 
@@ -586,6 +599,8 @@ export const bamboocssCss = (options: BambooCssPluginOptions): Plugin => {
         session.utilityLayer = activeBuilder.context.config.layers?.utilities ?? 'utilities'
         session.extractedFiles.clear()
         for (const file of extractedSourceFiles()) session.extractedFiles.add(file)
+        // Again, now that extraction has globbed: for the links a pattern's wildcard went through.
+        if (server) watchOutsideRoot(server, activeBuilder)
       }
 
       let graphAtomHashes: Set<string> | undefined

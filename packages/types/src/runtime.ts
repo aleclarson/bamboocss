@@ -10,6 +10,14 @@ interface InputOptions {
   cwd?: string
 }
 
+interface GlobOptions extends InputOptions {
+  /**
+   * Filled with every folder the glob began a walk at, and every folder or file it reached through
+   * a symbolic link, as it spelled them: where a path it returns may really be somewhere else.
+   */
+  linked?: string[]
+}
+
 export type WatcherEventType = 'add' | 'addDir' | 'change' | 'unlink' | 'unlinkDir'
 
 export interface WatchOptions extends InputOptions {
@@ -21,7 +29,7 @@ interface FileSystem {
   existsSync(fileLike: string): boolean
   /** False for a path that does not exist, so a caller never has to test twice. */
   isDirSync(path: string): boolean
-  glob(opts: InputOptions): string[]
+  glob(opts: GlobOptions): string[]
   readFileSync(filePath: string): string
   rmDirSync(dirPath: string): void
   writeFile(file: string, content: string): Promise<void>

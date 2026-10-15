@@ -6,6 +6,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -3985,6 +3986,132 @@ describe('a file added under an include outside the root', () => {
         }
 
         expect(code, 'no added file ever reached the stylesheet').toContain('w_\\\\[741\\\\.2px\\\\]')
+      } finally {
+        await server.close()
+      }
+    }, 120_000)
+  }
+})
+
+/**
+ * A source `include` reaches through a link: a workspace package linked into `node_modules`, as
+ * pnpm links one. Vite names each of its modules by where it really is, which the inventory never
+ * globbed, so a module looked like no source at all: the build refused the classes compiled for it
+ * as outside the CSS extraction graph, and in dev its edits, and a file added beside it, never
+ * reached the stylesheet.
+ */
+describe('a source include reached through a link', () => {
+  const card = (width: string) =>
+    `import { css } from '../../../app/styled-system/css'\nexport const card = css({ width: '[${width}]' })\n`
+
+  const project = (packages = 'node_modules/@acme/ui/src/**/*.tsx') => {
+    const root = realpathSync(mkdtempSync(join(tmpdir(), 'bamboo-linked-include-')))
+    onTestFinished(() => rmSync(root, { force: true, recursive: true }))
+    const app = join(root, 'app')
+    const ui = join(root, 'packages/ui')
+    mkdirSync(join(app, 'src'), { recursive: true })
+    mkdirSync(join(app, 'node_modules/@acme'), { recursive: true })
+    mkdirSync(join(ui, 'src'), { recursive: true })
+    // A workspace, as Vite finds one: it serves the packages beside the app, not only the app.
+    writeFileSync(join(root, 'pnpm-workspace.yaml'), `packages: ['app', 'packages/*']\n`)
+    writeFileSync(join(ui, 'package.json'), JSON.stringify({ name: '@acme/ui', version: '0.0.0' }))
+    writeFileSync(join(ui, 'src/card.tsx'), card('744.1px'))
+    symlinkSync(ui, join(app, 'node_modules/@acme/ui'), process.platform === 'win32' ? 'junction' : 'dir')
+    writeFileSync(
+      // CommonJS once bundled, so it is compiled in place rather than imported from a temporary file.
+      join(app, 'bamboo.config.ts'),
+      `export default { include: ['src/**/*.tsx', '${packages}'], outdir: 'styled-system', preflight: false }\n`,
+    )
+    writeFileSync(
+      join(app, 'src/main.tsx'),
+      `import 'virtual:bamboo.css'\nimport { card } from '@acme/ui/src/card'\nexport const main = card\n`,
+    )
+    return { app, ui }
+  }
+
+  const builds: Array<[string, typeof build]> = [
+    ['Vite 7', build],
+    ['Vite 8', buildVite8 as unknown as typeof build],
+  ]
+  for (const [label, buildWith] of builds) {
+    test(`${label} builds it, with its rule in the stylesheet`, async () => {
+      const { app } = project()
+
+      const result = (await buildWith({
+        root: app,
+        configFile: false,
+        logLevel: 'silent',
+        css: { postcss: { plugins: [] } },
+        plugins: [bamboocss({ cwd: app, reportSummary: false }) as never],
+        build: {
+          write: false,
+          minify: false,
+          lib: { entry: join(app, 'src/main.tsx'), formats: ['es'], fileName: 'main' },
+        },
+      })) as Rollup.RollupOutput[]
+      const outputs = result.flatMap((one) => one.output)
+
+      const sheet = outputs.find((output) => output.type === 'asset' && output.fileName.endsWith('.css'))
+      expect(sheet && String((sheet as Rollup.OutputAsset).source)).toContain('width: 744.1px')
+      expect(outputs.map((output) => (output.type === 'chunk' ? output.code : '')).join('\n')).toContain('w_[744.1px]')
+    }, 120_000)
+  }
+
+  // As written, and through a wildcard that reaches the link — which no pattern then names.
+  const servers: Array<[string, typeof createServer, number, string]> = [
+    ['Vite 7', createServer, 24801, 'node_modules/@acme/ui/src/**/*.tsx'],
+    ['Vite 8', createVite8Server as unknown as typeof createServer, 24802, 'node_modules/@acme/ui/src/**/*.tsx'],
+    ['Vite 7, through a wildcard,', createServer, 24803, 'node_modules/@acme/*/src/**/*.tsx'],
+    [
+      'Vite 8, through a wildcard,',
+      createVite8Server as unknown as typeof createServer,
+      24804,
+      'node_modules/@acme/*/src/**/*.tsx',
+    ],
+  ]
+  for (const [label, createDevServer, port, packages] of servers) {
+    test(`${label} carries an edit to it, and a file added beside it, to the dev stylesheet`, async () => {
+      const { app, ui } = project(packages)
+      const server = await createDevServer({
+        root: app,
+        configFile: false,
+        logLevel: 'silent',
+        css: { postcss: { plugins: [] } },
+        plugins: [bamboocss({ cwd: app, reportSummary: false }) as never],
+        server: { middlewareMode: true, hmr: { port } },
+      })
+      const sheet = async () => (await server.environments.client.transformRequest('virtual:bamboo.css'))?.code ?? ''
+      /** Polled with a macrotask between reads, as Vite 8 answers a cached module without leaving the microtask queue. */
+      const until = async (rule: string, poke: (poll: number) => void = () => {}) => {
+        const deadline = Date.now() + 20_000
+        let code = ''
+        for (let poll = 0; !code.includes(rule) && Date.now() < deadline; poll++) {
+          poke(poll)
+          await new Promise((resolve) => setTimeout(resolve, 50))
+          code = await sheet()
+        }
+        return code
+      }
+
+      try {
+        expect(await sheet()).toContain('w_\\\\[744\\\\.1px\\\\]')
+        // The module as Vite names it, by where it really is.
+        await server.environments.client.transformRequest(`/@fs${join(ui, 'src/card.tsx')}`)
+
+        // Before any edit, so only the first pass can have watched its folder: where it really is,
+        // since Vite's watcher passes over `node_modules`. A fresh file each second until one is
+        // seen: the watcher lists a folder before it listens to it.
+        const added = await until('w_\\\\[744\\\\.3px\\\\]', (poll) => {
+          if (poll % 20 === 0) writeFileSync(join(ui, `src/added-${poll}.tsx`), card('744.3px'))
+        })
+        expect(added, 'no added file ever reached the stylesheet').toContain('w_\\\\[744\\\\.3px\\\\]')
+
+        // Seen by Vite's own watcher, under that name: written again each second until it is, as
+        // the watcher can take a moment to listen to a module it has just been given.
+        const edited = await until('w_\\\\[744\\\\.2px\\\\]', (poll) => {
+          if (poll % 20 === 0) writeFileSync(join(ui, 'src/card.tsx'), card('744.2px') + `// ${poll}\n`)
+        })
+        expect(edited, 'the edit never reached the stylesheet').toContain('w_\\\\[744\\\\.2px\\\\]')
       } finally {
         await server.close()
       }

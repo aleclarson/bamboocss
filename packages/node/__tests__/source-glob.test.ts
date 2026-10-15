@@ -28,14 +28,20 @@ const files = (cwd: string, entries: string[]) => {
  * Globs over a loop, each in a process of its own. The glob is synchronous, so a walk that never
  * ended would hang this worker — and a CI job with it, until the job's own limit — not fail it.
  */
-const globApart = (inputs: Record<string, { cwd: string; include: string[] }>): Record<string, string[]> => {
+const globApart = (
+  inputs: Record<string, { cwd: string; include: string[] }>,
+): { files: Record<string, string[]>; linked: Record<string, string[]> } => {
   const { BAMBOO_DEBUG: _, ...env } = process.env
   const script = `
     import { nodeRuntime } from ${JSON.stringify(pathToFileURL(join(import.meta.dirname, '../src/node-runtime.ts')).href)}
     const inputs = ${JSON.stringify(inputs)}
-    process.stdout.write(JSON.stringify(Object.fromEntries(
-      Object.entries(inputs).map(([name, input]) => [name, nodeRuntime.fs.glob(input)]),
-    )))
+    const files = {}
+    const linked = {}
+    for (const [name, input] of Object.entries(inputs)) {
+      linked[name] = []
+      files[name] = nodeRuntime.fs.glob({ ...input, linked: linked[name] })
+    }
+    process.stdout.write(JSON.stringify({ files, linked }))
   `
   const cli = createRequire(import.meta.url).resolve('tsx/cli')
   return JSON.parse(execFileSync(process.execPath, [cli, '-e', script], { encoding: 'utf8', env, timeout: 30_000 }))
@@ -66,8 +72,9 @@ describe('the source glob, round a loop', () => {
   symlinkSync(above, join(above, 'src/up'), link)
 
   let results: Record<string, string[]>
+  let reported: Record<string, string[]>
   beforeAll(() => {
-    results = globApart({
+    ;({ files: results, linked: reported } = globApart({
       above: { cwd: above, include: ['src/**/*.tsx'] },
       beside: { cwd: cycle, include: ['src/*/*.tsx', 'src/a/loop/**/*.tsx'] },
       cycle: { cwd: cycle, include: ['src/**/*.tsx'] },
@@ -77,11 +84,17 @@ describe('the source glob, round a loop', () => {
       merged: { cwd: cycle, include: ['*.css', 'src/a/loop/**/*.tsx'] },
       mutual: { cwd: mutual, include: ['src/**/*.tsx'] },
       shallow: { cwd: cycle, include: ['src/*/*.tsx'] },
-    })
+    }))
   }, 60_000)
 
   test('ends at a link back into a folder it is reading, with every path short of the loop', () => {
     expect(results.cycle).toEqual([path(cycle, 'src/a/app.tsx'), path(cycle, 'src/alias/app.tsx')])
+  })
+
+  // Where a path it returns may really be elsewhere: where the walk began, and each link it went
+  // through — not one it read as empty, which is really a folder above it.
+  test('reports where it began and each link it went through', () => {
+    expect(reported.cycle!.sort()).toEqual([path(cycle, 'src'), path(cycle, 'src/alias')])
   })
 
   test('ends at two links into one another', () => {
@@ -143,6 +156,20 @@ test('the source glob returns what fast-glob does wherever no link loops', () =>
 
   expect(result).toEqual(glob.sync(include, { absolute: true, cwd, ignore: globIgnore(undefined) }).sort())
   expect(result).toContain(path(cwd, 'src/ui/theme/theme.tsx'))
+})
+
+// Where a returned path may really be elsewhere, as a bundler names it: a link to a file as much as
+// one to a folder. Windows grants a link to a file only to an administrator.
+test.skipIf(process.platform === 'win32')('the source glob reports a link to a file it returns', () => {
+  const cwd = files(join(root, 'file-link'), ['shared/card.tsx', 'src/app.tsx'])
+  symlinkSync(join(cwd, 'shared/card.tsx'), join(cwd, 'src/card.tsx'), 'file')
+  const linked: string[] = []
+
+  expect(nodeRuntime.fs.glob({ cwd, include: ['src/**/*.tsx'], linked })).toEqual([
+    path(cwd, 'src/app.tsx'),
+    path(cwd, 'src/card.tsx'),
+  ])
+  expect(linked.sort()).toEqual([path(cwd, 'src'), path(cwd, 'src/card.tsx')])
 })
 
 /**

@@ -251,9 +251,13 @@ export class BambooContext extends Generator {
     })
   }
 
-  getFiles = () => {
+  /**
+   * The sources `include` names. `linked`, where given, is filled with where the glob began and
+   * the folders and files it reached through a link: where a source may really be somewhere else.
+   */
+  getFiles = (linked?: string[]) => {
     const { include, exclude, cwd } = this.config
-    return this.runtime.fs.glob({ include, exclude, cwd })
+    return this.runtime.fs.glob({ include, exclude, cwd, linked })
   }
 
   /**

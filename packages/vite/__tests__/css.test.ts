@@ -649,9 +649,16 @@ describe('the folders a dev server watches beyond its root', () => {
     await pass()
     expect(first.added, 'once each').toHaveLength(2)
 
+    // There now, as a link: handed over again where it really is.
+    mkdirSync(join(root, 'target'))
+    symlinkSync(join(root, 'target'), join(root, 'later'), link)
+    first.edit()
+    await pass()
+    expect(first.added).toEqual([join(root, 'shared'), join(root, 'later'), join(root, 'target')])
+
     // A restart's new watcher, given them as it is configured: it may serve the sheet it remembers
     // without a pass.
-    expect(serve().added).toEqual([join(root, 'shared'), join(root, 'later')])
+    expect(serve().added).toEqual([join(root, 'shared'), join(root, 'target')])
   }, 60_000)
 })
 

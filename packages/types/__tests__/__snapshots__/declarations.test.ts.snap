@@ -81,6 +81,7 @@ exports[`export every name they did 1`] = `
   "FilterStyleObject",
   "FontfaceRule",
   "GenericProperties",
+  "GlobOptions",
   "GlobalCore",
   "GlobalFontface",
   "GlobalFontfaceRule",

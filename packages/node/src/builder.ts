@@ -2,7 +2,7 @@ import { findConfig } from '@bamboocss/config'
 import { logger } from '@bamboocss/logger'
 import { BambooError, uniq } from '@bamboocss/shared'
 import type { DiffConfigResult } from '@bamboocss/types'
-import { existsSync, readFileSync, statSync } from 'fs'
+import { existsSync, readFileSync, realpathSync, statSync } from 'fs'
 import { normalize, resolve } from 'path'
 import picomatch from 'picomatch'
 import { codegen } from './codegen'
@@ -68,6 +68,15 @@ class MinPriorityQueue<T> {
   }
 }
 
+/** A folder or file the glob reached through a link, by where it really is and as the glob spelled it. */
+interface LinkedPath {
+  directory: boolean
+  real: string
+  realPrefix: string
+  spelled: string
+  spelledPrefix: string
+}
+
 /** Files a watcher knows moved since the previous setup. Omit this to retain filesystem discovery. */
 export interface BuilderSourceChanges {
   /** Absolute or cwd-relative paths. An empty list authoritatively means no source moved. */
@@ -101,6 +110,8 @@ export class Builder {
   private configDependencies: Set<string> = new Set()
   /** Last complete included inventory, including members which have since been deleted. */
   private sourceInventory: string[] | undefined
+  /** Where the glob behind that inventory began, and what it reached through a link. */
+  private sourceLinks: readonly string[] = []
   /** Existing included owners selected by the last resolution-ledger invalidation pass. */
   private affectedFiles: Set<string> | undefined
   /** Dependency-before-importer parse order for the selected owners. */
@@ -177,26 +188,35 @@ export class Builder {
   getSourceFiles = (): readonly string[] => Object.freeze([...(this.sourceInventory ?? [])])
 
   /** The folders each context's patterns are globbed from. @see getWatchDirectories */
-  private watchDirectories = new WeakMap<BambooContext, readonly string[]>()
+  private patternDirectories = new WeakMap<BambooContext, readonly string[]>()
+  /** Those, and the folders the glob reached through a link, for one context and glob. @see getWatchDirectories */
+  private watchDirectories: { ctx: BambooContext; links: readonly string[]; directories: readonly string[] } | undefined
 
   /**
-   * @internal The folders `include` and `dependencies` are globbed from, absolute: where a file
-   * appearing can change the stylesheet, and so what a watcher has to watch for it to be seen.
+   * @internal The folders `include` and `dependencies` are globbed from, absolute — and each folder
+   * the last glob reached through a link — where a file appearing can change the stylesheet, and so
+   * what a watcher has to watch for it to be seen. A link a pattern's wildcard reaches,
+   * `node_modules/@acme/*` to a workspace package, leads somewhere no pattern names.
    */
   getWatchDirectories = (): readonly string[] => {
     const ctx = this.getContextOrThrow()
-    let directories = this.watchDirectories.get(ctx)
-    if (!directories) {
+    let patterns = this.patternDirectories.get(ctx)
+    if (!patterns) {
       const { cwd, dependencies, include } = ctx.config
       // A negation reads nothing, so it names no folder; `!(legacy)/**` is no negation, but a glob.
-      const patterns = [...(include ?? []), ...(dependencies ?? [])].filter(
+      const positive = [...(include ?? []), ...(dependencies ?? [])].filter(
         (pattern) => !picomatch.scan(pattern).negated,
       )
-      directories = Object.freeze(
-        patterns.length ? uniq(globDirname(patterns).map((directory) => resolve(cwd, directory))) : [],
+      patterns = Object.freeze(
+        positive.length ? uniq(globDirname(positive).map((directory) => resolve(cwd, directory))) : [],
       )
-      this.watchDirectories.set(ctx, directories)
+      this.patternDirectories.set(ctx, patterns)
     }
+    const cached = this.watchDirectories
+    if (cached?.ctx === ctx && cached.links === this.sourceLinks) return cached.directories
+    const linked = this.linkedPaths().toReal.filter((path) => path.directory)
+    const directories = Object.freeze(uniq([...patterns, ...linked.map((path) => path.spelled)]))
+    this.watchDirectories = { ctx, links: this.sourceLinks, directories }
     return directories
   }
 
@@ -222,7 +242,123 @@ export class Builder {
       )
     }
     const sourceMatcher = this.sourceMatchers.get(ctx)
-    return sourceMatcher?.(relativePath) || sourceMatcher?.(absolutePath) || false
+    if (!sourceMatcher) return false
+    if (sourceMatcher(relativePath) || sourceMatcher(absolutePath)) return true
+    // A bundler names a module by where it really is, which a link `include` was read through
+    // spells otherwise: the module is a source if any spelling of it is. Only a spelling in a folder
+    // `include` is globbed from can be, which spares the matcher every dependency of a project
+    // that is itself reached through a link.
+    const bases = this.includeBases(ctx)
+    return this.sourcePathsOf(absolutePath).some(
+      (source) =>
+        bases.some((base) => source === base.path || source.startsWith(base.prefix)) &&
+        (sourceMatcher(this.sourcePath(ctx.runtime.path.relative(ctx.config.cwd, source))) || sourceMatcher(source)),
+    )
+  }
+
+  /** The folders each context's `include` is globbed from. @see isPotentialSourceFile */
+  private includeBaseCache = new WeakMap<BambooContext, ReadonlyArray<{ path: string; prefix: string }>>()
+
+  private includeBases = (ctx: BambooContext) => {
+    let bases = this.includeBaseCache.get(ctx)
+    if (!bases) {
+      const positive = (ctx.config.include ?? []).filter((pattern) => !picomatch.scan(pattern).negated)
+      bases = (positive.length ? uniq(globDirname(positive)) : []).map((directory) => {
+        const path = this.sourcePath(resolve(ctx.config.cwd, directory))
+        return { path, prefix: path.endsWith('/') ? path : `${path}/` }
+      })
+      this.includeBaseCache.set(ctx, bases)
+    }
+    return bases
+  }
+
+  /** The linked paths of each glob, resolved once each. @see linkedPaths */
+  private linkedPathCache = new WeakMap<readonly string[], { all: LinkedPath[]; toReal: LinkedPath[] }>()
+
+  /**
+   * Where each folder and file the glob behind the inventory reached through a link — or the folder
+   * it began at, spelled through a link above it — really is, which is what a bundler resolving a
+   * module there names it by. Resolved once per glob, and only when asked, so a build that never
+   * asks pays nothing. Any difference in spelling counts, case too: a bundler names a module as the
+   * system does, and a path the inventory spells otherwise is no member of it.
+   */
+  private linkedPaths = () => {
+    let linked = this.linkedPathCache.get(this.sourceLinks)
+    if (!linked) {
+      const all: LinkedPath[] = []
+      for (const link of this.sourceLinks) {
+        let real: string
+        let directory: boolean
+        try {
+          real = this.sourcePath(realpathSync.native(link))
+          directory = statSync(real).isDirectory()
+        } catch {
+          continue
+        }
+        const spelled = this.sourcePath(link)
+        if (real !== spelled)
+          all.push({ directory, real, realPrefix: `${real}/`, spelled, spelledPrefix: `${spelled}/` })
+      }
+      // Deepest first, so the folder nearest a file answers for it.
+      const toReal = [...all].sort((left, right) => right.spelled.length - left.spelled.length)
+      linked = { all, toReal }
+      this.linkedPathCache.set(this.sourceLinks, linked)
+    }
+    return linked
+  }
+
+  /**
+   * An absolute, `/`-spelled path as the inventory spells it — each way, where two links reach one
+   * folder and the inventory holds the files under both. None, where no link is in the way.
+   */
+  private sourcePathsOf = (path: string) => {
+    const sources: string[] = []
+    for (const { real, realPrefix, spelled } of this.linkedPaths().all) {
+      if (path === real) sources.push(spelled)
+      else if (path.startsWith(realPrefix)) sources.push(spelled + path.slice(real.length))
+    }
+    return sources
+  }
+
+  /**
+   * @internal `filePath` as the source inventory spells it, where a bundler names it by where it
+   * really is: through each folder or file a link was read at. None, where no link is in the way.
+   */
+  toSourcePaths = (filePath: string): readonly string[] => {
+    const ctx = this.getContextOrThrow()
+    return this.sourcePathsOf(this.absOwner(ctx, filePath))
+  }
+
+  /** The inventory's sources by where each really is, for one inventory and glob. @see getRealSourceFiles */
+  private realSourceFiles:
+    | { inventory: readonly string[]; links: readonly string[]; reals: readonly string[] }
+    | undefined
+
+  /**
+   * @internal The sources the inventory reached through a link, by where each really is: the names
+   * a bundler gives them, and so what it reports compiling and editing.
+   */
+  getRealSourceFiles = (): readonly string[] => {
+    const ctx = this.getContextOrThrow()
+    const inventory = this.sourceInventory
+    if (!inventory) return []
+    const cached = this.realSourceFiles
+    if (cached?.inventory === inventory && cached.links === this.sourceLinks) return cached.reals
+    const { toReal } = this.linkedPaths()
+    const reals: string[] = []
+    if (toReal.length) {
+      for (const file of inventory) {
+        const path = this.absOwner(ctx, file)
+        for (const { real, spelled, spelledPrefix } of toReal) {
+          if (path === spelled) reals.push(real)
+          else if (path.startsWith(spelledPrefix)) reals.push(real + path.slice(spelled.length))
+          else continue
+          break
+        }
+      }
+    }
+    this.realSourceFiles = { inventory, links: this.sourceLinks, reals: Object.freeze(reals) }
+    return this.realSourceFiles.reals
   }
 
   /** @internal Whether creating or deleting this path can change a `dependencies` glob. */
@@ -446,7 +582,8 @@ export class Builder {
     // alone misses a plain-object helper outside the glob; the previous inventory alone misses
     // a newly added member; the current inventory alone misses a deletion.
     const needsInventoryScan = !sourceChanges || sourceChanges.needsInventoryScan || this.sourceInventory === undefined
-    const inventory = needsInventoryScan ? ctx.getFiles() : [...this.sourceInventory!]
+    const linked: string[] = []
+    const inventory = needsInventoryScan ? ctx.getFiles(linked) : [...this.sourceInventory!]
     const previousInventory = this.sourceInventory ?? inventory
     const allTracked = uniq([...previousInventory, ...inventory, ...this.getResolutionReadFiles()])
     const trackedPaths = new Set(allTracked.map((file) => this.absOwner(ctx, file)))
@@ -471,7 +608,11 @@ export class Builder {
       this.affectedFiles = new Set()
       this.extractionOrder = []
     }
-    this.sourceInventory = [...inventory]
+    // The same array where nothing was globbed, so what is derived from it is not derived again.
+    if (needsInventoryScan) {
+      this.sourceInventory = [...inventory]
+      this.sourceLinks = linked
+    }
   }
 
   /** Normalize the path identity shared by the Project ledger and file-owner keys. */
@@ -732,7 +873,8 @@ export class Builder {
     // costs a directory walk per rebuild and can only disagree with `filesMeta` — which was
     // computed from that inventory — about files that appeared in between, and those are the
     // next watcher event's to handle either way.
-    const files = !hasConfigChanged && this.sourceInventory ? [...this.sourceInventory] : ctx.getFiles()
+    const linked: string[] = []
+    const files = !hasConfigChanged && this.sourceInventory ? [...this.sourceInventory] : ctx.getFiles(linked)
     const inventory = new Set(files.map(this.sourcePath))
     if (hasConfigChanged) {
       this.resolutionReadSets.clear()
@@ -776,7 +918,10 @@ export class Builder {
 
     done()
 
-    this.sourceInventory = [...files]
+    if (hasConfigChanged || !this.sourceInventory) {
+      this.sourceInventory = [...files]
+      this.sourceLinks = linked
+    }
     // Resolver-discovered modules can sit outside `include`. Their bytes were semantically
     // read by this pass, so remember the same mtimes as included owners and detect their next
     // edit without globbing the checkout.

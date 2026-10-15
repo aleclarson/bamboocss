@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest'
 import { createCompilationHost, type CompilationBuilder } from '../src/compilation-host'
 
 /**
- * A Builder with the four members the host touches, and a way to replace its context.
+ * A Builder with the members the host touches, and a way to replace its context.
  *
  * Deliberately not the real one: what is under test is who calls `setup`, how often, and what
  * may run while a stylesheet pass holds the shared AST. A real Builder would answer all of
@@ -17,6 +17,8 @@ const stubBuilder = () => {
   const setups: SetupOptions[] = []
   const reloaded: string[] = []
   const removed: string[] = []
+  /** A source's real path, by the spelling the inventory read it through a link at. */
+  const linked = new Map<string, string>()
 
   const builder = {
     get context() {
@@ -36,6 +38,7 @@ const stubBuilder = () => {
     removeSource: (filePath: string) => {
       removed.push(filePath)
     },
+    toSourcePaths: (filePath: string) => (linked.has(filePath) ? [linked.get(filePath)!] : []),
   }
 
   return {
@@ -43,6 +46,7 @@ const stubBuilder = () => {
     setups,
     reloaded,
     removed,
+    linked,
     failNextSetup: (error: Error) => {
       failNext = error
     },
@@ -144,6 +148,30 @@ describe('the compilation host', () => {
       files: ['/app/src/created.ts', '/app/src/deleted.ts'],
       needsInventoryScan: false,
     })
+  })
+
+  // Vite names a module by where it really is; the inventory read it through a link, at another
+  // path. Extraction re-reads the inventory's, and the compiler's resolution read the real one.
+  test('journals and refreshes a source by both its real path and the one the inventory read it at', async () => {
+    const { host, stub } = hostOf()
+    host.setCommand('serve')
+    await host.ensureGeneration()
+    stub.linked.set('/packages/ui/src/button.tsx', '/app/node_modules/@acme/ui/src/button.tsx')
+    stub.linked.set('/packages/ui/src/old.tsx', '/app/node_modules/@acme/ui/src/old.tsx')
+
+    host.noteSourceChange('/packages/ui/src/button.tsx', 'update')
+    host.reloadSource('/packages/ui/src/button.tsx')
+    host.removeSource('/packages/ui/src/old.tsx')
+    await host.runCssPass(async () => undefined)
+
+    expect(stub.reloaded).toEqual(['/packages/ui/src/button.tsx', '/app/node_modules/@acme/ui/src/button.tsx'])
+    expect(stub.removed).toEqual(['/packages/ui/src/old.tsx', '/app/node_modules/@acme/ui/src/old.tsx'])
+    expect(stub.setups[1]?.sourceChanges?.files).toEqual([
+      '/app/node_modules/@acme/ui/src/button.tsx',
+      '/app/node_modules/@acme/ui/src/old.tsx',
+      '/packages/ui/src/button.tsx',
+      '/packages/ui/src/old.tsx',
+    ])
   })
 
   test('keeps events which arrive while setup is in flight for the following pass', async () => {
