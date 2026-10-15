@@ -35,6 +35,7 @@ const getSyncOptions = (context: RuleContext<any, any>) => {
   return {
     configPath: context.settings['@bamboocss/configPath'] as string | undefined,
     currentFile: context.filename,
+    cwd: context.cwd,
   }
 }
 

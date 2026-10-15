@@ -48,4 +48,4 @@ export const rules = {
   [PreferLonghandProperties]: preferLonghandProperties,
   [PreferShorthandProperties]: preferShorthandProperties,
   [PreferUnifiedPropertyStyle]: preferUnifiedPropertyStyle,
-} as any
+}

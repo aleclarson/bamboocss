@@ -317,6 +317,9 @@ importers:
       '@types/micromatch':
         specifier: ^4.0.10
         version: 4.0.10
+      '@typescript-eslint/parser':
+        specifier: ^8.43.0
+        version: 8.59.4(eslint@9.39.1(jiti@2.7.0))(typescript@5.9.3)
       '@typescript-eslint/rule-tester':
         specifier: ^8.43.0
         version: 8.59.4(eslint@9.39.1(jiti@2.7.0))(typescript@5.9.3)

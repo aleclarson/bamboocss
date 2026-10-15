@@ -1,0 +1,107 @@
+---
+title: Linting
+description: Lint Bamboo CSS usage with ESLint, against the same config your build reads.
+---
+
+`@bamboocss/eslint-plugin` checks how your code uses Bamboo CSS, in the editor and in CI, against the config your build
+reads: a token path that does not exist, a value the build cannot resolve, a hardcoded color where a token belongs, a
+recipe the build cannot name.
+
+## Installation
+
+```bash
+pnpm add -D @bamboocss/eslint-plugin
+```
+
+## Configuration
+
+ESLint 9 and later read flat config, `eslint.config.js`. Add the recommended rules:
+
+```js
+// eslint.config.js
+import bamboo from '@bamboocss/eslint-plugin'
+import tsParser from '@typescript-eslint/parser'
+
+export default [{ files: ['**/*.{ts,tsx}'], languageOptions: { parser: tsParser } }, bamboo.configs['flat/recommended']]
+```
+
+`bamboo.configs['flat/all']` turns on every rule instead. With `defineConfig`, the same is
+`extends: ['bamboo/flat/recommended']` beside `plugins: { bamboo }`.
+
+The configs name no parser: TypeScript files take the one your project configures — the line above, or
+`typescript-eslint`'s configs — and `.vue`, `.svelte` and `.astro` files keep their own. In a file ESLint lints as
+another language — CSS through `@eslint/css`, JSON through `@eslint/json` — the rules stand aside.
+
+To choose the rules yourself, register the plugin and set them:
+
+```js
+export default [
+  {
+    plugins: { bamboo },
+    rules: {
+      'bamboo/no-invalid-token-paths': 'error',
+      'bamboo/no-hardcoded-color': 'warn',
+    },
+  },
+]
+```
+
+In `eslint.config.ts`, the plugin and its configs type-check as ESLint's own `ESLint.Plugin` and `Linter.Config`.
+
+### Legacy `.eslintrc`
+
+For the config system ESLint 9 deprecated, `recommended` and `all` are `.eslintrc` configs. They name
+`@typescript-eslint/parser`, which has to be installed:
+
+```json
+{
+  "extends": ["plugin:bamboo/recommended"]
+}
+```
+
+### Settings
+
+The rules read the `bamboo.config.ts` found from the file being linted. To read another, name the file — or the
+directory holding it — relative to ESLint's working directory. For a path relative to `eslint.config.js` instead, make
+it absolute:
+
+```js
+import path from 'node:path'
+
+export default [
+  {
+    settings: { '@bamboocss/configPath': path.join(import.meta.dirname, 'bamboo.config.ts') },
+  },
+]
+```
+
+## Rules
+
+✅ marks the rules in `flat/recommended` and `recommended`.
+
+| Rule                                                                                                                                               | Description                                                                                      | ✅  |
+| -------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | --- |
+| [`file-not-included`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/file-not-included.md)                         | Disallow Bamboo CSS in files the config's `include` does not cover                               | ✅  |
+| [`no-config-function-in-source`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/no-config-function-in-source.md)   | Prohibit config functions outside the Bamboo config file                                         | ✅  |
+| [`no-debug`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/no-debug.md)                                           | Disallow the `debug` attribute in shipped code                                                   | ✅  |
+| [`no-deprecated-tokens`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/no-deprecated-tokens.md)                   | Disallow deprecated tokens                                                                       | ✅  |
+| [`no-descendant-selectors`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/no-descendant-selectors.md)             | Disallow nested selectors that style a different element than the class is applied to            |     |
+| [`no-dynamic-styling`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/no-dynamic-styling.md)                       | Disallow dynamic styling; prefer static styles, CSS variables or recipes                         | ✅  |
+| [`no-escape-hatch`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/no-escape-hatch.md)                             | Prohibit escape hatch syntax                                                                     |     |
+| [`no-hardcoded-color`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/no-hardcoded-color.md)                       | Use color tokens rather than hardcoded colors                                                    | ✅  |
+| [`no-important`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/no-important.md)                                   | Disallow `!important`                                                                            |     |
+| [`no-invalid-nesting`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/no-invalid-nesting.md)                       | Nested styles must contain `&`                                                                   | ✅  |
+| [`no-invalid-token-paths`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/no-invalid-token-paths.md)               | Disallow token paths that do not exist, and values the build cannot resolve                      | ✅  |
+| [`no-margin-properties`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/no-margin-properties.md)                   | Prefer `gap` in the parent to margins                                                            |     |
+| [`no-physical-properties`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/no-physical-properties.md)               | Prefer logical properties to physical ones                                                       |     |
+| [`no-property-renaming`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/no-property-renaming.md)                   | Disallow renaming pattern and style props, which the build cannot follow                         | ✅  |
+| [`no-redundant-value`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/no-redundant-value.md)                       | Report an edge or pair value written longer than it needs to be                                  |     |
+| [`no-unlayered-override`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/no-unlayered-override.md)                 | Disallow joining a class with one it cannot see, where neither can win by cascade layer          | ✅  |
+| [`no-unsafe-token-fn-usage`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/no-unsafe-token-fn-usage.md)           | Use the token directly where the token function is not needed                                    | ✅  |
+| [`prefer-atomic-properties`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/prefer-atomic-properties.md)           | Prefer atomic properties to composite ones                                                       |     |
+| [`prefer-composite-properties`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/prefer-composite-properties.md)     | Prefer composite properties to atomic ones                                                       |     |
+| [`prefer-longhand-properties`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/prefer-longhand-properties.md)       | Prefer longhand properties to shorthands                                                         |     |
+| [`prefer-shorthand-properties`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/prefer-shorthand-properties.md)     | Prefer shorthand properties to longhands                                                         |     |
+| [`prefer-unified-property-style`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/prefer-unified-property-style.md) | Disallow mixing atomic and composite forms of the same property                                  |     |
+| [`require-literal-token-path`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/require-literal-token-path.md)       | Require token paths the build can resolve, so `prune.tokens` can drop the rest                   |     |
+| [`require-recipe-class-name`](https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/require-recipe-class-name.md)         | Require a `className` on a recipe, so its class names do not depend on what the build could read | ✅  |

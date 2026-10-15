@@ -4,10 +4,30 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createSyncFn } from 'synckit'
 
-// Rule creator
-export const createRule = ESLintUtils.RuleCreator(
+const ruleCreator = ESLintUtils.RuleCreator(
   (name) => `https://github.com/gajus/bamboocss/blob/main/packages/eslint-plugin/docs/rules/${name}.md`,
 )
+
+/**
+ * A rule that walks a JavaScript program, and stands aside for any file that is not one.
+ *
+ * ESLint lints CSS, JSON and Markdown as languages of their own and runs a rule wherever a config
+ * turns it on, so a config applying to every file hands these rules a stylesheet or a document.
+ * Scoping the configs with `files` would not do instead: in flat config a `files` pattern adds
+ * the files it matches to those ESLint lints, and a `.jsx` or `.vue` file with no parser for it
+ * would then fail to parse.
+ */
+export const createRule: typeof ruleCreator = (rule) => {
+  const module = ruleCreator(rule)
+  return {
+    ...module,
+    create: (context) => {
+      // `sourceCode` is ESLint 8.40's; before it, every file ESLint lints is a program.
+      const type = (context as { sourceCode?: { ast?: { type?: string } } }).sourceCode?.ast?.type
+      return type === undefined || type === 'Program' ? module.create(context) : {}
+    },
+  }
+}
 
 // Determine the distribution directory. Under test the plugin is loaded from
 // `src/utils/index.ts`, so the built worker sits two levels up in `dist`; when

@@ -51,12 +51,19 @@
     "@bamboocss/preset-base": "workspace:*",
     "@bamboocss/types": "workspace:*",
     "@types/micromatch": "^4.0.10",
+    "@typescript-eslint/parser": "^8.43.0",
     "@typescript-eslint/rule-tester": "^8.43.0",
     "eslint": "^9.35.0",
     "multiline-ts": "^4.0.1",
     "typescript": "^5.7.2"
   },
   "peerDependencies": {
+    "@typescript-eslint/parser": ">=8.0.0",
     "eslint": "*"
+  },
+  "peerDependenciesMeta": {
+    "@typescript-eslint/parser": {
+      "optional": true
+    }
   }
 }

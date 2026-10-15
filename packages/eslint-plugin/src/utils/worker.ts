@@ -2,16 +2,19 @@
 // `import { type X }` survives as a runtime import, which pulls the plugin
 // entry — and its `createSyncFn` call — into this worker's bundle.
 import type { ImportResult } from '.'
-import { findConfig, loadConfig } from '@bamboocss/config'
+import { loadConfig } from '@bamboocss/config'
 import { resolveTsPathPattern } from '@bamboocss/config/ts-path'
 import { Generator } from '@bamboocss/generator'
 import micromatch from 'micromatch'
 import path from 'path'
 import { runAsWorker } from 'synckit'
+import { configFor } from './config-path'
 
 type Options = {
   configPath?: string
   currentFile: string
+  /** ESLint's working directory, which a relative `configPath` is read against. */
+  cwd?: string
 }
 
 const contextCache: { [configPath: string]: Promise<Generator> } = {}
@@ -39,9 +42,7 @@ export async function getContext(options: Options) {
     })
     return context
   } else {
-    const configPath = findConfig({
-      cwd: options.configPath ?? options.currentFile,
-    })
+    const configPath = configFor(options)
 
     // The context cache ensures we don't reload the same config multiple times
     if (!contextCache[configPath]) {

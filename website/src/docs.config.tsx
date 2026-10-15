@@ -175,6 +175,7 @@ export const docsNavigation: NavItem = {
         { title: 'Dynamic Styles', url: 'dynamic-styling' },
         { title: 'Static Generator', url: 'static' },
         { title: 'Source Transformation', url: 'source-transformation' },
+        { title: 'Linting', url: 'linting' },
         { title: 'Debugging', url: 'debugging' },
       ],
     },
