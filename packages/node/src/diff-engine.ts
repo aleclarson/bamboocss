@@ -24,7 +24,7 @@ export class DiffEngine {
   async reloadConfigAndRefreshContext(fn?: (conf: LoadConfigResult) => void) {
     const conf = await loadConfig({ cwd: this.ctx.config.cwd, file: this.ctx.conf.path })
     const resolutionFiles: { value?: readonly string[] } = {}
-    const tsconfig = await loadTsConfig(conf, conf.config.cwd || this.ctx.config.cwd, undefined, resolutionFiles)
+    const tsconfig = await loadTsConfig(conf, conf.config.cwd || this.ctx.config.cwd, resolutionFiles)
     applyTsConfig(conf, tsconfig)
     rememberTsConfigResolutionFiles(conf, resolutionFiles.value ?? [])
 

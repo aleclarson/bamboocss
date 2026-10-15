@@ -1,23 +1,30 @@
 import { convertTsPathsToRegexes } from '@bamboocss/config'
-import type { LoadConfigResult, LoadTsConfigResult } from '@bamboocss/types'
-import { promises as fs } from 'node:fs'
-import path from 'node:path'
-import type { TsconfigResolutionProvenance } from './tsconfig-provenance'
-
 import {
+  declaresAliases,
   findClosestTsconfig,
-  resolveBaseUrlForCompilerOptions,
+  globBase,
+  includesUnder,
+  isSolutionTsconfig,
+  isSourceFileIncludedInTsconfig,
+  readTsconfigGraph,
   resolveDirectTsconfigJson,
-  resolveSolutionTsconfigForFile,
-} from './tsconfig-utils'
+  resolvePathsBase,
+  type TsconfigProject,
+} from '@bamboocss/config/tsconfig'
+import type { LoadConfigResult, LoadTsConfigResult } from '@bamboocss/types'
+import path from 'node:path'
 
-const readPathsFromCache = (cache: Map<string, string>) => {
-  const prefix = 'readFileSync:'
-  const suffix = ':utf8'
-  return Array.from(cache.keys())
-    .filter((key) => key.startsWith(prefix) && key.endsWith(suffix))
-    .map((key) => key.slice(prefix.length, -suffix.length))
-}
+/**
+ * What each `include` glob reaches: the file it names, or the directory up to its first segment
+ * with a glob character in it — braces and brackets too, in this syntax. A negation reaches none.
+ */
+const includeTargets = (include: readonly string[] | undefined, cwd: string) =>
+  (include ?? []).flatMap((glob): Array<{ file?: string; directory?: string }> => {
+    if (glob.startsWith('!')) return []
+    const { base, wildcard } = globBase(glob, /[*?{}[\]!()]/)
+    const target = path.resolve(cwd, base)
+    return [wildcard || !path.extname(base) ? { directory: target } : { file: target }]
+  })
 
 /**
  * Exact tsconfig files read while producing one resolved Node config.
@@ -35,109 +42,80 @@ export const rememberTsConfigResolutionFiles = (conf: LoadConfigResult, files: I
 export const getTsConfigResolutionFiles = (conf: LoadConfigResult): readonly string[] =>
   resolutionFilesByConfig.get(conf) ?? Object.freeze(conf.tsconfigFile ? [path.resolve(conf.tsconfigFile)] : [])
 
-const referencedTsconfigPath = (reference: string, rootPath: string) =>
-  path.resolve(path.dirname(rootPath), reference.endsWith('.json') ? reference : path.join(reference, 'tsconfig.json'))
-
-const MAX_TSCONFIG_REFERENCE_FILES = 256
-
-const getImplicitBaseUrl = (compilerOptions: object | undefined) => {
-  if (!compilerOptions) return undefined
-  const matches = Object.getOwnPropertySymbols(compilerOptions).filter(
-    (candidate) => candidate.description === 'implicitBaseUrl',
-  )
-  if (matches.length !== 1) return undefined
-  const symbol = matches[0]!
-  const descriptor = Object.getOwnPropertyDescriptor(compilerOptions, symbol)
-  if (!descriptor || !('value' in descriptor) || typeof descriptor.value !== 'string') return undefined
-  return { owner: compilerOptions, symbol, value: descriptor.value }
-}
-
-const collectReferenceGraph = async (
-  rootPath: string,
-  rootParsed: import('get-tsconfig').TsConfigJsonResolved,
-  parseTsconfig: typeof import('get-tsconfig').parseTsconfig,
-  cache: Map<string, string>,
-) => {
-  const references: Array<{ from: string; path: string }> = []
-  const unresolvedReferences: string[] = []
-  let traversalLimitExceeded = false
-  // Reference paths stay lexical deliberately. Two symlink aliases to the same bytes can
-  // resolve their own relative references against different directories, so realpath-based
-  // deduplication would silently discard one semantic graph.
-  const visited = new Set([path.resolve(rootPath)])
-  const queue = [{ parsed: rootParsed, path: rootPath }]
-
-  for (let index = 0; index < queue.length; index++) {
-    const current = queue[index]!
-    for (const reference of current.parsed.references ?? []) {
-      const referencedPath = referencedTsconfigPath(reference.path, current.path)
-      references.push({ from: current.path, path: referencedPath })
-
-      if (visited.has(referencedPath)) continue
-      if (visited.size >= MAX_TSCONFIG_REFERENCE_FILES) {
-        traversalLimitExceeded = true
-        unresolvedReferences.push(referencedPath)
-        continue
-      }
-      visited.add(referencedPath)
-      try {
-        const source = await fs.readFile(referencedPath, 'utf8')
-        // A parse check, not a conversion: TypeScript 7 reads the tsconfig in the Go process, so
-        // all this needs is to know the text is well-formed JSON-with-comments before queueing it.
-        JSON.parse(source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1'))
-        queue.push({ parsed: parseTsconfig(referencedPath, cache), path: referencedPath })
-      } catch {
-        unresolvedReferences.push(referencedPath)
-      }
-    }
-  }
-
-  return { references, traversalLimitExceeded, unresolvedReferences }
-}
-
 export async function loadTsConfig(
   conf: LoadConfigResult,
   cwd: string,
-  provenance?: { value?: TsconfigResolutionProvenance },
   resolutionFiles?: { value?: readonly string[] },
 ): Promise<LoadTsConfigResult | undefined> {
-  const root = cwd
-
   let tsconfigFile: string | null = await resolveDirectTsconfigJson(conf.path)
-  const direct = tsconfigFile !== null
   if (!tsconfigFile) {
     if (resolutionFiles) resolutionFiles.value = Object.freeze([])
-    tsconfigFile = await findClosestTsconfig(conf.path, root, 'tsconfig.json')
+    tsconfigFile = await findClosestTsconfig(conf.path, cwd, 'tsconfig.json')
   }
 
   if (!tsconfigFile) {
-    if (provenance) {
-      provenance.value = {
-        direct: false,
-        readPaths: [],
-        references: [],
-        traversalLimitExceeded: false,
-        unresolvedReferences: [],
-      }
-    }
     return {
       tsconfig: {},
       tsconfigFile: undefined,
     }
   }
 
-  const gtc = await import('get-tsconfig')
-  const cache = new Map<string, string>()
-  const rootParsed = gtc.parseTsconfig(tsconfigFile, cache)
-  const { tsconfig, tsconfigFile: effectiveTsconfigPath } = await resolveSolutionTsconfigForFile(
-    path.resolve(conf.path),
-    tsconfigFile,
-    rootParsed,
-    gtc,
-    cache,
-  )
-  const compilerOptions = tsconfig?.compilerOptions
-  const implicitBaseUrl = getImplicitBaseUrl(compilerOptions)
+  const graph = await readTsconfigGraph(tsconfigFile)
+  // A JavaScript config resolves through the root, as it always has.
+  const configFile = path.resolve(conf.path)
+  let effective = (/\.[cm]?tsx?$/.test(configFile) && graph.projectIncluding(configFile)) || graph.root
+  // These resolve the sources, not the config file. Under a solution-style root, which compiles
+  // nothing itself, the two are in different projects: `create vite` puts the sources and their
+  // aliases in `tsconfig.app.json`, and the config beside the root or in `tsconfig.node.json`.
+  // Found through the config, an aliased import in a source resolved nowhere. So it is the first
+  // project including files where `include` points and declaring aliases — a broad `include`
+  // reaches `tsconfig.node.json` too, which declares none. With none, what resolved them before.
+  // `include` is globbed from the config's `cwd`, and so is read from it here.
+  //
+  // The project that would include a source there, as TypeScript reads its `include`, `exclude` and
+  // extensions — the file a glob names, or one standing for those directly in the directory it
+  // reaches, in both extensions. Failing that, one reaching into that directory at all, as a
+  // project listing its files one by one does, or one including only deeper directories.
+  if (isSolutionTsconfig(graph.root.tsconfig)) {
+    const targets = includeTargets(conf.config?.include, conf.config?.cwd ? path.resolve(conf.config.cwd) : cwd)
+    const probes = targets.flatMap(({ file, directory }) =>
+      file ? [file] : [path.join(directory!, '__bamboo__.ts'), path.join(directory!, '__bamboo__.tsx')],
+    )
+    const includes = ({ tsconfig, tsconfigFile }: TsconfigProject) =>
+      probes.some((probe) => isSourceFileIncludedInTsconfig(probe, tsconfigFile, tsconfig))
+    const reaches = (project: TsconfigProject) =>
+      targets.some(({ directory }) => directory !== undefined && includesUnder(directory, project))
+    const sources =
+      graph.find((project) => declaresAliases(project) && includes(project)) ??
+      graph.find((project) => declaresAliases(project) && reaches(project))
+    if (sources) effective = sources
+  }
+
+  let { tsconfig } = effective
+  const effectiveTsconfigPath = effective.tsconfigFile
+  // TypeScript resolves `baseUrl`, and `paths` without one, against the directory of the tsconfig
+  // declaring them, and the resolver joins both to `cwd` — the same place only for a tsconfig
+  // there. Absolute, they resolve the same against either. No `baseUrl` is set where none is
+  // written, which would change how every bare specifier resolves.
+  const compilerOptions = tsconfig.compilerOptions
+  const base = resolvePathsBase(tsconfig, effectiveTsconfigPath, cwd)
+  if (compilerOptions && (compilerOptions.baseUrl != null || compilerOptions.paths)) {
+    tsconfig = {
+      ...tsconfig,
+      compilerOptions:
+        compilerOptions.baseUrl != null
+          ? { ...compilerOptions, baseUrl: base }
+          : {
+              ...compilerOptions,
+              paths: Object.fromEntries(
+                Object.entries(compilerOptions.paths!).map(([pattern, targets]) => [
+                  pattern,
+                  targets.map((target) => path.resolve(base, target)),
+                ]),
+              ),
+            },
+    }
+  }
 
   const result: LoadTsConfigResult = {
     tsconfig,
@@ -145,33 +123,13 @@ export async function loadTsConfig(
   }
 
   if (resolutionFiles) {
-    resolutionFiles.value = Object.freeze(
-      [...new Set(readPathsFromCache(cache).map((file) => path.resolve(file)))].sort(),
-    )
+    resolutionFiles.value = Object.freeze([...new Set(graph.files())].sort())
   }
 
-  if (compilerOptions?.paths) {
-    const baseUrl = compilerOptions.baseUrl
+  if (tsconfig.compilerOptions?.paths) {
     result.tsOptions = {
-      baseUrl,
-      pathMappings: convertTsPathsToRegexes(
-        compilerOptions.paths,
-        resolveBaseUrlForCompilerOptions(baseUrl, effectiveTsconfigPath, cwd),
-      ),
-    }
-  }
-
-  if (provenance) {
-    const referenceGraph = await collectReferenceGraph(tsconfigFile, rootParsed, gtc.parseTsconfig, cache)
-    provenance.value = {
-      direct,
-      effectivePath: effectiveTsconfigPath,
-      implicitBaseUrl,
-      readPaths: readPathsFromCache(cache),
-      references: referenceGraph.references,
-      rootPath: tsconfigFile,
-      traversalLimitExceeded: referenceGraph.traversalLimitExceeded,
-      unresolvedReferences: referenceGraph.unresolvedReferences,
+      baseUrl: tsconfig.compilerOptions.baseUrl,
+      pathMappings: convertTsPathsToRegexes(tsconfig.compilerOptions.paths, base),
     }
   }
 

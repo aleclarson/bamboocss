@@ -71,7 +71,7 @@ async function prepareNodeConfig(options: NodeConfigOptions = {}): Promise<Prepa
   conf.config.plugins = [...autoPlugins, ...(conf.config.plugins ?? [])]
 
   const tsconfigResolutionFiles: { value?: readonly string[] } = {}
-  const tsConfResult = await loadTsConfig(conf, cwd, undefined, tsconfigResolutionFiles)
+  const tsConfResult = await loadTsConfig(conf, cwd, tsconfigResolutionFiles)
 
   if (tsConfResult) {
     Object.assign(conf, tsConfResult)

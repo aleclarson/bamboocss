@@ -9,6 +9,7 @@ import path, { dirname, join, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, test } from 'vitest'
 import { bundle } from '../src/bundle-config'
+import { resolveSolutionAliases } from '../src/tsconfig-utils'
 
 describe('bundle config', () => {
   const cwd = process.cwd()
@@ -611,5 +612,337 @@ describe('load config', () => {
     const { config } = await bundle<any>(join(root, 'bamboo.config.ts'), root)
 
     expect(config).toEqual({ strict: true })
+  })
+
+  /**
+   * A solution-style `tsconfig.json` — `"files": []` and `references` — declares no `paths`: they
+   * are in the projects it references, as `create vite` lays them out. esbuild found the root by
+   * walking up from the config, and with it no aliases, so a config importing through one failed
+   * to bundle.
+   */
+  describe('through the paths of a referenced project', () => {
+    const solution = (app: object, files: Record<string, string> = {}) =>
+      project({
+        'tsconfig.json': JSON.stringify({ files: [], references: [{ path: './tsconfig.app.json' }] }),
+        'tsconfig.app.json': JSON.stringify(app),
+        'src/theme/tokens.ts': `export const tokens = { colors: { brand: { value: '#2f81f7' } } }`,
+        'bamboo.config.ts': `import { tokens } from '@/theme/tokens'\nexport default { theme: { tokens } }`,
+        ...files,
+      })
+    const brand = { theme: { tokens: { colors: { brand: { value: '#2f81f7' } } } } }
+
+    test('a config beside the root, in no project', async () => {
+      const root = solution({ include: ['src'], compilerOptions: { paths: { '@/*': ['./src/*'] } } })
+
+      const { config } = await bundle<any>(join(root, 'bamboo.config.ts'), root, { projectReferences: true })
+
+      expect(config).toEqual(brand)
+    })
+
+    test('with the paths a project extends', async () => {
+      const root = solution(
+        { extends: './tsconfig.paths.json', include: ['src'] },
+        {
+          'tsconfig.paths.json': JSON.stringify({ compilerOptions: { baseUrl: '.', paths: { '@/*': ['./src/*'] } } }),
+        },
+      )
+
+      const { config } = await bundle<any>(join(root, 'bamboo.config.ts'), root, { projectReferences: true })
+
+      expect(config).toEqual(brand)
+    })
+
+    test('through a reference of a reference', async () => {
+      const root = project({
+        'tsconfig.json': JSON.stringify({ files: [], references: [{ path: './tsconfig.web.json' }] }),
+        'tsconfig.web.json': JSON.stringify({ files: [], references: [{ path: './tsconfig.app.json' }] }),
+        'tsconfig.app.json': JSON.stringify({ include: ['src'], compilerOptions: { paths: { '@/*': ['./src/*'] } } }),
+        'src/theme/tokens.ts': `export const tokens = { colors: { brand: { value: '#2f81f7' } } }`,
+        'bamboo.config.ts': `import { tokens } from '@/theme/tokens'\nexport default { theme: { tokens } }`,
+      })
+
+      const { config } = await bundle<any>(join(root, 'bamboo.config.ts'), root, { projectReferences: true })
+
+      expect(config).toEqual(brand)
+    })
+
+    // TypeScript checks the config under the project including it, and with that project's
+    // aliases alone: one only another project declares is not the config's to import through.
+    test('the project that includes the config, and none of another', async () => {
+      const root = solution(
+        { include: ['src'], compilerOptions: { paths: { '@/*': ['./src/*'] } } },
+        {
+          'tsconfig.json': JSON.stringify({
+            files: [],
+            references: [{ path: './tsconfig.app.json' }, { path: './tsconfig.node.json' }],
+          }),
+          'tsconfig.node.json': JSON.stringify({
+            include: ['bamboo.config.ts'],
+            compilerOptions: { paths: { '~/*': ['./src/*'] } },
+          }),
+        },
+      )
+      const file = join(root, 'bamboo.config.ts')
+
+      await expect(bundle(file, root, { projectReferences: true })).rejects.toThrow(
+        /Could not resolve "@\/theme\/tokens"/,
+      )
+
+      writeFileSync(file, `import { tokens } from '~/theme/tokens'\nexport default { theme: { tokens } }`)
+      await expect(bundle<any>(file, root, { projectReferences: true })).resolves.toMatchObject({ config: brand })
+    })
+
+    test('the project that includes it through a nested solution', async () => {
+      const root = project({
+        'tsconfig.json': JSON.stringify({ files: [], references: [{ path: './tsconfig.web.json' }] }),
+        'tsconfig.web.json': JSON.stringify({
+          files: [],
+          references: [{ path: './tsconfig.app.json' }, { path: './tsconfig.node.json' }],
+        }),
+        'tsconfig.app.json': JSON.stringify({ include: ['src'], compilerOptions: { paths: { '@/*': ['./src/*'] } } }),
+        'tsconfig.node.json': JSON.stringify({
+          include: ['bamboo.config.ts'],
+          compilerOptions: { paths: { '~/*': ['./src/*'] } },
+        }),
+        'src/theme/tokens.ts': `export const tokens = { colors: { brand: { value: '#2f81f7' } } }`,
+        'bamboo.config.ts': `import { tokens } from '~/theme/tokens'\nexport default { theme: { tokens } }`,
+      })
+
+      const { config } = await bundle<any>(join(root, 'bamboo.config.ts'), root, { projectReferences: true })
+
+      expect(config).toEqual(brand)
+    })
+
+    // Only the aliases come from a project the config is not in: its other options are the
+    // project's. Under its `verbatimModuleSyntax`, an import the config never uses would be kept.
+    test("not with the rest of that project's options", async () => {
+      const root = solution(
+        { include: ['src'], compilerOptions: { verbatimModuleSyntax: true, paths: { '@/*': ['./src/*'] } } },
+        {
+          'src/theme/unused.ts': `export const unused = 1`,
+          'bamboo.config.ts': `import { tokens } from '@/theme/tokens'\nimport { unused } from '@/theme/unused'\nexport default { theme: { tokens } }`,
+        },
+      )
+
+      const { config, dependencies } = await bundle<any>(join(root, 'bamboo.config.ts'), root, {
+        projectReferences: true,
+      })
+
+      expect(config).toEqual(brand)
+      expect(dependencies.filter((file) => file.endsWith('unused.ts'))).toEqual([])
+    })
+
+    // Each file through the project including it, as TypeScript reads it: a file the config imports
+    // from `tsconfig.app.json` imports through that project's aliases, not the config's.
+    test("a file it imports through that file's own project", async () => {
+      const root = solution(
+        { include: ['src'], compilerOptions: { paths: { '@/*': ['./src/*'] } } },
+        {
+          'tsconfig.json': JSON.stringify({
+            files: [],
+            references: [{ path: './tsconfig.app.json' }, { path: './tsconfig.node.json' }],
+          }),
+          'tsconfig.node.json': JSON.stringify({
+            include: ['bamboo.config.ts'],
+            compilerOptions: { paths: { '~/*': ['./src/*'] } },
+          }),
+          'src/theme/brand.ts': `export const brand = { value: '#2f81f7' }`,
+          'src/theme/tokens.ts': `import { brand } from '@/theme/brand'\nexport const tokens = { colors: { brand } }`,
+          'bamboo.config.ts': `import { tokens } from '~/theme/tokens'\nexport default { theme: { tokens } }`,
+        },
+      )
+
+      const { config } = await bundle<any>(join(root, 'bamboo.config.ts'), root, { projectReferences: true })
+
+      expect(config).toEqual(brand)
+    })
+
+    // esbuild's `tsconfig` option would have read every file under one tsconfig, this package's too.
+    test('a package it imports through the tsconfig of its own', async () => {
+      const root = solution(
+        { include: ['src'], compilerOptions: { paths: { '@/*': ['./src/*'] } } },
+        {
+          'packages/tokens/tsconfig.json': JSON.stringify({ compilerOptions: { paths: { '@tokens/*': ['./lib/*'] } } }),
+          'packages/tokens/lib/brand.ts': `export const brand = { value: '#2f81f7' }`,
+          'packages/tokens/src/index.ts': `import { brand } from '@tokens/brand'\nexport const tokens = { colors: { brand } }`,
+          'bamboo.config.ts': `import { tokens } from './packages/tokens/src/index'\nexport default { theme: { tokens } }`,
+        },
+      )
+
+      const { config } = await bundle<any>(join(root, 'bamboo.config.ts'), root, { projectReferences: true })
+
+      expect(config).toEqual(brand)
+    })
+
+    // The first project declaring aliases need not be the one whose aliases reach the file.
+    test('a config in no project, through whichever project reaches the file', async () => {
+      const root = solution(
+        { include: ['src'], compilerOptions: { paths: { '@/*': ['./src/*'] } } },
+        {
+          'tsconfig.json': JSON.stringify({
+            files: [],
+            references: [{ path: './tsconfig.e2e.json' }, { path: './tsconfig.app.json' }],
+          }),
+          'tsconfig.e2e.json': JSON.stringify({ include: ['e2e'], compilerOptions: { paths: { '@/*': ['./e2e/*'] } } }),
+        },
+      )
+
+      const { config } = await bundle<any>(join(root, 'bamboo.config.ts'), root, { projectReferences: true })
+
+      expect(config).toEqual(brand)
+    })
+
+    // A JavaScript config is in the project that includes it with `allowJs`, as a TypeScript one is.
+    test('a JavaScript config, through the project including it and none of another', async () => {
+      const root = solution(
+        { include: ['src'], compilerOptions: { paths: { '@/*': ['./src/*'] } } },
+        {
+          'tsconfig.json': JSON.stringify({
+            files: [],
+            references: [{ path: './tsconfig.app.json' }, { path: './tsconfig.node.json' }],
+          }),
+          'tsconfig.node.json': JSON.stringify({
+            include: ['bamboo.config.mjs'],
+            compilerOptions: { allowJs: true, paths: { '~/*': ['./src/*'] } },
+          }),
+          'bamboo.config.mjs': `import { tokens } from '@/theme/tokens'\nexport default { theme: { tokens } }`,
+        },
+      )
+      const file = join(root, 'bamboo.config.mjs')
+
+      await expect(bundle(file, root, { projectReferences: true })).rejects.toThrow(
+        /Could not resolve "@\/theme\/tokens"/,
+      )
+
+      writeFileSync(file, `import { tokens } from '~/theme/tokens'\nexport default { theme: { tokens } }`)
+      await expect(bundle<any>(file, root, { projectReferences: true })).resolves.toMatchObject({ config: brand })
+    })
+
+    // A file a project includes resolves through that project, whatever the root declares.
+    test("a file it imports through its project's aliases, beside a root declaring others", async () => {
+      const root = solution(
+        { include: ['src'], compilerOptions: { paths: { '@/*': ['./src/*'] } } },
+        {
+          'tsconfig.json': JSON.stringify({
+            files: [],
+            extends: './tsconfig.base.json',
+            references: [{ path: './tsconfig.app.json' }],
+          }),
+          'tsconfig.base.json': JSON.stringify({ compilerOptions: { paths: { '@workspace/*': ['./packages/*'] } } }),
+          'src/theme/brand.ts': `export const brand = { value: '#2f81f7' }`,
+          'src/theme/tokens.ts': `import { brand } from '@/theme/brand'\nexport const tokens = { colors: { brand } }`,
+          'bamboo.config.ts': `import { tokens } from './src/theme/tokens'\nexport default { theme: { tokens } }`,
+        },
+      )
+
+      const { config } = await bundle<any>(join(root, 'bamboo.config.ts'), root, { projectReferences: true })
+
+      expect(config).toEqual(brand)
+    })
+
+    // Not a `baseUrl` alone: it would put a directory of the project ahead of every package.
+    test("a config in no project, through no other project's baseUrl", async () => {
+      const root = solution(
+        { include: ['src'], compilerOptions: { baseUrl: '.' } },
+        {
+          'node_modules/utils/package.json': JSON.stringify({ name: 'utils', main: 'index.js' }),
+          'node_modules/utils/index.js': `exports.where = 'package'`,
+          'utils/index.ts': `export const where = 'project'`,
+          'bamboo.config.ts': `import { where } from 'utils'\nexport default { where }`,
+        },
+      )
+
+      const { config } = await bundle<any>(join(root, 'bamboo.config.ts'), root, { projectReferences: true })
+
+      expect(config).toEqual({ where: 'package' })
+    })
+
+    // Aliases the root declares itself are read by esbuild, as they always were.
+    test('a root declaring aliases of its own', async () => {
+      const root = solution(
+        { include: ['src'] },
+        {
+          'tsconfig.json': JSON.stringify({
+            files: [],
+            references: [{ path: './tsconfig.app.json' }],
+            compilerOptions: { baseUrl: '.', paths: { '@/*': ['./src/*'] } },
+          }),
+        },
+      )
+
+      const { config } = await bundle<any>(join(root, 'bamboo.config.ts'), root, { projectReferences: true })
+
+      expect(config).toEqual(brand)
+    })
+
+    // esbuild names an importer by its real path, which is not where the projects were read for a
+    // config found through a symlinked directory.
+    test('for an importer named by its real path', async () => {
+      const root = solution({ include: ['src'], compilerOptions: { paths: { '@/*': ['./src/*'] } } })
+      const link = join(realpathSync(mkdtempSync(join(tmpdir(), 'bamboo-config-link-'))), 'project')
+      projects.push(dirname(link))
+      symlinkSync(root, link, 'dir')
+
+      const aliases = await resolveSolutionAliases(join(link, 'bamboo.config.ts'), link)
+
+      expect(aliases?.candidates('@/theme/tokens', join(root, 'bamboo.config.ts'))).toEqual([
+        join(link, 'src/theme/tokens'),
+      ])
+      expect(aliases?.candidates('@/theme/tokens', join(link, 'bamboo.config.ts'))).toEqual([
+        join(link, 'src/theme/tokens'),
+      ])
+    })
+
+    // A root that compiles the config itself — no `files` or `include`, so everything — is the
+    // config's project, whatever it references, and declares no aliases.
+    test('not past a root that is not solution-style', async () => {
+      const root = project({
+        'tsconfig.json': JSON.stringify({ references: [{ path: './lib' }] }),
+        'lib/tsconfig.json': JSON.stringify({ compilerOptions: { paths: { '@/*': ['../src/*'] } } }),
+        'src/theme/tokens.ts': `export const tokens = { colors: { brand: { value: '#2f81f7' } } }`,
+        'bamboo.config.ts': `import { tokens } from '@/theme/tokens'\nexport default { theme: { tokens } }`,
+      })
+
+      await expect(bundle(join(root, 'bamboo.config.ts'), root, { projectReferences: true })).rejects.toThrow(
+        /Could not resolve "@\/theme\/tokens"/,
+      )
+    })
+
+    // A reference whose `extends` names a package that is not installed is no reason to fail.
+    test('past a reference that does not parse', async () => {
+      const root = solution(
+        { include: ['src'], compilerOptions: { paths: { '@/*': ['./src/*'] } } },
+        {
+          'tsconfig.json': JSON.stringify({
+            files: [],
+            references: [{ path: './tsconfig.node.json' }, { path: './tsconfig.app.json' }],
+          }),
+          'tsconfig.node.json': JSON.stringify({ extends: '@tsconfig/not-installed', include: ['vite.config.ts'] }),
+        },
+      )
+
+      const { config } = await bundle<any>(join(root, 'bamboo.config.ts'), root, { projectReferences: true })
+
+      expect(config).toEqual(brand)
+    })
+
+    // Moving an alias, or adding the project that declares it, changes what the config imports.
+    test('depending on the tsconfigs consulted, and on a reference not there yet', async () => {
+      const root = solution(
+        { include: ['src'], compilerOptions: { paths: { '@/*': ['./src/*'] } } },
+        {
+          'tsconfig.json': JSON.stringify({
+            files: [],
+            references: [{ path: './tsconfig.missing.json' }, { path: './tsconfig.app.json' }],
+          }),
+        },
+      )
+
+      const { dependencies } = await bundle<any>(join(root, 'bamboo.config.ts'), root, { projectReferences: true })
+
+      expect(dependencies).toEqual(
+        expect.arrayContaining(['tsconfig.json', 'tsconfig.app.json', 'tsconfig.missing.json']),
+      )
+    })
   })
 })

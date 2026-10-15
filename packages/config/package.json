@@ -54,6 +54,15 @@
         "default": "./dist/resolve-ts-path-pattern.mjs"
       }
     },
+    "./tsconfig": {
+      "source": "./src/tsconfig-utils.ts",
+      "types": "./dist/tsconfig-utils.d.cts",
+      "require": "./dist/tsconfig-utils.cjs",
+      "import": {
+        "types": "./dist/tsconfig-utils.d.mts",
+        "default": "./dist/tsconfig-utils.mjs"
+      }
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {
@@ -72,6 +81,7 @@
     "@bamboocss/types": "workspace:*",
     "esbuild": "0.27.7",
     "escalade": "3.2.0",
+    "get-tsconfig": "4.13.0",
     "microdiff": "1.5.0",
     "typescript": "npm:@typescript/typescript6@6.0.2"
   },

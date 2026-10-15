@@ -1058,13 +1058,16 @@ export class BambooContext extends Generator {
       poll,
     })
 
-    watcher.on(
-      'change',
-      debounce(async (file) => {
-        logger.info('ctx:change', 'config changed, rebuilding...')
-        await reportRebuildFailure(() => cb(file))
-      }),
-    )
+    const rebuild = debounce(async (file: string) => {
+      logger.info('ctx:change', 'config changed, rebuilding...')
+      await reportRebuildFailure(() => cb(file))
+    })
+    // A dependency appearing is a change too: the config's tsconfigs include a referenced project
+    // that does not exist yet. One going is not — a checkout removes and restores files, and the
+    // config would fail to load in between.
+    watcher.on('all', (event, file) => {
+      if (event === 'add' || event === 'change') void rebuild(file)
+    })
   }
 
   watchFiles = (

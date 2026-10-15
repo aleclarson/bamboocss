@@ -64,7 +64,6 @@
     "chokidar": "5.0.0",
     "fast-glob": "3.3.3",
     "fs-extra": "11.3.2",
-    "get-tsconfig": "^4.13.0",
     "lodash.merge": "4.6.2",
     "look-it-up": "2.1.0",
     "matcher": "6.0.0",

@@ -7,9 +7,10 @@ import { mkdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { dirname, extname, join } from 'node:path'
+import { dirname, extname, isAbsolute, join, relative } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { findConfig } from './find-config'
+import { resolveSolutionAliases, type SolutionAliases } from './tsconfig-utils'
 import type { BundleConfigResult, ConfigFileOptions } from './types'
 
 const require = createRequire(import.meta.url)
@@ -51,11 +52,11 @@ const REQUIRE_BANNER =
  * any failure, which ran the config a second time and replaced the real error with that
  * fallback's own, `Please pass in filename to use require`.
  */
-export async function bundle<T extends Config = Config>(filepath: string, cwd: string) {
+export async function bundle<T extends Config = Config>(filepath: string, cwd: string, options: BundleOptions = {}) {
   // A path, or a package name — a string preset is loaded through here too — resolved from `cwd`.
   const file = require.resolve(filepath, { paths: [cwd] })
   const esm = isEsmFile(file)
-  const { code, dependencies } = await bundleFile(file, cwd, esm)
+  const { code, dependencies } = await bundleFile(file, cwd, esm, options)
 
   let mod: any
   try {
@@ -89,7 +90,11 @@ function isEsmFile(file: string): boolean {
   }
 }
 
-async function bundleFile(file: string, cwd: string, esm: boolean) {
+async function bundleFile(file: string, cwd: string, esm: boolean, options: BundleOptions) {
+  // esbuild reads each file under the tsconfig it finds walking up from it, which for one beside a
+  // solution-style root declares no `paths`, so a config's alias imports resolved nowhere. See
+  // `resolveSolutionAliases`.
+  const aliases = options.projectReferences ? await resolveSolutionAliases(file, cwd) : undefined
   const result = await build({
     absWorkingDir: cwd,
     entryPoints: [file],
@@ -110,13 +115,56 @@ async function bundleFile(file: string, cwd: string, esm: boolean) {
       'import.meta.filename': FILENAME,
     },
     ...(esm && { banner: { js: REQUIRE_BANNER } }),
-    plugins: [injectFileScopeVariables],
+    plugins: [injectFileScopeVariables, ...(aliases ? [resolveAliases(aliases)] : [])],
   })
 
   return {
     code: result.outputFiles[0].text,
-    dependencies: result.metafile ? Object.keys(result.metafile.inputs) : [],
+    // The tsconfigs consulted too: an alias that moves, or a reference that appears, changes what
+    // the config imports.
+    dependencies: [
+      ...(result.metafile ? Object.keys(result.metafile.inputs) : []),
+      ...(aliases?.files() ?? []).map((path) => relative(cwd, path)),
+    ],
   }
+}
+
+/**
+ * Resolve the bare imports of the files esbuild reads under a solution-style root through the
+ * aliases of their projects, each candidate as esbuild resolves a path — extensions, index files.
+ * One none of them reach is left to esbuild, which looks in `node_modules`, as TypeScript does.
+ */
+function resolveAliases(aliases: SolutionAliases): Plugin {
+  return {
+    name: 'bamboo:solution-aliases',
+    setup(build) {
+      // Never a relative specifier: TypeScript reads `paths` for bare ones alone. Nor an absolute
+      // one — every candidate is, so resolving one does not come back here.
+      build.onResolve({ filter: /^[^.]/ }, async (args) => {
+        if (args.namespace !== 'file' || !args.importer || isAbsolute(args.path)) return undefined
+        for (const candidate of aliases.candidates(args.path, args.importer) ?? []) {
+          const resolved = await build.resolve(candidate, {
+            importer: args.importer,
+            kind: args.kind,
+            resolveDir: args.resolveDir,
+          })
+          if (resolved.errors.length) continue
+          const { external, namespace, path, sideEffects, suffix } = resolved
+          return { external, namespace, path, sideEffects, suffix }
+        }
+        return undefined
+      })
+    },
+  }
+}
+
+interface BundleOptions {
+  /**
+   * Resolve the file's alias imports through a solution-style tsconfig's referenced projects. For
+   * the config, which is the project's; not for a preset, which is a package's, and whose own
+   * tsconfig esbuild finds from where it is.
+   */
+  projectReferences?: boolean
 }
 
 /**
@@ -245,7 +293,7 @@ export async function bundleConfig(options: ConfigFileOptions): Promise<BundleCo
 
   logger.debug('config:path', filePath)
 
-  const result = await bundle(filePath, cwd)
+  const result = await bundle(filePath, cwd, { projectReferences: true })
 
   if (typeof result.config !== 'object') {
     throw new BambooError('CONFIG_ERROR', `💥 Config must export or return an object.`)
