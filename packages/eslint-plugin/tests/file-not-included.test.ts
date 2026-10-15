@@ -23,6 +23,12 @@ eslintTester.run(RULE_NAME, rule, {
       errors: [{ messageId: 'include' }],
       filename: 'Invalid.tsx',
     },
+    // A hidden folder, which the build's glob does not enter however wide `include` is.
+    {
+      code: invalidCode,
+      errors: [{ messageId: 'include' }],
+      filename: '.storybook/preview.tsx',
+    },
   ],
   valid: [
     {

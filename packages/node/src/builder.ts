@@ -4,13 +4,12 @@ import { BambooError, uniq } from '@bamboocss/shared'
 import type { DiffConfigResult } from '@bamboocss/types'
 import { existsSync, readFileSync, realpathSync, statSync } from 'fs'
 import { normalize, resolve } from 'path'
-import picomatch from 'picomatch'
 import { codegen } from './codegen'
 import { loadConfigAndCreateContext } from './config'
 import { BambooContext } from './create-context'
 import { assembleExtractedSheet } from './assemble-sheet'
 import { globDirname } from './glob-dirname'
-import { globIgnore } from './node-runtime'
+import { sourceMatcher, splitPatterns } from './node-runtime'
 import { createSourceScanCache, recordResolvedTokenReferences } from './token-references'
 
 const fileModifiedMap = new Map<string, number>()
@@ -204,9 +203,7 @@ export class Builder {
     if (!patterns) {
       const { cwd, dependencies, include } = ctx.config
       // A negation reads nothing, so it names no folder; `!(legacy)/**` is no negation, but a glob.
-      const positive = [...(include ?? []), ...(dependencies ?? [])].filter(
-        (pattern) => !picomatch.scan(pattern).negated,
-      )
+      const { positive } = splitPatterns([...(include ?? []), ...(dependencies ?? [])])
       patterns = Object.freeze(
         positive.length ? uniq(globDirname(positive).map((directory) => resolve(cwd, directory))) : [],
       )
@@ -221,7 +218,16 @@ export class Builder {
   }
 
   /** The compiled `include`/`exclude` matcher of each context, since the compiler asks per module. */
-  private sourceMatchers = new WeakMap<BambooContext, ((path: string) => boolean) | undefined>()
+  private sourceMatchers = new WeakMap<BambooContext, (path: string) => boolean>()
+
+  private sourceMatcherOf = (ctx: BambooContext) => {
+    let matches = this.sourceMatchers.get(ctx)
+    if (!matches) {
+      matches = sourceMatcher(ctx.config.include, ctx.config.exclude, ctx.config.cwd)
+      this.sourceMatchers.set(ctx, matches)
+    }
+    return matches
+  }
 
   /**
    * @internal Whether this path is one `include` covers and `exclude` does not.
@@ -234,16 +240,8 @@ export class Builder {
     const ctx = this.getContextOrThrow()
     const absolutePath = this.absOwner(ctx, filePath)
     const relativePath = this.sourcePath(ctx.runtime.path.relative(ctx.config.cwd, absolutePath))
-    if (!this.sourceMatchers.has(ctx)) {
-      const sourcePatterns = ctx.config.include ?? []
-      this.sourceMatchers.set(
-        ctx,
-        sourcePatterns.length ? picomatch(sourcePatterns, { ignore: globIgnore(ctx.config.exclude) }) : undefined,
-      )
-    }
-    const sourceMatcher = this.sourceMatchers.get(ctx)
-    if (!sourceMatcher) return false
-    if (sourceMatcher(relativePath) || sourceMatcher(absolutePath)) return true
+    const isSource = this.sourceMatcherOf(ctx)
+    if (isSource(relativePath)) return true
     // A bundler names a module by where it really is, which a link `include` was read through
     // spells otherwise: the module is a source if any spelling of it is. Only a spelling in a folder
     // `include` is globbed from can be, which spares the matcher every dependency of a project
@@ -252,7 +250,7 @@ export class Builder {
     return this.sourcePathsOf(absolutePath).some(
       (source) =>
         bases.some((base) => source === base.path || source.startsWith(base.prefix)) &&
-        (sourceMatcher(this.sourcePath(ctx.runtime.path.relative(ctx.config.cwd, source))) || sourceMatcher(source)),
+        isSource(this.sourcePath(ctx.runtime.path.relative(ctx.config.cwd, source))),
     )
   }
 
@@ -262,7 +260,7 @@ export class Builder {
   private includeBases = (ctx: BambooContext) => {
     let bases = this.includeBaseCache.get(ctx)
     if (!bases) {
-      const positive = (ctx.config.include ?? []).filter((pattern) => !picomatch.scan(pattern).negated)
+      const { positive } = splitPatterns(ctx.config.include ?? [])
       bases = (positive.length ? uniq(globDirname(positive)) : []).map((directory) => {
         const path = this.sourcePath(resolve(ctx.config.cwd, directory))
         return { path, prefix: path.endsWith('/') ? path : `${path}/` }
@@ -366,10 +364,17 @@ export class Builder {
     const ctx = this.getContextOrThrow()
     const absolutePath = this.absOwner(ctx, filePath)
     const relativePath = this.sourcePath(ctx.runtime.path.relative(ctx.config.cwd, absolutePath))
-    const patterns = ctx.config.dependencies ?? []
-    const matcher = patterns.length ? picomatch(patterns) : undefined
-    return matcher?.(relativePath) || matcher?.(absolutePath) || false
+    let matcher = this.dependencyMatchers.get(ctx)
+    if (!matcher) {
+      // As the glob that expands `dependencies` reads them.
+      matcher = sourceMatcher(ctx.config.dependencies, undefined, ctx.config.cwd)
+      this.dependencyMatchers.set(ctx, matcher)
+    }
+    return matcher(relativePath)
   }
+
+  /** The compiled `dependencies` matcher of each context, since a watcher asks per event. */
+  private dependencyMatchers = new WeakMap<BambooContext, (path: string) => boolean>()
 
   /** @internal Exact local package/tsconfig files which can change semantic resolution. */
   getResolutionConfigurationFiles = (): readonly string[] => {

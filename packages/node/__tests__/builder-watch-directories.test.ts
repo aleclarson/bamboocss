@@ -34,3 +34,16 @@ test('the folders a file appearing can change the stylesheet from', async () => 
     join(cwd, 'theme'),
   ])
 })
+
+// What the glob takes from `include`, membership takes too: a negation there passes over what it
+// names, and over nothing else — it used to make every path there is a source.
+test('a source is what the glob would read', async () => {
+  const builder = new Builder()
+  await builder.setup({ cwd: project })
+  const { cwd } = builder.getContextOrThrow().config
+
+  expect(builder.isPotentialSourceFile(join(cwd, 'src/app.tsx'))).toBe(true)
+  expect(builder.isPotentialSourceFile(join(cwd, 'src/legacy/old.tsx'))).toBe(false)
+  expect(builder.isPotentialSourceFile(join(cwd, 'README.md'))).toBe(false)
+  expect(builder.isPotentialSourceFile(join(cwd, 'node_modules/react/index.js'))).toBe(false)
+})

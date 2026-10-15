@@ -5,9 +5,8 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
-import picomatch from 'picomatch'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
-import { globIgnore, nodeRuntime } from '../src/node-runtime'
+import { globIgnore, nodeRuntime, sourceMatcher } from '../src/node-runtime'
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'bamboo-source-glob-')))
 afterAll(() => rmSync(root, { force: true, recursive: true }))
@@ -175,11 +174,24 @@ test.skipIf(process.platform === 'win32')('the source glob reports a link to a f
 /**
  * The glob finds the inventory, and `Builder.isPotentialSourceFile` — this matcher — decides
  * whether a file that appears later belongs to it, and whether the compiler reads a module at all.
- * Where the two disagree, a module is compiled into classes the stylesheet was never built from.
+ * Where the two disagree, a module is compiled into classes the stylesheet was never built from, or
+ * a file that is no source sets off a scan of them all.
  */
 describe('the source glob, against membership', () => {
   const cwd = join(root, 'membership')
-  const entries = ['src/app.tsx', 'src/legacy/old.tsx', 'src/ui/button.tsx']
+  const entries = [
+    '.hidden/a.stories.tsx',
+    '.hidden/app.tsx',
+    '.hidden/y.d.ts',
+    '.storybook/legacy/q.tsx',
+    'README.md',
+    'lib/util.ts',
+    'src/app.tsx',
+    'src/legacy/deep/older.tsx',
+    'src/legacy/old.tsx',
+    'src/ui/a.stories.tsx',
+    'src/ui/button.tsx',
+  ]
   files(cwd, entries)
 
   test.each<[string[], string[]?]>([
@@ -191,11 +203,59 @@ describe('the source glob, against membership', () => {
     [['src/**/*.tsx'], ['src/legacy/']],
     [['src/**/*.tsx', '!src/legacy/']],
     [['src/**/*.tsx'], ['src/legacy/**']],
+    // A folder passed over is passed over whole: the glob does not read it.
+    [['src/**/*.tsx'], ['src/legacy']],
+    [['src/**/*.tsx'], ['**/legacy']],
+    [['src/**/*.tsx'], ['src/legacy/deep']],
+    // A negated `include` pattern passes over, where a matcher handed it matched every other path.
+    [['src/**/*.tsx', '!src/legacy/**']],
+    [['src/**/*.tsx', '!src/legacy']],
+    [['src/**/*.tsx', '!**/old.tsx']],
+    // A wildcard in a folder's last segment does not stop the walk there: it passes over entries.
+    [['src/**/*.tsx'], ['src/legacy/*']],
+    [['src/**/*.tsx'], ['src/l*']],
+    [['src/**/*.tsx', '!src/ui/*']],
+    // A pattern without a glob is looked up, not walked, so a folder passed over does not hide it.
+    [['src/**/*.tsx', 'src/legacy/old.tsx'], ['src/legacy']],
+    // Nor the folder a walk begins at, which the walk never tests.
+    [['src/legacy/**/*.tsx'], ['src/legacy']],
+    // A negation in `exclude` reads as what it names, without the `!`.
+    [['src/**/*.tsx'], ['!src/ui/**']],
+    // A hidden folder is not entered, though a pattern starting at `.` reaches everything else —
+    // and what is passed over is passed over in one `include` does name.
+    [['**/*.tsx']],
+    [['**/*']],
+    [['.hidden/**/*.tsx'], ['**/*.stories.tsx']],
+    [['.hidden/**/*.ts']],
+    // Below a hidden folder a walk begins at, a folder is tested as the walk reads names: `**` does
+    // not reach into `.storybook`, so `**/legacy` does not stop it there.
+    [['.storybook/**/*.tsx'], ['**/legacy']],
+    // `..` resolved on the way down — in what is read from, not in what is passed over.
+    [['src/x/../**/*.tsx']],
+    [['src/**/*.tsx'], ['src/x/../legacy']],
+    // Each walk as its own patterns spell what it meets: an absolute `exclude` stops an absolute
+    // walk, and none from `cwd`.
+    [[`${path(cwd)}/src/**/*.tsx`], [`${path(cwd)}/src/legacy`]],
+    [['src/**/*.tsx'], [`${path(cwd)}/src/legacy`]],
   ])('%j, excluding %j', (include, exclude) => {
-    const member = picomatch(include, { ignore: globIgnore(exclude) })
+    const member = sourceMatcher(include, exclude, cwd)
 
     expect(nodeRuntime.fs.glob({ cwd, exclude, include })).toEqual(
       entries.filter((entry) => member(entry)).map((entry) => path(cwd, entry)),
     )
+  })
+
+  test('counts nothing a negated pattern does not name a member', () => {
+    const member = sourceMatcher(['src/**/*.tsx', '!src/legacy/**'], undefined, cwd)
+
+    expect(['README.md', 'node_modules/react/index.js', 'src/legacy/old.tsx'].filter((file) => member(file))).toEqual(
+      [],
+    )
+    expect(member('src/app.tsx')).toBe(true)
+  })
+
+  // The glob walks from `cwd` down, so nothing above it, however a pattern starting with `**` reads.
+  test('counts nothing outside cwd a member', () => {
+    expect(sourceMatcher(['**/*.tsx'], undefined, cwd)('../outside/card.tsx')).toBe(false)
   })
 })

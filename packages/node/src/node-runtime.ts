@@ -4,7 +4,7 @@ import chokidar from 'chokidar'
 import glob from 'fast-glob'
 import fsExtra from 'fs-extra'
 import { readdirSync, realpathSync, statSync, type Stats, type StatSyncOptions } from 'node:fs'
-import { dirname, extname, isAbsolute, join, relative, resolve, sep } from 'path'
+import { dirname, extname, isAbsolute, join, posix, relative, resolve, sep } from 'path'
 import picomatch from 'picomatch'
 import { globDirname } from './glob-dirname'
 
@@ -27,6 +27,124 @@ import { globDirname } from './glob-dirname'
  * mutated.
  */
 export const globIgnore = (exclude: string[] | undefined) => ['**/*.d.ts', ...(exclude ?? [])]
+
+/** Patterns that name what to read, apart from those, `!`-led, that name what to pass over. */
+export const splitPatterns = (patterns: readonly string[]) => {
+  const positive: string[] = []
+  const negative: string[] = []
+  for (const pattern of patterns) {
+    if (picomatch.scan(pattern).negated) negative.push(pattern.slice(1))
+    else positive.push(pattern)
+  }
+  return { negative, positive }
+}
+
+/**
+ * Whether a `cwd`-relative, `/`-spelled path is one the source glob returns for `include` and
+ * `exclude`, told without walking: what decides a file's membership when it appears, and whether
+ * the compiler reads a module.
+ *
+ * As the glob reads the two, which a matcher handed the same lists does not:
+ *
+ * - A negated `include` pattern — `!src/legacy/**` — is one more thing to pass over, where such a
+ *   matcher matches every path it does not name: `README.md`, and each module in `node_modules`,
+ *   was a source. So is a negated `exclude` pattern, which the glob reads without its `!`.
+ * - A file passed over is matched with hidden paths in reach, so `**\/*.d.ts` drops one under
+ *   `.storybook` that `include` names, though a wildcard of `include`'s own does not enter it.
+ * - A folder the walk meets below where it began, with a name an ignore matches outright —
+ *   `src/legacy`, `**\/legacy`, not `src/legacy/*` — is not read: nothing in it is a source. The
+ *   folder a walk begins at is never tested, so `src/legacy/**` beside `exclude: ['src/legacy']`
+ *   reads it, and a pattern without a glob — looked up in its own folder — is one wherever it is.
+ * - A pattern is matched as its own walk spells what it meets: one written as an absolute path
+ *   against where a file is from the root, and every other against where it is from `cwd` — so
+ *   `**\/*.tsx` reaches nothing above `cwd`, and an absolute `exclude` beside a relative `include`
+ *   passes over nothing, as the glob passes over nothing for it.
+ */
+export const sourceMatcher = (
+  include: readonly string[] = [],
+  exclude?: string[],
+  cwd: string = process.cwd(),
+): ((path: string) => boolean) => {
+  const { negative, positive } = splitPatterns(include)
+  // As written: the glob resolves `..` in what it reads from, not in what it passes over.
+  const ignore = [
+    ...negative,
+    ...globIgnore(exclude).map((pattern) => (pattern.startsWith('!') ? pattern.slice(1) : pattern)),
+  ]
+  const read = positive.map(resolveDots)
+  // Each walk matches what it meets as its own patterns spell it: from `cwd`, or from the root.
+  const fromCwd = membership(
+    read.filter((pattern) => !isAbsolute(pattern)),
+    ignore,
+    cwd,
+  )
+  const absolute = read.filter((pattern) => isAbsolute(pattern))
+  // Spelled with `/`, as the glob spells it: a watcher on Windows hands over `\`.
+  const spelled = (input: string) => (input.includes('\\') ? slashes(input) : input)
+  if (!absolute.length) return (input) => fromCwd(spelled(input))
+  const fromRoot = membership(absolute, ignore, cwd)
+  const root = slashes(cwd)
+  return (input) => {
+    const path = spelled(input)
+    return fromCwd(path) || fromRoot(posix.join(root, path))
+  }
+}
+
+/** A pattern with `.` and `..` segments resolved, as the walk resolves them on its way down. */
+const resolveDots = (pattern: string) =>
+  pattern.startsWith('./') || pattern.includes('/./') || pattern.includes('/../') ? posix.normalize(pattern) : pattern
+
+/** As `sourceMatcher` tells it, for patterns all spelled the one way — and paths spelled so. */
+const membership = (read: string[], ignore: string[], cwd: string): ((path: string) => boolean) => {
+  if (!read.length) return () => false
+  // `/` in a path and `\` an escape, on every platform, as the glob reads them.
+  const options = { windows: false }
+  // As written — braces and all, one test each — and what is passed over only once that matches,
+  // so a module no pattern reaches costs no more than the patterns.
+  const matches = picomatch(read, options)
+  const ignored = picomatch(ignore, { ...options, dot: true })
+  const member = (path: string) => matches(path) && !ignored(path)
+
+  // Those that stop the walk at a folder: a name without a glob, which it tests a folder against
+  // — with its own reading of a hidden name, unlike what it tests a file against.
+  const folderIgnore = ignore.filter(
+    (pattern) => !pattern.endsWith('/**') && !glob.isDynamicPattern(posix.basename(pattern)),
+  )
+  if (!folderIgnore.length) return member
+
+  // By the folder each is read from — a pattern without a glob too, which is looked up in its own
+  // folder, so that nothing lies between where it is read from and the file.
+  const walks = byWalk(
+    glob.generateTasks(read, { cwd }).flatMap((task) => task.positive),
+    cwd,
+  )
+  let stops = false
+  const reads = [...walks].map(([base, patterns]) => {
+    // With one walk, the patterns as written already said that it reaches the path.
+    const inWalk = walks.size === 1 ? () => true : picomatch(patterns, options)
+    // Not the folder a walk begins at, nor one above it: the walk never tests those.
+    const skipped = folderIgnore.filter((pattern) => !picomatch([pattern, `${pattern}/**`], options)(base))
+    if (!skipped.length) return inWalk
+    stops = true
+    const inSkipped = picomatch(
+      skipped.map((pattern) => `${pattern}/**`),
+      options,
+    )
+    return (path: string) => inWalk(path) && !inSkipped(path)
+  })
+  // Read by some walk that reaches it, and was not stopped short of it.
+  return stops ? (path) => member(path) && reads.some((read) => read(path)) : member
+}
+
+/** Patterns by the folder each is walked from when alone, as the source glob walks them. */
+const byWalk = (patterns: readonly string[], cwd: string | undefined) => {
+  const walks = new Map<string, string[]>()
+  for (const pattern of patterns) {
+    const base = glob.generateTasks([pattern], { cwd })[0]?.base ?? '.'
+    walks.set(base, [...(walks.get(base) ?? []), pattern])
+  }
+  return walks
+}
 
 /**
  * The order the source glob returns files in, made a decision rather than an accident.
@@ -179,12 +297,7 @@ const stopAtCycles = () => {
  */
 const byOwnBase = (task: glob.Task, cwd: string | undefined) => {
   if (task.base !== '.' || task.positive.length < 2) return [task.positive]
-  const groups = new Map<string, string[]>()
-  for (const pattern of task.positive) {
-    const base = glob.generateTasks([pattern], { cwd })[0]?.base ?? '.'
-    groups.set(base, [...(groups.get(base) ?? []), pattern])
-  }
-  return [...groups.values()]
+  return [...byWalk(task.positive, cwd).values()]
 }
 
 export const nodeRuntime: Runtime = {
@@ -252,8 +365,8 @@ export const nodeRuntime: Runtime = {
       const coalesce = poll || process.platform === 'win32'
 
       const dirnames = globDirname(include)
-      const isValidPath = picomatch(include, { cwd, ignore: exclude })
       const workingDir = cwd || process.cwd()
+      const isValidPath = sourceMatcher(include, exclude, workingDir)
 
       const watcher = chokidar.watch(dirnames, {
         usePolling: poll,

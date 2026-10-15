@@ -7,7 +7,6 @@ import { resolveTsPathPattern } from '@bamboocss/config/ts-path'
 import { Generator } from '@bamboocss/generator'
 import type { TokenDataTypes } from '@bamboocss/types'
 import { logger } from '@bamboocss/logger'
-import micromatch from 'micromatch'
 import { readFileSync, statSync } from 'node:fs'
 import path from 'path'
 import { runAsWorker } from 'synckit'
@@ -387,17 +386,24 @@ export async function runAsync(action: string, options: Options, ...args: any): 
   }
 }
 
-// Refactored to use micromatch instead of getFiles() for O(1) performance
-const isValidFile = (context: Generator, fileName: string): boolean => {
-  const { exclude, include } = context.config
+/** Each context's answer to whether `include` reaches a file. @see isValidFile */
+const sourceMatchers = new WeakMap<Generator, (path: string) => boolean>()
+
+/**
+ * Whether `include` reaches the file, as the build's glob reads it — a negated pattern among
+ * `include`, a folder named in `exclude`, a hidden folder the glob does not enter — and without a
+ * walk, which a rule asked of every file cannot afford.
+ */
+const isValidFile = async (context: Generator, fileName: string): Promise<boolean> => {
   const cwd = context.config.cwd || process.cwd()
-
+  let matches = sourceMatchers.get(context)
+  if (!matches) {
+    const { sourceMatcher } = await loadNode()
+    matches = sourceMatcher(context.config.include, context.config.exclude, cwd)
+    sourceMatchers.set(context, matches)
+  }
   const relativePath = path.isAbsolute(fileName) ? path.relative(cwd, fileName) : fileName
-
-  return micromatch.isMatch(relativePath, include, {
-    dot: true,
-    ignore: exclude,
-  })
+  return matches(relativePath.replaceAll('\\', '/'))
 }
 
 // Refactored to arrow function, removed async
