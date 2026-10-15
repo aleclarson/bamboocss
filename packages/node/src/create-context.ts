@@ -3,8 +3,6 @@ import type {
   FoldAnalysis,
   NativeEntrypoint,
   NativeFileAnalysis,
-  NativeFoldOptions,
-  NativePathMapping,
   NativeProjectOptions,
   NativeSource,
   NativeToken,
@@ -23,42 +21,17 @@ import type {
   WatcherEventType,
 } from '@bamboocss/types'
 import { debounce } from 'perfect-debounce'
-import { createRequire } from 'node:module'
 import { statSync } from 'node:fs'
-import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { createBox } from './cli-box'
 import { DiffEngine } from './diff-engine'
 import { ParserResult, type UnresolvedStyle } from './parser-result'
 import { SourceProject } from './source-project'
 import { nodeRuntime } from './node-runtime'
+import { loadNativeExtractor } from './native-extractor'
 import { OutputEngine } from './output-engine'
 
 /** A thrown value's message, for a `catch` binding that is typed `unknown`. */
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
-
-type NativeExtractor = {
-  analyzeMany(
-    sources: NativeSource[],
-    entrypoints: NativeEntrypoint[],
-    options?: NativeProjectOptions,
-  ): NativeFileAnalysis[]
-  accountTokens(
-    filename: string,
-    source: string,
-    tokenModules: string[],
-    pathMappings?: NativePathMapping[],
-  ): NativeTokenAccounting
-  compileModules(sources: NativeSource[], auxiliary: NativeSource[], options: NativeFoldOptions): FoldAnalysis[]
-}
-
-const nativeBinaryName = () => {
-  if (process.platform === 'darwin' && process.arch === 'arm64') return 'darwin-arm64.node'
-  if (process.platform === 'darwin' && process.arch === 'x64') return 'darwin-x64.node'
-  if (process.platform === 'linux' && process.arch === 'arm64') return 'linux-arm64-gnu.node'
-  if (process.platform === 'linux' && process.arch === 'x64') return 'linux-x64-gnu.node'
-  if (process.platform === 'win32' && process.arch === 'x64') return 'win32-x64-msvc.node'
-}
 
 /**
  * What each loss is, and what the author can do about it.
@@ -567,29 +540,7 @@ export class BambooContext extends Generator {
   }
   private hookedAuxiliary: readonly string[] | undefined
 
-  /** Load the required Rust extractor from the workspace or the published prebuild directory. */
-  private loadNativeExtractor = (): NativeExtractor => {
-    const nativeRequire = createRequire(import.meta.url)
-    try {
-      return nativeRequire('@bamboocss/native-extractor') as NativeExtractor
-    } catch (workspaceError) {
-      const binary = nativeBinaryName()
-      if (!binary) {
-        throw new BambooError(
-          'NATIVE_EXTRACTION',
-          `Native extraction is not available for ${process.platform}-${process.arch}.`,
-          { cause: workspaceError },
-        )
-      }
-      try {
-        return nativeRequire(join(dirname(fileURLToPath(import.meta.url)), 'native', binary)) as NativeExtractor
-      } catch (publishedError) {
-        throw new BambooError('NATIVE_EXTRACTION', `Failed to load the native extractor binary ${binary}.`, {
-          cause: publishedError,
-        })
-      }
-    }
-  }
+  private loadNativeExtractor = loadNativeExtractor
 
   private prepareNativeSource = (filePath: string, original: string) => {
     let parserOptions: ParserResultConfigureOptions = {}

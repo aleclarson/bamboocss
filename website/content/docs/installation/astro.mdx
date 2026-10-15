@@ -57,5 +57,9 @@ Add `/// <reference types="@bamboocss/vite/client" />` to `src/env.d.ts` so Type
 
 </Steps>
 
+Bamboo reads `.astro` files with `@astrojs/compiler-rs`, which Astro 7 depends on, and with `@astrojs/compiler`, which
+Astro 6 and before depend on, for a component the first cannot read. If neither can be loaded, Bamboo says so rather
+than extracting nothing from `.astro` files without a word.
+
 There is no Bamboo PostCSS configuration or authored `@layer` prelude. See [Using Vite](/docs/installation/vite) for the
 compiler contract and diagnostics.

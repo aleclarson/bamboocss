@@ -36,14 +36,7 @@
     },
     "packages/node": {
       "project": ["src/**/*.ts"],
-      "ignoreDependencies": [
-        "@astrojs/compiler",
-        "@bamboocss/token-dictionary",
-        "lodash.merge",
-        "pkg-types",
-        "pluralize",
-        "ts-pattern"
-      ]
+      "ignoreDependencies": ["@bamboocss/token-dictionary", "lodash.merge", "pkg-types", "pluralize", "ts-pattern"]
     },
     "packages/preset-atlaskit": {
       "project": ["src/**/*.ts"]
