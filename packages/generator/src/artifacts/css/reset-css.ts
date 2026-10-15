@@ -1,5 +1,5 @@
 import type { Stylesheet } from '@bamboocss/core'
-import { type Context, extractTrailingPseudos } from '@bamboocss/core'
+import { type Context, extractTrailingPseudos, withoutFirstParent } from '@bamboocss/core'
 import { isObject, mapEntries } from '@bamboocss/shared'
 import type { GlobalStyleObject } from '@bamboocss/types'
 
@@ -167,7 +167,7 @@ export function generateResetCss(ctx: Context, sheet: Stylesheet) {
       if (trailingPseudo) {
         // For selectors with trailing pseudo-elements, we need to restructure them
         // from "::selection.pd-reset" to ".pd-reset ::selection"
-        const scopeClass = selector.replace('&', '')
+        const scopeClass = withoutFirstParent(selector)
         const newSelector = rebuiltSelector
           ? `${scopeClass} ${rebuiltSelector}${trailingPseudo}`
           : `${scopeClass} ${trailingPseudo}`

@@ -921,3 +921,76 @@ describe('atomic / with direct nesting', () => {
     `)
   })
 })
+
+/**
+ * An `&` or a comma in a quoted attribute value is the value's own character. Every `&` was taken
+ * for the parent, writing the class into the value the rule matches against, and a comma split
+ * the selector in two — so each of these rules matched nothing.
+ */
+describe('atomic / a selector with a quoted attribute value', () => {
+  test('keeps an `&` in it as it is', () => {
+    expect(css({ '&[data-label="a & b"]': { color: 'red.300' } })).toMatchInlineSnapshot(`
+      "@layer utilities {
+        @layer s020-c0-p3000;
+
+        @layer s020-c0-p3000 {
+          .\\[\\&\\[data-label\\=\\"a_\\&_b\\"\\]\\]\\:c_red\\.300[data-label="a & b"] {
+            color: var(--colors-red-300);
+      }
+        }
+      }"
+    `)
+    expect(css({ "&[title='a & b']:hover": { color: 'red.300' } })).toMatchInlineSnapshot(`
+      "@layer utilities {
+        @layer s030-c0-p3000;
+
+        @layer s030-c0-p3000 {
+          .\\[\\&\\[title\\=\\'a_\\&_b\\'\\]\\:hover\\]\\:c_red\\.300[title='a & b']:hover {
+            color: var(--colors-red-300);
+      }
+        }
+      }"
+    `)
+    expect(css({ '[data-label="&"] &': { color: 'red.300' } })).toMatchInlineSnapshot(`
+      "@layer utilities {
+        @layer s020-c0-p3000;
+
+        @layer s020-c0-p3000 {
+          [data-label="&"] .\\[\\[data-label\\=\\"\\&\\"\\]_\\&\\]\\:c_red\\.300 {
+            color: var(--colors-red-300);
+      }
+        }
+      }"
+    `)
+  })
+
+  // A key whose only `&` is quoted names no parent, and nests as a descendant, as one without any
+  // does — not with its condition dropped, which applied its styles to every element.
+  test('nests a key whose only `&` is quoted', () => {
+    expect(css({ '.x [data-label="&"]': { color: 'red.300' } })).toMatchInlineSnapshot(`
+      "@layer utilities {
+        @layer s030-c0-p3000;
+
+        @layer s030-c0-p3000 {
+          .\\[\\.x_\\[data-label\\=\\"\\&\\"\\]\\]\\:c_red\\.300 .x [data-label="&"] {
+            color: var(--colors-red-300);
+      }
+        }
+      }"
+    `)
+  })
+
+  test('keeps a comma in it as it is', () => {
+    expect(css({ '&[data-label="x,y"]': { color: 'red.300' } })).toMatchInlineSnapshot(`
+      "@layer utilities {
+        @layer s020-c0-p3000;
+
+        @layer s020-c0-p3000 {
+          .\\[\\&\\[data-label\\=\\"x\\,y\\"\\]\\]\\:c_red\\.300[data-label="x,y"] {
+            color: var(--colors-red-300);
+      }
+        }
+      }"
+    `)
+  })
+})

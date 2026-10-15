@@ -1,5 +1,6 @@
 import { FALLBACK_SEPARATOR, hypenateProperty } from '@bamboocss/shared'
 import type { Dict } from '@bamboocss/types'
+import { parentReferences, replaceParent, sharesLine, splitSelectors, withoutParentSpace } from './parent-selector'
 import { unitlessProperties } from './unitless'
 
 // adapted from https://github.com/stitchesjs/stitches/blob/50fd8a1adc6360340fe348a8b3ebc8b06d38e230/packages/stringify/src/index.js
@@ -58,7 +59,7 @@ export function stringify(
     // Then selectors
     if (selectors.length && !used.has(selectors)) {
       used.add(selectors)
-      cssText += `${selectors.map((s) => s.replace('& ', ''))} {`
+      cssText += `${selectors.map(withoutParentSpace)} {`
     }
 
     let value = data
@@ -124,7 +125,7 @@ export function stringify(
 
         // Nested condition
         if (isAtRuleLike) {
-          if (selectors.length && name.includes('@scope') && name.includes('&')) {
+          if (selectors.length && name.includes('@scope') && parentReferences(name).length > 0) {
             const resolvedSelectors = getResolvedSelectors(selectors, parseSelectors(name))
             usedName = Object(resolvedSelectors[0])
           }
@@ -167,56 +168,17 @@ export function stringify(
  * parseSelectors('&:is(:disabled, [disabled], [data-disabled]), .another') // [':is(:disabled, [disabled], [data-disabled])', '.another']
  */
 export function parseSelectors(selector: string): string[] {
-  const result = [] as string[]
-  let parenCount = 0
-  let currentSelector = ''
-  let inEscape = false
-
-  for (let i = 0; i < selector.length; i++) {
-    const char = selector[i]
-
-    if (char === '\\' && !inEscape) {
-      inEscape = true
-      currentSelector += char
-      continue
-    }
-
-    if (inEscape) {
-      inEscape = false
-      currentSelector += char
-      continue
-    }
-
-    if (char === '(') {
-      parenCount++
-    } else if (char === ')') {
-      parenCount--
-    }
-
-    if (char === ',' && parenCount === 0) {
-      result.push(currentSelector.trim())
-      currentSelector = ''
-    } else {
-      currentSelector += char
-    }
-  }
-
-  if (currentSelector) {
-    result.push(currentSelector.trim())
-  }
-
-  return result
+  // One selector, which is what nearly every one is: nothing to split.
+  if (!selector.includes(',')) return selector ? [selector.trim()] : []
+  return splitSelectors(selector)
 }
 
-const parentSelectorRegex = /&/g
-// Deliberately not global, unlike the one above. `.test()` on a `/g` regex resumes from
-// `lastIndex` and advances it on a match, so the same argument answered `true` then `false`
-// on alternating calls — and the branch below picked `:is(parent)` or a bare parent by call
-// count rather than by its arguments. Those two are not the same rule: `.a .b:hover .a .b`
-// matches a different element set than `:is(.a .b):hover :is(.a .b)`. `parentSelectorRegex`
-// keeps its flag because `.replace()` has to reach every `&`, and it resets `lastIndex`.
+// Deliberately not global. `.test()` on a `/g` regex resumes from `lastIndex` and advances it on
+// a match, so the same argument answered `true` then `false` on alternating calls — and the branch
+// below picked `:is(parent)` or a bare parent by call count rather than by its arguments. Those two
+// are not the same rule: `.a .b:hover .a .b` matches a different element set than
+// `:is(.a .b):hover :is(.a .b)`.
 const descendantSelectorRegex = /[ +>|~]/
-const surroundedRegex = /&.*&/
 
 /**
  * Returns selectors resolved from parent selectors and nested selectors.
@@ -236,13 +198,15 @@ const getResolvedSelectors = (
   parentSelectors.forEach((parentSelector) => {
     resolved.push(
       ...nestedSelectors.map((selector) => {
-        if (!selector.includes('&')) return parentSelector + ' ' + selector
+        const references = parentReferences(selector)
+        if (!references.length) return parentSelector + ' ' + selector
 
-        return selector.replace(
-          parentSelectorRegex,
-          descendantSelectorRegex.test(parentSelector) && surroundedRegex.test(selector)
+        return replaceParent(
+          selector,
+          descendantSelectorRegex.test(parentSelector) && sharesLine(selector, references)
             ? `:is(${parentSelector})`
             : parentSelector,
+          references,
         )
       }),
     )

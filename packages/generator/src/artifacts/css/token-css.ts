@@ -1,5 +1,5 @@
 import type { Conditions, Context } from '@bamboocss/core'
-import { Stylesheet, expandNestedCss, extractParentSelectors, stringify } from '@bamboocss/core'
+import { Stylesheet, expandNestedCss, extractParentSelectors, stringify, withoutParents } from '@bamboocss/core'
 import { logger } from '@bamboocss/logger'
 import type { ConditionQuery } from '@bamboocss/types'
 import postcss, { Container, CssSyntaxError } from 'postcss'
@@ -468,7 +468,7 @@ function getDeepestRule(root: string, selectors: string[]) {
 }
 
 function withoutParentSelector(selector: string) {
-  return selector.replaceAll('&', '').trim()
+  return withoutParents(selector).trim()
 }
 
 function getDeepestNode<T extends Container>(node: T): Container {

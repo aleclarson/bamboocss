@@ -11,4 +11,10 @@ describe('selectors', () => {
     const selectors = extractParentSelectors('[data-theme="dark"] &')
     expect(selectors).toMatchInlineSnapshot(`"[data-theme="dark"]"`)
   })
+
+  // A ` &` in a quoted value is the value's: it was taken off as the nesting, and the attribute
+  // matched a different value.
+  test('keeps a quoted ` &`', () => {
+    expect(extractParentSelectors('[data-a="a &"] &')).toBe('[data-a="a &"]')
+  })
 })
