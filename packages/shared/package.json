@@ -36,5 +36,8 @@
     "build": "tsdown --dts && tsx scripts/postbuild.ts",
     "build-fast": "tsdown --dts=false",
     "dev": "tsdown --dts=false --watch --on-success=\"tsx scripts/postbuild.ts\""
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

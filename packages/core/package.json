@@ -59,5 +59,8 @@
     "@types/lodash.merge": "4.6.9",
     "postcss-discard-duplicates": "8.0.2",
     "postcss-discard-empty": "8.0.2"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

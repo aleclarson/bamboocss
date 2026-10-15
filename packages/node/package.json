@@ -95,5 +95,8 @@
     "@astrojs/compiler-rs": {
       "optional": true
     }
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

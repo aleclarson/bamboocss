@@ -5,6 +5,9 @@ description: Easily use Bamboo with Vite, React and Typescript with our dedicate
 
 ## Build platform requirements
 
+Bamboo runs on Node.js 22.12 or later, as its packages' `engines` say: the PostCSS plugins it optimizes CSS with take no
+release before 22, and Vite none before 22.12.
+
 Bamboo extracts styles with a required Rust/Oxc native binary bundled in `@bamboocss/node`. Published packages include
 prebuilt binaries for these machines running the CLI, dev server, or production build:
 

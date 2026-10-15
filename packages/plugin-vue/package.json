@@ -40,5 +40,8 @@
   "dependencies": {
     "@bamboocss/types": "workspace:*",
     "@vue/compiler-sfc": "3.5.41"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }

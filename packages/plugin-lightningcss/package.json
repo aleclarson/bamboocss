@@ -42,5 +42,8 @@
     "@bamboocss/types": "workspace:*",
     "browserslist": "4.28.7",
     "lightningcss": "1.33.0"
+  },
+  "engines": {
+    "node": ">=22.12.0"
   }
 }
