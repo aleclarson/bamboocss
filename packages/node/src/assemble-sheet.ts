@@ -11,6 +11,12 @@ export interface AssembleExtractedSheetOptions {
   sourceInventory?: readonly string[]
   /** Complete parser results for a one-shot build; watch builds retain lightweight facts instead. */
   parserResults?: ParserResult[]
+  /**
+   * Whether to prune the reset, which `preflight: { prune: true }` asks for. Off for a sheet built
+   * to be read rather than shipped: the pass says what it removed once per context, and a report
+   * saying it first would leave the build that follows silent.
+   */
+  prunePreflight?: boolean
 }
 
 /**
@@ -27,6 +33,7 @@ export const assembleExtractedSheet = (
     mtimeOf,
     sourceInventory,
     parserResults = [],
+    prunePreflight = true,
   }: AssembleExtractedSheetOptions = {},
 ): Stylesheet => {
   ctx.encoder.atomizeObservedRecipes()
@@ -39,7 +46,7 @@ export const assembleExtractedSheet = (
 
   ctx.appendBaselineCss(sheet, { atomizeRecipes: true })
 
-  const collectElements = prunesPreflight(ctx.config.preflight)
+  const collectElements = prunePreflight && prunesPreflight(ctx.config.preflight)
   const pruneKeyframes = Boolean(ctx.config.prune?.keyframes)
   const declaredKeyframes = pruneKeyframes ? keyframeNames(ctx) : []
   const needsScans = ctx.config.prune?.tokens !== false || collectElements || pruneKeyframes

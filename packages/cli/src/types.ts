@@ -37,7 +37,15 @@ export interface AnalyzeCommandFlags {
   outfile?: string
   cwd?: string
   config?: string
-  scope?: 'token' | 'recipe'
+  /** `token`, `recipe`, and with `unused` `pattern` or `keyframe` — each also plural. */
+  scope?: string
+  unused?: boolean
+}
+
+export interface DoctorCommandFlags {
+  json?: boolean
+  cwd?: string
+  config?: string
 }
 
 export interface DebugCommandFlags {
@@ -49,6 +57,7 @@ export interface DebugCommandFlags {
   onlyConfig?: boolean
   cpuProf?: boolean
   logfile?: string
+  zip?: boolean
 }
 
 export interface ShipCommandFlags {

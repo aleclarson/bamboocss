@@ -202,12 +202,23 @@ pnpm bamboo analyze --scope token
 
 # analyze only recipe usage
 pnpm bamboo analyze --scope recipe
+
+# list the configured names no source uses
+pnpm bamboo analyze --unused
+pnpm bamboo analyze --unused --scope token
 ```
 
-| Flag                   | Description                                  | Related |
-| ---------------------- | -------------------------------------------- | ------- |
-| `--outfile [filepath]` | Output analyze report in given JSON filepath | -       |
-| `--scope <type>`       | Select analysis scope (token or recipe)      | -       |
+`--unused` writes one name to a line on stdout, after what it is — `token colors.spare.500`, `recipe badge`,
+`pattern grid`, `keyframe fade` — or bare under `--scope`, so a script can read it; the log goes to stderr. A token or a
+keyframe is listed when the build's own prune removes it, with every prune on whatever the config says, so a name listed
+is one the stylesheet already ships without. One the prune keeps for a reader it cannot follow — a `token()` path built
+at runtime, a theme, a [`keepTokens`](/docs/references/config#prune) pattern — is not listed.
+
+| Flag                   | Description                                                             | Related |
+| ---------------------- | ----------------------------------------------------------------------- | ------- |
+| `--outfile [filepath]` | Output analyze report in given JSON filepath                            | -       |
+| `--scope <type>`       | Select analysis scope: `token` or `recipe`, and `pattern` or `keyframe` | -       |
+| `--unused`             | List only the configured names no source uses, one per line             | -       |
 
 ## debug
 
@@ -226,6 +237,9 @@ pnpm bamboo debug --dry
 
 # Only output resolved config
 pnpm bamboo debug --only-config
+
+# One archive to attach to a bug report, ./styled-system/debug.zip
+pnpm bamboo debug --zip
 ```
 
 | Flag             | Description                                                           | Related |
@@ -233,6 +247,25 @@ pnpm bamboo debug --only-config
 | `--dry`          | Output debug files in stdout without writing to disk                  | -       |
 | `--outdir [dir]` | Output directory for debug files, defaults to `./styled-system/debug` | -       |
 | `--only-config`  | Should only output the config file, default to 'false'                | -       |
+| `--zip`          | Write the debug files as one `<outdir>.zip` instead                   | -       |
+
+## doctor
+
+Check the project as the build reads it, without writing anything: the config it loads, the sources `include` selects,
+and the generated `styled-system` against what `bamboo codegen` would write now. It fails, and says what to fix, when a
+generated file is missing, out of date or no longer generated, when a source cannot be extracted — every style in it is
+absent from the stylesheet — or when a call names a pattern or recipe that does not exist.
+
+```bash
+pnpm bamboo doctor
+
+# The report as JSON, for a script
+pnpm bamboo doctor --json
+```
+
+| Flag     | Description              | Related |
+| -------- | ------------------------ | ------- |
+| `--json` | Print the report as JSON | -       |
 
 ## ship
 

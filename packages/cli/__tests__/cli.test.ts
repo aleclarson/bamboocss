@@ -242,7 +242,7 @@ describe('CLI', () => {
 
     test.each([
       ['codgen', '`bamboo codgen` is not a command; did you mean `bamboo codegen`?'],
-      ['doctor', '`doctor` matches no files, so nothing was built, and the stylesheet was left as it was.'],
+      ['deploy', '`deploy` matches no files, so nothing was built, and the stylesheet was left as it was.'],
       ['./codgen', '`./codgen` matches no files'],
       [`'src/*.tsxx'`, '`src/*.tsxx` matches no files'],
       // A glob matches files, so a directory alone matches nothing.
@@ -364,5 +364,121 @@ describe('CLI', () => {
     expect(pkg).toMatchObject(owned)
     expect(pkg.exports['./css']).toBeDefined()
     expect(pkg.license).toBeUndefined()
+  })
+
+  /**
+   * `analyze --unused` is for a script to read: one configured name no source uses to a line, on
+   * stdout, after what it is — or bare, under a scope.
+   */
+  describe('analyze --unused', () => {
+    const run = (args: string) => {
+      const { status, stdout, stderr } = spawnSync(`node ${binPath} analyze ${args} --cwd="${testsCwd}"`, {
+        cwd: testsCwd,
+        shell: true,
+        encoding: 'utf8',
+        env: { ...process.env, NO_COLOR: '1' },
+      })
+      return { status, stdout, stderr }
+    }
+    const linesOf = (stdout: string) => stdout.split('\n').filter(Boolean)
+
+    test('lists each name after its kind', () => {
+      const { status, stdout } = run('--unused')
+      expect(status).toBe(0)
+      const lines = linesOf(stdout)
+      expect(lines.length).toBeGreaterThan(0)
+      for (const line of lines) expect(line).toMatch(/^(token|recipe|pattern|keyframe) \S+$/)
+      expect(lines).toContain('keyframe spin')
+    })
+
+    test('lists bare names under a scope, which may be plural', () => {
+      const { status, stdout } = run('--unused --scope keyframes')
+      expect(status).toBe(0)
+      expect(linesOf(stdout)).toContain('spin')
+      for (const line of linesOf(stdout)) expect(line).toMatch(/^\S+$/)
+    })
+
+    // `--outfile` with no path names no file, so the names are still the output, and alone in it.
+    test('keeps stdout to the names when --outfile names no file', () => {
+      const { status, stdout } = run('--unused --outfile')
+      expect(status).toBe(0)
+      for (const line of linesOf(stdout)) expect(line).toMatch(/^(token|recipe|pattern|keyframe) \S+$/)
+    })
+
+    // The reporter logs through the logger's ES module, another instance than the CommonJS one the
+    // CLI quiets, and it said what it was analyzing through `--silent`.
+    test('says nothing with --silent', () => {
+      expect(run('--silent')).toMatchObject({ status: 0, stdout: '' })
+    })
+
+    test('rejects a scope it does not know, and one that only lists what is unused without --unused', () => {
+      expect(run('--unused --scope colors')).toMatchObject({
+        status: 1,
+        stderr: expect.stringContaining('--scope is one of'),
+      })
+      expect(run('--scope pattern')).toMatchObject({ status: 1, stderr: expect.stringContaining('with --unused') })
+    })
+  })
+
+  /** `bamboo doctor` fails when the build would not do what it is asked, and says why. */
+  describe('doctor', () => {
+    const run = (args: string) => {
+      const { status, stdout, stderr } = spawnSync(`node ${binPath} ${args} --cwd="${testsCwd}"`, {
+        cwd: testsCwd,
+        shell: true,
+        encoding: 'utf8',
+        env: { ...process.env, NO_COLOR: '1' },
+      })
+      return { status, stdout, stderr }
+    }
+
+    test('passes a project codegen has just written, as a report or as JSON', () => {
+      expect(run('codegen').status).toBe(0)
+      expect(run('doctor')).toMatchObject({ status: 0, stdout: expect.stringContaining('No problems found.') })
+
+      const { status, stdout } = run('doctor --json')
+      expect(status).toBe(0)
+      expect(JSON.parse(stdout)).toMatchObject({ problems: [], artifacts: { missing: [], stale: [] } })
+    })
+
+    test('fails one whose generated files are out of date', async () => {
+      const file = path.resolve(paths.styledSystem, 'css/css.mjs')
+      const original = await fs.readFile(file, 'utf8')
+      try {
+        await fs.writeFile(file, '// edited by hand\n')
+        expect(run('doctor')).toMatchObject({ status: 1, stdout: expect.stringContaining('run `bamboo codegen`') })
+      } finally {
+        await fs.writeFile(file, original)
+      }
+    })
+  })
+
+  /** `bamboo debug --zip`: the dump as one archive, which a bug report attaches. */
+  describe('debug --zip', () => {
+    const run = (args: string) => {
+      const { status, stdout, stderr } = spawnSync(`node ${binPath} debug ${args} --cwd="${testsCwd}"`, {
+        cwd: testsCwd,
+        shell: true,
+        encoding: 'utf8',
+        env: { ...process.env, NO_COLOR: '1' },
+      })
+      return { status, output: stdout + stderr }
+    }
+
+    test('writes <outdir>.zip rather than the folder', async () => {
+      const archive = path.resolve(paths.styledSystem, 'debug.zip')
+      await fs.rm(archive, { force: true })
+      await fs.rm(path.resolve(paths.styledSystem, 'debug'), { force: true, recursive: true })
+
+      expect(run('--zip')).toMatchObject({ status: 0, output: expect.stringContaining('debug.zip') })
+      const bytes = await fs.readFile(archive)
+      expect(bytes.readUInt32LE(0), 'a zip local file header').toBe(0x04034b50)
+      expect(bytes.includes(Buffer.from('debug/config.json'))).toBe(true)
+      await expect(fs.access(path.resolve(paths.styledSystem, 'debug'))).rejects.toThrow()
+    })
+
+    test('refuses --dry, which writes nothing', () => {
+      expect(run('--zip --dry')).toMatchObject({ status: 1, output: expect.stringContaining('--dry writes nothing') })
+    })
   })
 })

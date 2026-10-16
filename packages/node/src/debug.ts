@@ -1,11 +1,15 @@
 import { colors, logger } from '@bamboocss/logger'
-import { parse } from 'node:path'
+import { writeFile } from 'node:fs/promises'
+import { basename, dirname, parse } from 'node:path'
 import type { BambooContext } from './create-context'
+import { createZip, type ZipEntry } from './zip'
 
 interface DebugOptions {
   outdir: string
   dry: boolean
   onlyConfig?: boolean
+  /** Write the dump as one `<outdir>.zip`, which a bug report attaches, rather than as files. */
+  zip?: boolean
 }
 
 export async function debug(ctx: BambooContext, options: DebugOptions) {
@@ -17,14 +21,43 @@ export async function debug(ctx: BambooContext, options: DebugOptions) {
 
   const { fs, path } = ctx.runtime
   const outdir = options.outdir
+  // Beside the folder it stands in for: `debug/` and `debug` alike are `debug.zip`.
+  const archive = options.zip && outdir ? `${path.resolve(outdir)}.zip` : undefined
+
+  // Into the archive, under the folder the files would have been written to, or to disk.
+  const entries: ZipEntry[] = []
+  const writes: Array<Promise<unknown>> = []
+  const write = (name: string, content: string) => {
+    if (options.zip) {
+      entries.push({ name: `${basename(path.resolve(outdir))}/${name}`, data: content })
+      return
+    }
+    logger.info('cli', `Writing ${colors.bold(`${outdir}/${name}`)}`)
+    writes.push(fs.writeFile(`${outdir}${path.sep}${name}`, content))
+  }
+  const finish = async () => {
+    // A file that could not be written fails the command, rather than ending in a count of files
+    // nothing was written for.
+    const failed = (await Promise.allSettled(writes)).flatMap((write) =>
+      write.status === 'rejected' ? [write.reason] : [],
+    )
+    if (failed.length) {
+      throw new AggregateError(failed, `${failed.length} debug file(s) could not be written to ${outdir}: ${failed[0]}`)
+    }
+    if (!archive) return
+    fs.ensureDirSync(dirname(archive))
+    logger.info('cli', `Writing ${colors.bold(archive)}`)
+    // Bytes, which the runtime's `writeFile` is not for.
+    await writeFile(archive, createZip(entries))
+  }
 
   if (!options.dry && outdir) {
-    fs.ensureDirSync(outdir)
-    logger.info('cli', `Writing ${colors.bold(`${outdir}/config.json`)}`)
-    await fs.writeFile(`${outdir}/config.json`, JSON.stringify(ctx.config, null, 2))
+    if (!options.zip) fs.ensureDirSync(outdir)
+    write('config.json', JSON.stringify(ctx.config, null, 2))
   }
 
   if (options.onlyConfig) {
+    await finish()
     measureTotal()
     return
   }
@@ -57,16 +90,12 @@ export async function debug(ctx: BambooContext, options: DebugOptions) {
       const astJsonPath = `${relative}${path.sep}${parsedPath.name}.ast.json`.replaceAll(path.sep, '__')
       const cssPath = `${relative}${path.sep}${parsedPath.name}.css`.replaceAll(path.sep, '__')
 
-      logger.info('cli', `Writing ${colors.bold(`${outdir}/${astJsonPath}`)}`)
-      logger.info('cli', `Writing ${colors.bold(`${outdir}/${cssPath}`)}`)
-
-      return Promise.allSettled([
-        fs.writeFile(`${outdir}${path.sep}${astJsonPath}`, JSON.stringify(result.toJSON(), null, 2)),
-        fs.writeFile(`${outdir}${path.sep}${cssPath}`, css),
-      ])
+      write(astJsonPath, JSON.stringify(result.toJSON(), null, 2))
+      write(cssPath, css)
     }
   })
 
+  await finish()
   logger.info('cli', `Found ${colors.bold(`${filesWithCss.length}/${files.length}`)} files using Bamboo`)
   measureTotal()
 }

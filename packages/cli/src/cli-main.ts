@@ -7,6 +7,8 @@ import {
   codegen,
   cssgen,
   debug,
+  doctor,
+  formatDoctorReport,
   generate,
   generatePackageExports,
   loadConfigAndCreateContext,
@@ -21,10 +23,12 @@ import { BambooError, closestMatch, compact } from '@bamboocss/shared'
 import type { Config, CssArtifactType } from '@bamboocss/types'
 import { cac } from 'cac'
 import { existsSync } from 'node:fs'
+import { Console } from 'node:console'
 import { join, resolve } from 'node:path'
 import { version } from '../package.json'
 import type {
   AnalyzeCommandFlags,
+  DoctorCommandFlags,
   CodegenCommandFlags,
   CssGenCommandFlags,
   DebugCommandFlags,
@@ -73,7 +77,7 @@ const normalizeStrictTokens = (value: unknown): Config['strictValues'] | undefin
  * The default command reads its arguments as `include` globs, so a mistyped command matched no
  * files, built a stylesheet from nothing over the real one, and exited 0. `generate` refuses any
  * glob matching nothing; this answers the one case it can say more about, the command meant.
- * Watching or not, as the typo is a typo either way. A word near no command — `bamboo doctor` —
+ * Watching or not, as the typo is a typo either way. A word near no command — `bamboo deploy` —
  * is left to `generate`, which watching lets wait for the files to appear.
  */
 const assertKnownCommand = (files: string[], cwd: string, commands: string[]) => {
@@ -91,6 +95,33 @@ const assertKnownCommand = (files: string[], cwd: string, commands: string[]) =>
       },
     )
   }
+}
+
+/**
+ * A command's config overrides, with `logLevel: 'silent'` laid over them under `--silent`.
+ *
+ * Creating a context sets the level a config's `logLevel` names, after the command had quieted
+ * the logger, which undid `--silent` for every project that names one. Laid over the config, it
+ * is the level the context sets, and stays so when a watch reads the config again.
+ */
+function silenced<T extends Config>(config: T, silent: boolean | undefined): T
+function silenced<T extends Config>(config: T | undefined, silent: boolean | undefined): T | undefined
+function silenced<T extends Config>(config: T | undefined, silent: boolean | undefined) {
+  return silent ? ({ ...config, logLevel: 'silent' } as T) : config
+}
+
+/**
+ * Keep stdout to a command's output, as `bamboo mcp` keeps it to its protocol: the log, which the
+ * logger writes through `console`, goes to stderr, and a reader that has gone — `bamboo analyze
+ * --unused | head -1` — ends the command, rather than failing it with `EPIPE`.
+ */
+const keepStdoutToOutput = () => {
+  const toStderr = new Console({ stdout: process.stderr, stderr: process.stderr })
+  for (const method of ['log', 'info', 'debug', 'dir'] as const) console[method] = toStderr[method].bind(toStderr)
+  process.stdout.on('error', (error: NodeJS.ErrnoException) => {
+    if (error.code === 'EPIPE' || error.code === 'ERR_STREAM_DESTROYED') process.exit(0)
+    throw error
+  })
 }
 
 export async function main() {
@@ -157,7 +188,7 @@ export async function main() {
       const ctx = await loadConfigAndCreateContext({
         cwd,
         configPath,
-        config: compact({ gitignore, outdir: flags.outdir }),
+        config: silenced(compact({ gitignore, outdir: flags.outdir }), silent),
       })
 
       if (gitignore) {
@@ -205,7 +236,7 @@ export async function main() {
       let ctx = await loadConfigAndCreateContext({
         cwd,
         // Only when it was passed: an absent `--clean` is not `clean: undefined` over the config's.
-        config: compact({ clean }),
+        config: silenced(compact({ clean }), silent),
         configPath,
       })
 
@@ -276,7 +307,7 @@ export async function main() {
 
       let ctx = await loadConfigAndCreateContext({
         cwd,
-        config: overrideConfig,
+        config: silenced(overrideConfig, silent),
         configPath,
       })
 
@@ -358,7 +389,7 @@ export async function main() {
       }
 
       const config = compact({ include: files.length ? files : undefined, ...rest, cwd })
-      await generate(config, configPath, { requireFiles: files.length > 0 })
+      await generate(silenced(config, silent), configPath, { requireFiles: files.length > 0 })
 
       stopProfiling()
 
@@ -384,7 +415,7 @@ export async function main() {
       const ctx = await loadConfigAndCreateContext({
         cwd,
         configPath,
-        config: { cwd },
+        config: silenced({ cwd }, silent),
       })
 
       await spec(ctx, { outdir })
@@ -394,28 +425,60 @@ export async function main() {
     .command('analyze [glob]', 'Analyze design token usage in glob')
     .option('--outfile [filepath]', 'Output analyze report in JSON')
     .option('--silent', "Don't print any logs")
-    .option('--scope <type>', 'Select analysis scope (token or recipe)')
+    .option('--scope <type>', 'Select analysis scope: token or recipe, and with --unused pattern or keyframe')
+    .option('--unused', 'List only the configured names no source uses, one per line')
     .option('-c, --config <path>', 'Path to bamboo config file')
     .option('--cwd <cwd>', 'Current working directory', { default: cwd })
     .action(async (maybeGlob?: string, flags: AnalyzeCommandFlags = {}) => {
-      const { silent, config: configPath, scope } = flags
+      const { silent, config: configPath } = flags
+      const scope = flags.scope?.replace(/s$/, '')
+      if (scope != null && !['token', 'recipe', 'pattern', 'keyframe'].includes(scope)) {
+        throw new BambooError(
+          'INVALID_FLAG',
+          `--scope is one of token, recipe, pattern or keyframe, not "${flags.scope}".`,
+        )
+      }
+      if (!flags.unused && (scope === 'pattern' || scope === 'keyframe')) {
+        throw new BambooError('INVALID_FLAG', `--scope ${scope} lists what is unused, with --unused.`)
+      }
 
       const tokenScope = scope == null || scope === 'token'
       const recipeScope = scope == null || scope === 'recipe'
 
       const cwd = resolve(flags.cwd!)
 
-      if (silent) {
-        logger.level = 'silent'
-      }
+      if (silent) logger.level = 'silent'
+      const outfile = typeof flags.outfile === 'string' ? resolve(flags.outfile) : undefined
+
+      // The list is the output, on stdout, where the logger writes too: a log line there would be
+      // read as a name.
+      if (flags.unused && !outfile) keepStdoutToOutput()
 
       const ctx = await loadConfigAndCreateContext({
         cwd,
-        config: maybeGlob ? { include: [maybeGlob] } : undefined,
+        config: silenced(compact({ include: maybeGlob ? [maybeGlob] : undefined }), silent),
         configPath,
       })
 
       const result = await analyze(ctx)
+
+      // One name to a line, on stdout, so a script can read it: under a scope the bare names,
+      // and otherwise each after what it is.
+      if (flags.unused) {
+        const keys = { token: 'tokens', recipe: 'recipes', pattern: 'patterns', keyframe: 'keyframes' } as const
+        const scoped = scope ? keys[scope as keyof typeof keys] : undefined
+        const unused = result.getUnused(scoped ? [scoped] : undefined)
+        if (outfile) {
+          await result.writeUnused(outfile, scoped ? { [scoped]: unused[scoped] } : unused)
+          logger.info('cli', `JSON report saved to ${outfile}`)
+          return
+        }
+        const lines = Object.entries(keys).flatMap(([kind, key]) =>
+          scoped == null ? unused[key].map((name) => `${kind} ${name}`) : key === scoped ? unused[key] : [],
+        )
+        if (lines.length) process.stdout.write(lines.join('\n') + '\n')
+        return
+      }
 
       if (flags?.outfile && typeof flags.outfile === 'string') {
         await result.writeReport(flags.outfile)
@@ -443,17 +506,37 @@ export async function main() {
     })
 
   cli
+    .command('doctor', 'Check the project as the build reads it: its config, sources and generated files')
+    .option('--json', 'Print the report as JSON')
+    .option('-c, --config <path>', 'Path to bamboo config file')
+    .option('--cwd <cwd>', 'Current working directory', { default: cwd })
+    .action(async (flags: DoctorCommandFlags = {}) => {
+      const cwd = resolve(flags.cwd!)
+
+      // The report is the output, and under `--json` a log line in it would not parse.
+      if (flags.json) keepStdoutToOutput()
+
+      const ctx = await loadConfigAndCreateContext({ cwd, configPath: flags.config })
+      const report = await doctor(ctx)
+
+      process.stdout.write((flags.json ? JSON.stringify(report, null, 2) : formatDoctorReport(report)) + '\n')
+      if (report.problems.length) process.exitCode = 1
+    })
+
+  cli
     .command('debug [glob]', 'Debug design token extraction & css generated from files in glob')
     .option('--silent', "Don't print any logs")
     .option('--dry', 'Output debug files in stdout without writing to disk')
     .option('--outdir [dir]', "Output directory for debug files, default to './styled-system/debug'")
     .option('--only-config', "Should only output the config file, default to 'false'")
+    .option('--zip', 'Write the debug files as one <outdir>.zip, to attach to a bug report')
     .option('-c, --config <path>', 'Path to bamboo config file')
     .option('--cwd <cwd>', 'Current working directory', { default: cwd })
     .option('--cpu-prof', 'Generates a `.cpuprofile` to help debug performance issues')
     .option('--logfile <file>', 'Outputs logs to a file')
     .action(async (maybeGlob?: string, flags: DebugCommandFlags = {}) => {
       const { silent, dry = false, outdir: outdirFlag, config: configPath } = flags ?? {}
+      if (dry && flags.zip) throw new BambooError('INVALID_FLAG', '--zip writes an archive, and --dry writes nothing.')
 
       const cwd = resolve(flags.cwd!)
       const stream = setLogStream({ cwd, logfile: flags.logfile })
@@ -469,13 +552,14 @@ export async function main() {
 
       const ctx = await loadConfigAndCreateContext({
         cwd,
-        config: maybeGlob ? { include: [maybeGlob] } : undefined,
+        config: silenced(maybeGlob ? { include: [maybeGlob] } : undefined, silent),
         configPath,
       })
 
-      const outdir = outdirFlag ?? join(...ctx.paths.root, 'debug')
+      // `--outdir` with no folder names none.
+      const outdir = typeof outdirFlag === 'string' ? outdirFlag : join(...ctx.paths.root, 'debug')
 
-      await debug(ctx, { outdir, dry, onlyConfig: flags.onlyConfig })
+      await debug(ctx, { outdir, dry, onlyConfig: flags.onlyConfig, zip: flags.zip })
 
       stopProfiling()
       stream.end()
@@ -505,7 +589,7 @@ export async function main() {
       // Laid over the config, rather than set on the context, so a config read again keeps it.
       let ctx = await loadConfigAndCreateContext({
         cwd,
-        config: compact({ include: maybeGlob ? [maybeGlob] : undefined, minify }),
+        config: silenced(compact({ include: maybeGlob ? [maybeGlob] : undefined, minify }), silent),
         configPath,
       })
 
@@ -557,7 +641,7 @@ export async function main() {
 
       const ctx = await loadConfigAndCreateContext({
         cwd,
-        config: { cwd },
+        config: silenced({ cwd }, silent),
       })
 
       const pkgPath = resolve(cwd, outdir, 'package.json')

@@ -60,7 +60,7 @@ export class OutputEngine {
    * Subdirectories are left alone; they are swept as themselves when their own artifacts
    * are written.
    */
-  prune = (artifacts: Array<Artifact | undefined>) => {
+  prune = (artifacts: Array<Artifact | undefined>, { dry = false }: { dry?: boolean } = {}) => {
     const produced = new Map<string, Set<string>>()
     /** Per directory, the file extensions this codegen wrote into it. */
     const kinds = new Map<string, Set<string>>()
@@ -85,6 +85,8 @@ export class OutputEngine {
     }
 
     let removed = 0
+    /** What was removed, or under `dry` what would be: `bamboo doctor` asks without removing. */
+    const stale: string[] = []
 
     for (const [dir, files] of produced) {
       if (!this.fs.existsSync(dir)) continue
@@ -103,6 +105,8 @@ export class OutputEngine {
         const absPath = this.path.join(dir, entry)
         if (this.fs.isDirSync(absPath)) continue
 
+        stale.push(absPath)
+        if (dry) continue
         logger.debug('write:stale', `removing ${entry}`)
         this.fs.rmFileSync(absPath)
         removed++
@@ -111,7 +115,7 @@ export class OutputEngine {
 
     if (removed) logger.debug('write:stale', `Removed ${removed} artifact(s) no longer generated`)
 
-    return { removed }
+    return { removed, stale }
   }
 
   write = (output: Artifact | undefined) => {

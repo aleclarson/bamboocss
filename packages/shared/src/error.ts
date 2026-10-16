@@ -25,6 +25,7 @@ export type BambooErrorCode =
   | 'HASH_COLLISION'
   | 'INVALID_DECLARATION'
   | 'UNKNOWN_COMMAND'
+  | 'INVALID_FLAG'
 
 export class BambooError extends Error {
   readonly code: string
