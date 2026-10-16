@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 
-use evaluator::{EvalResult, FileEvaluator, ProjectEvaluator};
+use evaluator::{
+    EvalResult, FileEvaluator, Fragments, ProjectEvaluator, spread_value, write_property,
+};
 use napi::bindgen_prelude::*;
 use napi_derive::napi;
 use oxc_allocator::Allocator;
@@ -431,8 +433,10 @@ fn jsx_data<'a>(
     attributes: &'a oxc_allocator::Vec<'a, JSXAttributeItem<'a>>,
     evaluator: &mut FileEvaluator<'a, '_, '_>,
 ) -> (Vec<serde_json::Value>, bool) {
+    // Attributes are written as an object literal's properties are, a spread as a spread.
     let mut object = serde_json::Map::new();
-    let mut conditions = Vec::new();
+    let mut fragments = Fragments::default();
+    let mut partial = None;
     let mut complete = true;
     for attribute in attributes {
         match attribute {
@@ -465,43 +469,22 @@ fn jsx_data<'a>(
                     _ => EvalResult::unknown(),
                 };
                 complete &= value.complete;
-                let undefined = value.is_undefined();
-                for condition in value.conditions {
-                    let mut fragment = serde_json::Map::new();
-                    fragment.insert(key.clone(), condition);
-                    conditions.push(fragment.into());
-                }
-                // As in an object literal: one written as `undefined`, or not known, replaces what
-                // a spread before it wrote.
-                match value.value {
-                    Some(value) => {
-                        object.insert(key, value);
-                    }
-                    None if undefined || !value.complete => {
-                        object.shift_remove(&key);
-                    }
-                    None => {}
-                }
+                write_property(&mut object, &mut fragments, &mut partial, key, value);
             }
             JSXAttributeItem::SpreadAttribute(spread) => {
                 let value = evaluator.evaluate(&spread.argument);
                 complete &= value.complete;
-                conditions.extend(value.conditions);
-                if let Some(serde_json::Value::Object(values)) = value.value {
-                    for key in value
-                        .partial
-                        .iter()
-                        .flat_map(|known| known.written_undefined())
-                    {
-                        object.shift_remove(key);
-                    }
-                    object.extend(values);
-                } else {
-                    complete = false;
-                }
+                spread_value(
+                    &mut object,
+                    &mut fragments,
+                    &mut partial,
+                    &mut complete,
+                    value,
+                );
             }
         }
     }
+    let mut conditions = fragments.list;
     conditions.push(object.into());
     (conditions, complete)
 }

@@ -101,6 +101,45 @@ describe('`+` in a style value', () => {
     expect(css).not.toContain('--colors-blue-300')
   })
 
+  // A key written by a spread with a value it could not decide between, or could not evaluate,
+  // keeps nothing of what was there: both arms of a choice on it are written.
+  test.each([
+    ['one of two values, by a spread', "const o = { a: 'p', ...{ a: c ? '' : 'y' } }"],
+    ['one of two values, by `Object.assign`', "const o = Object.assign({ a: 'p' }, { a: c ? '' : 'y' })"],
+    ['a value not known, by a spread', "const o = { a: 'p', ...{ a: f(), b: 1 } }"],
+  ])('a key written as %s is undecided', (_, definition) => {
+    const { css } = extract(`${definition}\ncss({ color: o.a ? 'red.300' : 'blue.300' })`)
+
+    expect(css).toContain('--colors-red-300')
+    expect(css).toContain('--colors-blue-300')
+  })
+
+  test.each([
+    // There, whichever of its values it holds.
+    [
+      'a key with one of two values is in an object',
+      "const o = { a: c ? 'x' : 'y' }\ncss({ color: 'a' in o ? 'red.300' : 'blue.300' })",
+      true,
+    ],
+    // `__proto__: base` sets the prototype, whose keys the object inherits.
+    [
+      'a key may be inherited from an unknown prototype',
+      "const o = { __proto__: theme }\ncss({ color: 'dark' in o ? 'red.300' : 'blue.300' })",
+      false,
+    ],
+    // A rest pattern that took a key the build cannot name may have taken any.
+    [
+      'a rest pattern took a key not known',
+      "const { [k]: _, ...rest } = { a: '1', b: '2' }\ncss({ color: 'a' in rest ? 'red.300' : 'blue.300' })",
+      false,
+    ],
+  ])('%s', (_, body, decided) => {
+    const { css } = extract(body)
+
+    expect(css).toContain('--colors-red-300')
+    expect(css.includes('--colors-blue-300')).toBe(!decided)
+  })
+
   test('a string JavaScript reads as `NaN` is not read as a number', () => {
     // U+0085 is whitespace to Rust's `trim` and not to JavaScript, so `'\u00855' * 2` is `NaN`.
     expect(extract("css({ zIndex: '\\u00855' * 2 })").css).not.toContain('z-index')

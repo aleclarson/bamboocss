@@ -133,4 +133,12 @@ describe('recipe jsx', () => {
 
     expect(data).toEqual([[{}]])
   })
+
+  // One of two values written after a spread leaves nothing of what the spread wrote.
+  test('an attribute written with one of two values after a spread', () => {
+    const code = `import { Button } from "styled-system/jsx"\nexport const A = () => <Button {...{ size: 'sm' }} size={c ? 'md' : 'lg'} />\n`
+    const data = [...(jsxRecipeParser(code).get('button') ?? [])].map((entry) => entry.data)
+
+    expect(data).toEqual([[{ size: 'md' }, { size: 'lg' }, {}]])
+  })
 })

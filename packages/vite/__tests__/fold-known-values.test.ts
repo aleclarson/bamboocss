@@ -333,6 +333,14 @@ describe('a property written as `undefined`', () => {
     expect(foldOf(withImport(body))).toMatchObject({ classes: ['grid-area_q'], skipped: [] })
   })
 
+  // What was not known was under the key the pattern took: the rest is known.
+  test('a rest of what was known', () => {
+    const body =
+      'const { a, ...rest } = { a: f(), b: 1 }\nconst g = () => rest.b\nexport const A = css({ zIndex: g() })'
+
+    expect(foldOf(withImport(body))).toMatchObject({ classes: ['z_1'], skipped: [] })
+  })
+
   // The rest is without the keys the pattern took, and says nothing of them.
   test('not the key a rest pattern took out', () => {
     const body =

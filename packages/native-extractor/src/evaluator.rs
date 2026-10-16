@@ -158,11 +158,6 @@ impl Partial {
         self.undefined.remove(property);
     }
 
-    /// The properties written as `undefined`, which a spread of the object writes over.
-    pub(crate) fn written_undefined(&self) -> impl Iterator<Item = &String> {
-        self.undefined.iter()
-    }
-
     /// A property written as `undefined`.
     fn write_undefined(&mut self, property: &str) {
         self.write(property, true, None);
@@ -1679,7 +1674,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             }
             Expression::ObjectExpression(object) => {
                 let mut output = serde_json::Map::with_capacity(object.properties.len());
-                let mut conditions = Vec::new();
+                let mut fragments = Fragments::default();
                 let mut complete = true;
                 let mut refusal = None;
                 // Started by the first write that is not known; until then every property is.
@@ -1694,6 +1689,18 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                                     Some(name) => known.write(&name, false, None),
                                     None => known.open(),
                                 }
+                                continue;
+                            }
+                            // `__proto__: base` sets the prototype, not a property: whatever the
+                            // base has, the object inherits, and `in` and a read see it.
+                            if !property.computed
+                                && !property.shorthand
+                                && property
+                                    .key
+                                    .static_name()
+                                    .is_some_and(|name| name == "__proto__")
+                            {
+                                partial.get_or_insert_default().open();
                                 continue;
                             }
                             let key = if property.computed {
@@ -1713,70 +1720,25 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                             let value = self.evaluate(&property.value);
                             complete &= value.complete;
                             refusal = refusal.or(value.refusal.clone());
-                            // It replaces what an earlier property or spread wrote under its key,
-                            // the values that one could not decide between included.
-                            drop_fragments(&mut conditions, &key);
-                            if value.is_undefined() {
-                                output.shift_remove(&key);
-                                partial.get_or_insert_default().write_undefined(&key);
-                                continue;
-                            }
-                            // Known only in part inside, as an array with a hole is, or a `null`
-                            // that may be `undefined`: recorded though the object is complete.
-                            if !value.complete || value.partial.is_some() || value.nullish {
-                                partial.get_or_insert_default().write_value(&key, &value);
-                            } else if let Some(known) = &mut partial {
-                                known.write(&key, true, None);
-                            }
-                            for condition in value.conditions {
-                                let mut fragment = serde_json::Map::new();
-                                fragment.insert(key.clone(), condition);
-                                conditions.push(fragment.into());
-                            }
-                            // Not known, it leaves nothing of what was there.
-                            match value.value {
-                                Some(value) => {
-                                    output.insert(key, value);
-                                }
-                                None => {
-                                    output.shift_remove(&key);
-                                }
-                            }
+                            write_property(&mut output, &mut fragments, &mut partial, key, value);
                         }
                         ObjectPropertyKind::SpreadProperty(spread) => {
                             let value = self.evaluate(&spread.argument);
                             complete &= value.complete;
-                            refusal = refusal.or(value.refusal);
-                            match value.value {
-                                // A spread wholly known writes its properties as a literal would;
-                                // any other may have written anything.
-                                Some(serde_json::Value::Object(values)) if value.complete => {
-                                    spread_object(
-                                        &mut output,
-                                        &mut conditions,
-                                        &mut partial,
-                                        values,
-                                        value.partial.as_deref(),
-                                        value.conditions,
-                                    );
-                                }
-                                Some(serde_json::Value::Object(values)) => {
-                                    conditions.extend(value.conditions);
-                                    partial.get_or_insert_default().open();
-                                    output.extend(values);
-                                }
-                                _ => {
-                                    conditions.extend(value.conditions);
-                                    complete = false;
-                                    partial.get_or_insert_default().open();
-                                }
-                            }
+                            refusal = refusal.or(value.refusal.clone());
+                            spread_value(
+                                &mut output,
+                                &mut fragments,
+                                &mut partial,
+                                &mut complete,
+                                value,
+                            );
                         }
                     }
                 }
                 EvalResult {
                     value: Some(output.into()),
-                    conditions,
+                    conditions: fragments.list,
                     complete,
                     refusal,
                     partial: partial
@@ -2303,6 +2265,12 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         };
         let refusal = left.refusal.or(right.refusal);
         let receiver = right.partial;
+        // Keys written with a value the object could not decide between: there, whichever it is.
+        let undecided: Vec<String> = right
+            .conditions
+            .iter()
+            .filter_map(|condition| fragment_key(condition).map(str::to_string))
+            .collect();
         let (Some(left), Some(right)) = (left.value, right.value) else {
             return EvalResult {
                 refusal,
@@ -2349,9 +2317,10 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                     // Written as `undefined`, or with a value the build could not evaluate: there,
                     // though the value leaves it out.
                     serde_json::Value::Object(_)
-                        if receiver.as_ref().is_some_and(|known| {
-                            known.undefined.contains(&key) || known.unsettled.contains(&key)
-                        }) =>
+                        if undecided.contains(&key)
+                            || receiver.as_ref().is_some_and(|known| {
+                                known.undefined.contains(&key) || known.unsettled.contains(&key)
+                            }) =>
                     {
                         Some(true.into())
                     }
@@ -2570,41 +2539,25 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             == Some(&["Object".to_string(), "assign".to_string()][..])
         {
             let mut output = serde_json::Map::new();
-            let mut conditions = Vec::new();
+            let mut fragments = Fragments::default();
             let mut complete = true;
             let mut refusal = None;
-            // Each source is read as a spread of it is: what it says of its properties goes with
-            // them, and one not wholly known may have written any.
+            // Each source is read as a spread of it is.
             let mut partial: Option<Partial> = None;
             for argument in arguments {
                 complete &= argument.complete;
-                refusal = refusal.or(argument.refusal);
-                match argument.value {
-                    Some(serde_json::Value::Object(value)) if argument.complete => {
-                        spread_object(
-                            &mut output,
-                            &mut conditions,
-                            &mut partial,
-                            value,
-                            argument.partial.as_deref(),
-                            argument.conditions,
-                        );
-                    }
-                    Some(serde_json::Value::Object(value)) => {
-                        conditions.extend(argument.conditions);
-                        partial.get_or_insert_default().open();
-                        output.extend(value);
-                    }
-                    _ => {
-                        conditions.extend(argument.conditions);
-                        complete = false;
-                        partial.get_or_insert_default().open();
-                    }
-                }
+                refusal = refusal.or(argument.refusal.clone());
+                spread_value(
+                    &mut output,
+                    &mut fragments,
+                    &mut partial,
+                    &mut complete,
+                    argument,
+                );
             }
             return EvalResult {
                 value: Some(output.into()),
-                conditions,
+                conditions: fragments.list,
                 complete,
                 refusal,
                 partial: partial
@@ -3035,6 +2988,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             }
             BindingPattern::ObjectPattern(pattern) => {
                 let mut consumed = Vec::new();
+                let mut unresolved = false;
                 for property in &pattern.properties {
                     let key = if property.computed {
                         property
@@ -3045,8 +2999,10 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                     } else {
                         property.key.static_name().map(|name| name.into_owned())
                     };
-                    if let Some(key) = &key {
-                        consumed.push(key.clone());
+                    match &key {
+                        Some(key) => consumed.push(key.clone()),
+                        // Which one it took is not known, so neither is what the rest holds.
+                        None => unresolved = true,
                     }
                     let child = key
                         .map_or_else(EvalResult::unknown, |key| member_value(value.clone(), &key));
@@ -3070,10 +3026,23 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                         for key in &consumed {
                             known.forget(key);
                         }
+                        // What was not known was under a key the pattern took.
+                        if known.is_empty() && remainder.value.is_some() {
+                            remainder.complete = true;
+                        }
                         remainder.partial = (!known.is_empty()).then(|| Arc::new(known));
                     }
-                    for key in &consumed {
-                        drop_fragments(&mut remainder.conditions, key);
+                    remainder.conditions.retain(|condition| {
+                        fragment_key(condition)
+                            .is_none_or(|key| !consumed.iter().any(|taken| taken == key))
+                    });
+                    // Without the key it took, which the build cannot name: any of them may be
+                    // gone, and opening the rest would still say each it holds is there.
+                    if unresolved {
+                        remainder = EvalResult {
+                            refusal: remainder.refusal,
+                            ..EvalResult::unknown()
+                        };
                     }
                     if remainder.value.is_none() {
                         remainder.complete = false;
@@ -3386,45 +3355,130 @@ fn is_nullish(result: &EvalResult) -> bool {
     }
 }
 
-/// An object spread over `output`, or a source of `Object.assign`: its properties written over
-/// what was there — the values an earlier write could not decide between dropped — what it says
-/// of each recorded, and those it wrote as `undefined` taken out. Keys keep the order they were
-/// first written in, as JavaScript keeps them: `shift_remove`, as `remove` moves the last key into
-/// the gap.
-fn spread_object(
-    output: &mut serde_json::Map<String, serde_json::Value>,
-    conditions: &mut Vec<serde_json::Value>,
-    partial: &mut Option<Partial>,
-    values: serde_json::Map<String, serde_json::Value>,
-    source: Option<&Partial>,
-    spread_conditions: Vec<serde_json::Value>,
-) {
-    let cleared = source.into_iter().flat_map(|source| &source.undefined);
-    for key in values.keys().chain(cleared.clone()) {
-        drop_fragments(conditions, key);
-    }
-    conditions.extend(spread_conditions);
-    if partial.is_some() || source.is_some() {
-        partial
-            .get_or_insert_default()
-            .write_spread(values.keys(), source);
-    }
-    for key in cleared {
-        output.shift_remove(key);
-    }
-    output.extend(values);
+/// What an object could not decide between, as `{ key: value }` fragments, and the keys they are
+/// under: a later write of a key replaces them, and looking for them only under a key that has any
+/// keeps that from going over every fragment for every property.
+#[derive(Default)]
+pub(crate) struct Fragments {
+    pub(crate) list: Vec<serde_json::Value>,
+    keys: HashSet<String>,
 }
 
-/// Drops the undecided values written under `key`, `{ key: value }` fragments, which a later write
-/// of the key replaces.
-fn drop_fragments(conditions: &mut Vec<serde_json::Value>, key: &str) {
-    if conditions.is_empty() {
+impl Fragments {
+    fn push(&mut self, key: &str, condition: serde_json::Value) {
+        self.keys.insert(key.to_string());
+        let mut fragment = serde_json::Map::new();
+        fragment.insert(key.to_string(), condition);
+        self.list.push(fragment.into());
+    }
+
+    fn extend(&mut self, conditions: Vec<serde_json::Value>) {
+        for condition in &conditions {
+            if let Some(key) = fragment_key(condition) {
+                self.keys.insert(key.to_string());
+            }
+        }
+        self.list.extend(conditions);
+    }
+
+    /// Drops the values written under `key` the object could not decide between.
+    fn replace(&mut self, key: &str) {
+        if self.keys.remove(key) {
+            self.list
+                .retain(|condition| fragment_key(condition) != Some(key));
+        }
+    }
+}
+
+/// The key a `{ key: value }` fragment is under.
+fn fragment_key(condition: &serde_json::Value) -> Option<&str> {
+    match condition {
+        serde_json::Value::Object(fragment) if fragment.len() == 1 => {
+            fragment.keys().next().map(String::as_str)
+        }
+        _ => None,
+    }
+}
+
+/// One property written into an object: over what an earlier property or spread wrote under its
+/// key, the values that one could not decide between included. Keys keep the order they were
+/// first written in, as JavaScript keeps them: `shift_remove`, as `remove` moves the last key
+/// into the gap.
+pub(crate) fn write_property(
+    output: &mut serde_json::Map<String, serde_json::Value>,
+    fragments: &mut Fragments,
+    partial: &mut Option<Partial>,
+    key: String,
+    value: EvalResult,
+) {
+    fragments.replace(&key);
+    if value.is_undefined() {
+        output.shift_remove(&key);
+        partial.get_or_insert_default().write_undefined(&key);
         return;
     }
-    conditions.retain(|condition| match condition {
-        serde_json::Value::Object(fragment) => !(fragment.len() == 1 && fragment.contains_key(key)),
-        _ => true,
-    });
+    // Known only in part inside, as an array with a hole is, or a `null` that may be
+    // `undefined`: recorded though the object is complete.
+    if !value.complete || value.partial.is_some() || value.nullish {
+        partial.get_or_insert_default().write_value(&key, &value);
+    } else if let Some(known) = partial {
+        known.write(&key, true, None);
+    }
+    for condition in value.conditions {
+        fragments.push(&key, condition);
+    }
+    // Not known, or one of several values, it leaves nothing of what was there.
+    match value.value {
+        Some(value) => {
+            output.insert(key, value);
+        }
+        None => {
+            output.shift_remove(&key);
+        }
+    }
+}
+
+/// A value spread into an object, or a source of `Object.assign`: its properties written over what
+/// was there — its undecided ones and those it wrote as `undefined` too — and what it says of each
+/// recorded. One not wholly known may have written anything, so the object is open after it; what
+/// it holds of a key it did not know is not kept as the key's value.
+pub(crate) fn spread_value(
+    output: &mut serde_json::Map<String, serde_json::Value>,
+    fragments: &mut Fragments,
+    partial: &mut Option<Partial>,
+    complete: &mut bool,
+    value: EvalResult,
+) {
+    let Some(serde_json::Value::Object(values)) = value.value else {
+        fragments.extend(value.conditions);
+        *complete = false;
+        partial.get_or_insert_default().open();
+        return;
+    };
+    let source = value.partial.as_deref();
+    let undecided: Vec<String> = value
+        .conditions
+        .iter()
+        .filter_map(|condition| fragment_key(condition).map(str::to_string))
+        .collect();
+    let cleared = source.into_iter().flat_map(|source| &source.undefined);
+    let unknown = source.into_iter().flat_map(|source| &source.unsettled);
+    for key in values.keys().chain(&undecided).chain(cleared.clone()) {
+        fragments.replace(key);
+    }
+    for key in undecided.iter().chain(cleared).chain(unknown) {
+        output.shift_remove(key);
+    }
+    fragments.extend(value.conditions);
+    if partial.is_some() || source.is_some() || !undecided.is_empty() {
+        partial
+            .get_or_insert_default()
+            .write_spread(values.keys().chain(&undecided), source);
+    }
+    output.extend(values);
+    if !value.complete {
+        partial.get_or_insert_default().open();
+    }
 }
 
 /// The array index a property name is, as JavaScript reads one: the canonical decimal form of an

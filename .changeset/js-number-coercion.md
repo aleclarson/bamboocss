@@ -24,6 +24,11 @@ Read values in style expressions as JavaScript does, where the build used Rust's
   extraction used to write rules for, and keys removed leave the rest in the order they were written. `Object.assign`
   also keeps a source's undecided values, as a spread does, rather than reading them as missing, and `in` is known for
   an object whose keys are known though a value is not.
+- A key a spread writes with a value it could not decide between, or could not evaluate, keeps nothing of what was
+  there: `{ a: 'p', ...{ a: c ? '' : 'y' } }` was read as `'p'`, so a choice on it wrote one arm's rules. The same holds
+  for a JSX attribute after a spread. `__proto__: base` in an object literal sets the prototype, so keys the base has
+  are no longer read as missing, and a rest pattern that takes a key the build cannot name leaves the rest unknown
+  rather than holding every key.
 - `join` writes a `null` element as nothing, as it does a hole: `[1, null, 2].join('-')` is `1--2`, not `1-null-2`.
 - A property the prototype has is no longer read as `undefined`: `o.toString` and `[].map` are not known, and neither is
   `'toString' in o`. A string read by index gives its character, unless a space comes at or before it, which may have
