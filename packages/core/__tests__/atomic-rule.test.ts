@@ -85,6 +85,22 @@ describe('atomic / with basic style object', () => {
     expect(css({ color: 'red !\u00a0important' })).toBe(css({ color: 'red !important' }))
   })
 
+  // A comment is not read around the mark, though CSS reads it as whitespace: the declaration is
+  // written as an ordinary one, important to the browser all the same. Write the mark last.
+  test('a comment after a mark leaves it unread', () => {
+    expect(css({ color: 'red !important /* c */' })).toMatchInlineSnapshot(`
+      "@layer utilities {
+        @layer s010-c0-p3000;
+
+        @layer s010-c0-p3000 {
+          .c_red_\\!important_\\/\\*_c_\\*\\/ {
+            color: red !important /* c */;
+      }
+        }
+      }"
+    `)
+  })
+
   test('a trailing mark after a value holding a `!` marks only the declaration', () => {
     expect(css({ content: '"hello!" !important' })).toMatchInlineSnapshot(`
       "@layer utilities {

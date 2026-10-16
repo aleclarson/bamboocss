@@ -28,14 +28,12 @@ describe('important and space handling', () => {
       ['red !\u00a0important', true],
       ['red !\u3000important', true],
       // A comment is not read: telling its `/*` from a string's or a url's is the tokenizer's job,
-      // and each reading of them short of it lost marks or made them. What follows `/*` is the
-      // value's, a mark included.
+      // and each reading of them short of it lost marks or made them. Write the mark last.
       ['red !important /* c */', false],
       ['red !/**/important', false],
       ['red /* c */', false],
       ['red /* wow! /* x */', false],
       ['"!/*" */', false],
-      ['red /* x !important', true],
       // NUL goes as `sanitize` removes it, at either end of what the mark leaves.
       ['\u0000[a!]', true],
       ['fallback(\u0000[a!], b)', true],

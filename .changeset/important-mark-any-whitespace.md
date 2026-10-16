@@ -13,7 +13,9 @@ Read an important mark the way the stylesheet ends up holding it.
   rule while the rule was written as an important one, and the element matched nothing. The class is now named from the
   same value the mark is read from. NUL beside the mark, which the build removes from a value, counts as whitespace too.
 - A comment around the mark is not read, as it was not before, though CSS reads one as whitespace: telling a comment's
-  `/*` from one in a string or a `url()` is the tokenizer's job. Write the mark last.
+  `/*` from one in a string or a `url()` is the tokenizer's job. Write the mark last: `red !important /* c */` is
+  written as an ordinary declaration, and `no-important` does not report it. A value holding a comment it never closes
+  is no CSS at all, and its rule is dropped whatever follows the `/*`.
 - An escape hatch is only brackets that are the whole value: `[a] 1fr [b!]` is two line names around a track, and its
   `!` is no mark. A fallback candidate that is an escape hatch holding the mark, `fallback([a!], b)`, marks the
   declaration, as `[a!]` alone does.
