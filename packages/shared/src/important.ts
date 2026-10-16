@@ -194,7 +194,7 @@ function markOf(value: string): string | undefined {
   const at = markAt(value)
   const inside = at === -1 ? markedHatch(value) : value
   if (inside === undefined) return undefined
-  return inside.slice(inside === value ? at : markAt(inside), beforeTrivia(inside, inside.length))
+  return inside.slice(at === -1 ? markAt(inside) : at, beforeTrivia(inside, inside.length))
 }
 
 // `string | T` is stated rather than inferred: `T` is a literal type at most call sites, and
