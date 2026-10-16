@@ -126,15 +126,19 @@ fn is_written_here(expression: &Expression<'_>) -> bool {
 
 pub(crate) struct Exactness<'e, 'a, 'p, 's> {
     pub evaluator: &'e mut FileEvaluator<'a, 'p, 's>,
+    /// Whether the value replaced drops a `null` and an `undefined` alike, as `css()` drops both,
+    /// so a `null` that may be either is as exact as both are.
+    pub drops_nullish: bool,
 }
 
 impl<'a> Exactness<'_, 'a, '_, '_> {
     /// The whole argument evaluates to exactly one value the program will produce.
     pub fn check(&mut self, expression: &'a Expression<'a>) -> bool {
         let result = self.evaluator.evaluate(expression);
-        // A hole decides a choice as `null` or `undefined` would, but a value holding one cannot
-        // replace source: a recipe and a pattern tell the two apart.
-        if !exact_result(&result) || result.holds_nullish() {
+        // A hole decides a choice as `null` or `undefined` would, but where the two differ a value
+        // holding one cannot replace source: a recipe takes `null` for an explicit miss and
+        // `undefined` for its default, and a pattern's defaults stand in for `undefined` alone.
+        if !exact_result(&result) || (result.holds_nullish() && !self.drops_nullish) {
             return false;
         }
         self.accounts(expression)

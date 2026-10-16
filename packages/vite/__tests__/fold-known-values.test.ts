@@ -289,8 +289,48 @@ describe('an array element', () => {
       "const f = () => 'a b'[0]\nexport const A = css({ gridArea: f() })",
       'grid-area_a',
     ],
+    // An array opened by a spread of unknown length still says where its elements before it are.
+    [
+      'an element before a spread of unknown length, spread again',
+      "const f = () => [...['a', ...unknown()]][0]\nexport const A = css({ gridArea: f() })",
+      'grid-area_a',
+    ],
+    [
+      'an element a rest takes from before a spread of unknown length',
+      "const [x, ...r] = ['a', 'b', ...unknown()]\nconst f = () => r[0]\nexport const A = css({ gridArea: f() })",
+      'grid-area_b',
+    ],
+    // `css()` drops a `null` and an `undefined` alike, so a hole is as exact as either there.
+    [
+      'a hole as a css() value',
+      'const z = [, 2]\nconst f = () => z[0]\nexport const A = css({ zIndex: 1, color: f() })',
+      'z_1',
+    ],
+    ['a hole as the whole css() value', 'const z = [, 2]\nexport const A = css({ zIndex: z[0] })', ''],
   ])('%s', (_, body, className) => {
     expect(foldOf(withImport(body))).toMatchObject({ classes: [className], skipped: [] })
+  })
+})
+
+/**
+ * A property written as `undefined` replaces what was there, as at runtime: the value leaves the
+ * key out, and it used to keep whatever an earlier property, spread or source put there, so
+ * `{ ...defaults, size: undefined }` kept the default.
+ */
+describe('a property written as `undefined`', () => {
+  test.each([
+    ['by `Object.assign`', "const t = Object.assign({}, { a: 'x' }, { a: undefined })"],
+    ['by a spread', "const t = { a: 'x', ...{ a: undefined } }"],
+    ['by a later property', "const t = { a: 'x', a: undefined }"],
+    ['over a default spread before it', "const defaults = { a: 'x' }\nconst t = { ...defaults, a: undefined }"],
+    [
+      'through a spread of a spread',
+      "const inner = { a: undefined }\nconst mid = { ...inner }\nconst t = { a: 'x', ...mid }",
+    ],
+  ])('%s', (_, definition) => {
+    const body = `${definition}\nconst f = () => t.a ?? 'q'\nexport const A = css({ gridArea: f() })`
+
+    expect(foldOf(withImport(body))).toMatchObject({ classes: ['grid-area_q'], skipped: [] })
   })
 })
 
@@ -401,8 +441,24 @@ describe('what is still not known', () => {
     // A literal's whitespace is collapsed as it is read, so past a space an index is not known.
     ['a string index past a space', "const f = () => 'a  b'[2]\nexport const A = css({ gridArea: f() })"],
     ['the length of a string holding a space', "const f = () => 'a  b'.length\nexport const A = css({ zIndex: f() })"],
-    // A value replacing source is `null` or `undefined`, not one that may be either.
-    ['a hole as the whole value', 'const z = [, 2]\nexport const A = css({ zIndex: z[0] })'],
+    // An array whose length is not known, kept in an object: nothing after it is where it is held.
+    [
+      'an element after an array of unknown length, through Object.assign',
+      "const g = Object.assign({}, { l: ['a', ...unknown()] })\nconst a = [...g.l, 'z']\nconst f = () => a[1]\nexport const A = css({ gridArea: f() })",
+    ],
+    [
+      'an element after an array of unknown length, from an object a spread opened',
+      "const g = { l: ['a', ...unknown()], ...maybe() }\nconst a = [...g.l, 'z']\nconst f = () => a[1]\nexport const A = css({ gridArea: f() })",
+    ],
+    [
+      'an element past what an open array said',
+      "const f = () => [...['a', ...unknown()]][1] ?? 'q'\nexport const A = css({ gridArea: f() })",
+    ],
+    // `Object.assign` keeps a source's undecided values, as a spread does.
+    [
+      'a property `Object.assign` takes as one of two values',
+      "const t = Object.assign({}, { a: c ? 'x' : 'y' })\nconst f = () => t.a ?? 'q'\nexport const A = css({ gridArea: f() })",
+    ],
     [
       'an element after a spread of unknown length',
       "const a = ['a', ...unknown(), 'b']\nconst f = () => a[2]\nexport const A = css({ gridArea: f() })",

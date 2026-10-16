@@ -85,6 +85,13 @@ pub(crate) struct Partial {
     /// The properties holding `null` that may be `undefined`: an array's holes and `undefined`
     /// elements, and what was read from one.
     nullish: HashSet<String>,
+    /// The properties written as `undefined`, which the value leaves out. A spread of the object,
+    /// or `Object.assign` from it, writes them over what was there: `{ ...defaults, size:
+    /// undefined }` clears the default, as it does at runtime.
+    undefined: HashSet<String>,
+    /// For an array opened after a spread of unknown length: how many elements came before it,
+    /// which are still where they are held.
+    known_prefix: usize,
 }
 
 impl Partial {
@@ -92,6 +99,9 @@ impl Partial {
     fn knows(&self, property: &str) -> bool {
         if self.open {
             self.settled.contains(property)
+                || array_index(property).is_some_and(|index| {
+                    index < self.known_prefix && !self.unsettled.contains(property)
+                })
         } else {
             !self.unsettled.contains(property)
         }
@@ -99,6 +109,7 @@ impl Partial {
 
     fn write(&mut self, property: &str, complete: bool, child: Option<Arc<Partial>>) {
         self.nullish.remove(property);
+        self.undefined.remove(property);
         if complete {
             self.unsettled.remove(property);
             if self.open {
@@ -126,19 +137,44 @@ impl Partial {
         self.settled.clear();
         self.nullish.clear();
         self.children.clear();
+        self.undefined.clear();
     }
 
     /// An array's elements from `len` on are not where they are held, as a spread of unknown
     /// length came there; those before it still are.
     fn open_after(&mut self, len: usize) {
-        if self.open {
-            return;
+        if !self.open {
+            self.open = true;
+            self.known_prefix = len;
         }
-        self.settled = (0..len)
-            .map(|index| index.to_string())
-            .filter(|index| !self.unsettled.contains(index))
-            .collect();
-        self.open = true;
+    }
+
+    /// A property written as `undefined`.
+    fn write_undefined(&mut self, property: &str) {
+        self.write(property, true, None);
+        self.undefined.insert(property.to_string());
+    }
+
+    /// An object spread over the properties written so far: each of `keys`, known, with what the
+    /// spread object said of it, then each it wrote as `undefined`.
+    fn write_spread<'k>(
+        &mut self,
+        keys: impl IntoIterator<Item = &'k String>,
+        source: Option<&Partial>,
+    ) {
+        for key in keys {
+            if source.is_some_and(|source| source.nullish.contains(key)) {
+                self.write_nullish(key);
+            } else {
+                let child = source.and_then(|source| source.children.get(key).cloned());
+                self.write(key, true, child);
+            }
+        }
+        if let Some(source) = source {
+            for key in &source.undefined {
+                self.write_undefined(key);
+            }
+        }
     }
 
     /// A property holding `null` that may be `undefined`.
@@ -167,11 +203,13 @@ impl Partial {
     /// iterator, which turns a hole into `undefined`, held the same. Past an unknown length
     /// nothing is where it is held, so `into` is open from there.
     fn spread_into(&self, into: &mut Partial, skip: usize, offset: usize, len: usize) {
-        if self.open {
-            into.open_after(offset);
-            return;
-        }
-        for position in skip..len {
+        // Opened itself, it says where its elements are only up to the spread that opened it.
+        let known = if self.open {
+            len.min(self.known_prefix)
+        } else {
+            len
+        };
+        for position in skip..known {
             let key = position.to_string();
             let target = (offset + position - skip).to_string();
             if self.nullish.contains(&key) {
@@ -184,6 +222,9 @@ impl Partial {
                 into.write(&target, known, child);
             }
         }
+        if self.open {
+            into.open_after(offset + known.saturating_sub(skip));
+        }
     }
 
     /// Whether every property is known and none holds an object known only in part, so there is
@@ -193,6 +234,7 @@ impl Partial {
             && self.unsettled.is_empty()
             && self.children.is_empty()
             && self.nullish.is_empty()
+            && self.undefined.is_empty()
     }
 }
 
@@ -1578,12 +1620,9 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                                             offset,
                                             values.len(),
                                         ),
-                                        // Of a known length, with nothing said of any element.
-                                        None if !value.complete => {
-                                            for position in offset..offset + values.len() {
-                                                partial.write(&position.to_string(), false, None);
-                                            }
-                                        }
+                                        // Incomplete with nothing said of it, not even its
+                                        // length: nothing from here on is where it is held.
+                                        None if !value.complete => partial.open_after(offset),
                                         // Every element is exactly what it is held as.
                                         None => {}
                                     }
@@ -1658,6 +1697,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                                 continue;
                             };
                             let value = self.evaluate(&property.value);
+                            let undefined = value.is_undefined();
                             complete &= value.complete;
                             // Known only in part inside, as an array with a hole is, or a `null`
                             // that may be `undefined`: recorded though the object is complete.
@@ -1672,7 +1712,11 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                                 fragment.insert(key.clone(), condition);
                                 conditions.push(fragment.into());
                             }
-                            if let Some(value) = value.value {
+                            if undefined {
+                                // Written over what an earlier property or spread put there.
+                                output.remove(&key);
+                                partial.get_or_insert_default().write_undefined(&key);
+                            } else if let Some(value) = value.value {
                                 output.insert(key, value);
                             }
                         }
@@ -1687,17 +1731,14 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                                 if !value.complete {
                                     partial.get_or_insert_default().open();
                                 } else if partial.is_some() || value.partial.is_some() {
-                                    let known = partial.get_or_insert_default();
-                                    for key in values.keys() {
-                                        let spread = value.partial.as_deref();
-                                        if spread.is_some_and(|spread| spread.nullish.contains(key))
-                                        {
-                                            known.write_nullish(key);
-                                            continue;
-                                        }
-                                        let child = spread
-                                            .and_then(|spread| spread.children.get(key).cloned());
-                                        known.write(key, true, child);
+                                    let source = value.partial.as_deref();
+                                    partial
+                                        .get_or_insert_default()
+                                        .write_spread(values.keys(), source);
+                                    for key in
+                                        source.into_iter().flat_map(|source| &source.undefined)
+                                    {
+                                        output.remove(key);
                                     }
                                 }
                                 output.extend(values);
@@ -2273,6 +2314,20 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                     serde_json::Value::Object(ref object) if object.contains_key(&key) => {
                         Some(true.into())
                     }
+                    // Written as `undefined`: there, though the value leaves it out.
+                    serde_json::Value::Object(_)
+                        if receiver
+                            .as_ref()
+                            .is_some_and(|known| known.undefined.contains(&key)) =>
+                    {
+                        Some(true.into())
+                    }
+                    // After a spread or a computed key the build could not read, any may be.
+                    serde_json::Value::Object(_)
+                        if receiver.as_ref().is_some_and(|known| known.open) =>
+                    {
+                        None
+                    }
                     serde_json::Value::Object(_) if !OBJECT_PROTOTYPE.contains(&key.as_str()) => {
                         Some(false.into())
                     }
@@ -2482,6 +2537,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             == Some(&["Object".to_string(), "assign".to_string()][..])
         {
             let mut output = serde_json::Map::new();
+            let mut conditions = Vec::new();
             let mut complete = true;
             let mut refusal = None;
             // Each source is read as a spread of it is: what it says of its properties goes with
@@ -2490,19 +2546,16 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             for argument in arguments {
                 complete &= argument.complete;
                 refusal = refusal.or(argument.refusal);
+                conditions.extend(argument.conditions);
                 match argument.value {
                     Some(serde_json::Value::Object(value)) if argument.complete => {
                         if partial.is_some() || argument.partial.is_some() {
-                            let known = partial.get_or_insert_default();
                             let source = argument.partial.as_deref();
-                            for key in value.keys() {
-                                if source.is_some_and(|source| source.nullish.contains(key)) {
-                                    known.write_nullish(key);
-                                } else {
-                                    let child =
-                                        source.and_then(|source| source.children.get(key).cloned());
-                                    known.write(key, true, child);
-                                }
+                            partial
+                                .get_or_insert_default()
+                                .write_spread(value.keys(), source);
+                            for key in source.into_iter().flat_map(|source| &source.undefined) {
+                                output.remove(key);
                             }
                         }
                         output.extend(value);
@@ -2519,7 +2572,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             }
             return EvalResult {
                 value: Some(output.into()),
-                conditions: Vec::new(),
+                conditions,
                 complete,
                 refusal,
                 partial: partial
@@ -3374,21 +3427,25 @@ fn member_value(mut result: EvalResult, property: &str) -> EvalResult {
         }
         // A string's index reads its UTF-16 code unit; half a surrogate pair has no `String`.
         Some(serde_json::Value::String(value)) => match array_index(property) {
-            Some(index)
-                if value
-                    .encode_utf16()
-                    .take(index + 1)
-                    .any(|unit| unit == 0x20) =>
-            {
-                (None, false)
+            Some(index) => {
+                // Past its end it is `undefined`, unless a space came first: a length not known.
+                let mut read = (None, true);
+                for (position, unit) in value.encode_utf16().enumerate() {
+                    if unit == 0x20 {
+                        read = (None, false);
+                        break;
+                    }
+                    if position == index {
+                        let character = char::from_u32(u32::from(unit));
+                        read = (
+                            character.map(|character| character.to_string().into()),
+                            false,
+                        );
+                        break;
+                    }
+                }
+                read
             }
-            Some(index) => match value.encode_utf16().nth(index) {
-                Some(unit) => (
-                    char::from_u32(u32::from(unit)).map(|unit| unit.to_string().into()),
-                    false,
-                ),
-                None => (None, true),
-            },
             None => (None, !may_be_inherited(property)),
         },
         _ => (None, false),

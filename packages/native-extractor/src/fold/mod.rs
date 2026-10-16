@@ -1086,6 +1086,7 @@ fn analyze_facts<'a>(
                 .all(|argument| match argument.as_expression() {
                     Some(expression) => Exactness {
                         evaluator: &mut evaluator,
+                        drops_nullish: kind == "css",
                     }
                     .check(expression),
                     None => false,
@@ -1424,6 +1425,7 @@ fn recipe_invocation<'a>(
                             let exact = exact_result(&result)
                                 && Exactness {
                                     evaluator: &mut *evaluator,
+                                    drops_nullish: false,
                                 }
                                 .check(value);
                             if exact {

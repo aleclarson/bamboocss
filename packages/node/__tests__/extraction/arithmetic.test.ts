@@ -35,6 +35,12 @@ describe('`+` in a style value', () => {
     ['`length` is in an array', "css({ zIndex: 'length' in [1] ? 1 : 2 })", { zIndex: 1 }, 'z-index: 1'],
     ['a `null` element is in an array', 'css({ zIndex: 0 in [null, 2] ? 1 : 2 })', { zIndex: 1 }, 'z-index: 1'],
     ['a missing property is not in an object', "css({ zIndex: 'a' in {} ? 1 : 2 })", { zIndex: 2 }, 'z-index: 2'],
+    [
+      'a property written as `undefined` is in an object',
+      "css({ zIndex: 'a' in { a: undefined } ? 1 : 2 })",
+      { zIndex: 1 },
+      'z-index: 1',
+    ],
     // JavaScript trims U+FEFF from a string it converts, and not U+0085, below.
     ['a string trimmed as JavaScript trims it', "css({ zIndex: '\\ufeff5' * 2 })", { zIndex: 10 }, 'z-index: 10'],
   ])('%s', (_, body, data, declaration) => {
@@ -59,6 +65,7 @@ describe('`+` in a style value', () => {
     ['`in` for what the prototype has', "css({ zIndex: 'toString' in {} ? 1 : 2 })"],
     ['`in` for an array method', "css({ zIndex: 'map' in [1] ? 1 : 2 })"],
     ['`in` for a hole', 'css({ zIndex: 0 in [, 2] ? 1 : 2 })'],
+    ['`in` after a spread the build cannot read', "css({ zIndex: 'a' in { ...unknown() } ? 1 : 2 })"],
     // Whitespace in a string literal is collapsed as it is read, and a tab orders before a space.
     ['strings holding whitespace compared', "css({ zIndex: 'a\\tb' < 'a b' ? 1 : 2 })"],
   ])('%s is left undecided', (_, body) => {
