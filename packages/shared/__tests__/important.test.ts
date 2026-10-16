@@ -32,7 +32,9 @@ describe('important and space handling', () => {
       ['red !/**/important', true],
       ['red ! /* a */ /* b */ important', true],
       ['red /* c */', false],
-      ['red !/*/important', false],
+      // `/*/` opens a comment and closes nothing, so it runs to the end and leaves `red !`: the
+      // short mark, which takes the unclosed comment with it as it is stripped.
+      ['red !/*/important', true],
       // A comment does not nest, and a `/*` in a string opens none: the `!` here is the comment's.
       ['red /* wow! /* x */', false],
       ['red !important /* a /* b */', true],
@@ -45,6 +47,8 @@ describe('important and space handling', () => {
       ['red !important /* c */ url(x)', false],
       // What a comment holds hides nothing: an apostrophe in its prose is no string.
       ["red !important /* don't */", true],
+      // A comment never closed runs to the end of the value, the mark it holds with it.
+      ['red /* x !important', false],
       ['red !important /* see url( */', true],
       // NUL goes as `sanitize` removes it, at either end of what the mark leaves.
       ['\u0000[a!]', true],
@@ -129,6 +133,7 @@ describe('important and space handling', () => {
     '\u0000[a!]',
     'red \u0000!',
     '[a\u0000!]',
+    ' red\u0000',
   ])('reads %j as sanitizing it reads it', (value) => {
     expect(isImportant(value)).toBe(isImportant(sanitize(value)))
     expect(withoutImportant(value)).toBe(withoutImportant(sanitize(value)))
@@ -170,6 +175,9 @@ describe('important and space handling', () => {
       // No mark: the comment is the value's.
       expect(withoutImportant('red /* c */')).toBe('red /* c */')
       expect(withoutImportant('red /* wow! /* x */')).toBe('red /* wow! /* x */')
+      // An unclosed comment goes with the mark before it, and holds none itself.
+      expect(withoutImportant('red !/*/important')).toBe('red')
+      expect(withoutImportant('red /* x !important')).toBe('red /* x !important')
       expect(withoutImportant('[a!] /* x */')).toBe('[a!] /* x */')
     })
 
@@ -180,6 +188,10 @@ describe('important and space handling', () => {
       // trivia ends in one.
       expect(withoutImportant(`red${' !/**/'.repeat(50_000)}`)).toBe('red')
       expect(withoutImportant(`red${' !important'.repeat(50_000)}`)).toBe('red')
+      // Each call looks for a value's comments once: looked for again on each pass, these took
+      // seconds.
+      expect(isImportant(`red !important${' /**/'.repeat(50_000)}`)).toBe(true)
+      expect(importantMark(`red !important${' /**/'.repeat(50_000)}`)).toBe('!important')
     })
 
     test('strips a mark ending a fallback candidate', () => {
