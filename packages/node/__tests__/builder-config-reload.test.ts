@@ -131,7 +131,9 @@ test('a watching build reads its config again when a `dependencies` glob gains a
   await builder.setup({ cwd, watch: true })
 
   expect(builder.getContextOrThrow().tokens.getByName('sizes.b')?.value).toBe('2px')
-  expect(builder.getContextOrThrow().explicitDeps).toContain(join(cwd, 'tokens/b.json'))
+  // A glob spells a path with forward slashes, on Windows too.
+  const slashed = (path: string) => path.replaceAll('\\', '/')
+  expect(builder.getContextOrThrow().explicitDeps.map(slashed)).toContain(slashed(join(cwd, 'tokens/b.json')))
 })
 
 // A plugin's `config:change` is handed the config as it reads after the edit. The Builder called

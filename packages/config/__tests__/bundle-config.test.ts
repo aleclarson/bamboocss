@@ -573,6 +573,32 @@ describe('load config', () => {
     await expect(bundleConfig({ cwd: root, file })).rejects.toThrow('Config must export or return an object')
   })
 
+  // As one written in `presets` is waited for: it was merged as an object holding nothing.
+  test('a config exporting a promise of one is waited for', async () => {
+    const root = project({ 'bamboo.config.cjs': `module.exports = Promise.resolve({ preflight: true })` })
+
+    const { config } = await bundleConfig({ cwd: root, file: join(root, 'bamboo.config.cjs') })
+
+    expect(config).toMatchObject({ preflight: true, outdir: 'styled-system' })
+  })
+
+  test('a preset named by its package exporting a promise of one is waited for', async () => {
+    const root = project({
+      'node_modules/promised-preset/package.json': JSON.stringify({ name: 'promised-preset', main: 'index.js' }),
+      'node_modules/promised-preset/index.js': `module.exports = Promise.resolve({ theme: { tokens: { colors: { x: { value: 'red' } } } } })`,
+    })
+
+    const config = await getResolvedConfig({ presets: ['promised-preset'] }, root)
+
+    expect(config.theme?.tokens?.colors).toMatchObject({ x: { value: 'red' } })
+  })
+
+  test('a preset written in `presets` that is not an object is refused', async () => {
+    await expect(getResolvedConfig({ presets: [Promise.resolve(null) as never] }, tmpdir())).rejects.toThrow(
+      'A preset must be an object',
+    )
+  })
+
   test.each([
     ['`null`', `module.exports = null`],
     ['a function', `module.exports = function preset() {}`],
@@ -678,6 +704,38 @@ describe('load config', () => {
       )
     })
 
+    // Between the frame an installed module's error was made in, as the module first ran, and the
+    // config's that imported it, is code esbuild wrote, which maps to nothing: it is passed over.
+    test('past a frame esbuild wrote', async () => {
+      const root = project({
+        'node_modules/early/package.json': JSON.stringify({ name: 'early', main: 'index.js' }),
+        'node_modules/early/index.js': `const ERR = new Error('early')\nexports.fail = () => { throw ERR }`,
+        'bamboo.config.ts': [`import { fail } from 'early'`, `fail()`, `export default {}`].join('\n'),
+      })
+
+      const error = await bundle(join(root, 'bamboo.config.ts'), root).catch((error) => error)
+
+      expect(error.message).toContain(
+        `early\n    at ${join(root, 'node_modules/early/index.js')}:1:13\n    at ${join(root, 'bamboo.config.ts')}:1:`,
+      )
+    })
+
+    // The stack of another error, written into the message, is no part of this one's.
+    test('not from a stack held in its message', async () => {
+      const source = [
+        `const inner = () => new Error('inner')`,
+        `const held = inner().stack`,
+        `throw new Error('wrapped: ' + held)`,
+        `export default {}`,
+      ]
+      const root = project({ 'bamboo.config.ts': source.join('\n') })
+      const file = join(root, 'bamboo.config.ts')
+
+      const error = await bundle(file, root).catch((error) => error)
+
+      expect(error.message).toBe(`💥 Failed to load ${file}: ${error.cause.message}\n    at ${file}:3:7`)
+    })
+
     // Bundled again for its map, the config is no longer what ran: a map of other code would
     // point at the wrong line, so none is given.
     test('not once a file it imports has changed', async () => {
@@ -695,6 +753,15 @@ describe('load config', () => {
       const error = await bundle(file, root).catch((error) => error)
 
       expect(error.message).toBe(`💥 Failed to load ${file}: boom 1`)
+    })
+
+    test('for a thrown value whose traps all throw', async () => {
+      const root = project({ 'bamboo.config.ts': `throw new Proxy({}, { get() { throw new Error('trap') } })` })
+      const file = join(root, 'bamboo.config.ts')
+
+      const error = await bundle(file, root).catch((error) => error)
+
+      expect(error.message).toBe(`💥 Failed to load ${file}: object`)
     })
 
     test('for a thrown value with no `toString` of its own', async () => {

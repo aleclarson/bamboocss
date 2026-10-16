@@ -31,12 +31,9 @@ export async function getResolvedConfig(config: ExtendableConfig, cwd: string, h
 
       if (typeof subPreset === 'string') {
         const presetModule = await bundle(subPreset, cwd)
-        // As a config is (`bundleConfig`): a function or `null` was merged as a preset with nothing
-        // in it, or failed on a property of `null`, naming no preset.
-        if (typeof presetModule.config !== 'object' || presetModule.config === null) {
-          throw new BambooError('CONFIG_ERROR', `💥 Preset \`${subPreset}\` must export an object.`)
-        }
-        presetConfig = presetModule.config
+        // A promise of one, as one written in `presets` may be: it was merged as an object holding
+        // nothing.
+        presetConfig = await presetModule.config
         presetName = subPreset
         externalPresets.push({
           dependencies: [...presetModule.dependencies],
@@ -45,7 +42,13 @@ export async function getResolvedConfig(config: ExtendableConfig, cwd: string, h
         })
       } else {
         presetConfig = await subPreset
-        presetName = (presetConfig as any).name || 'unknown-preset'
+        presetName = (presetConfig as any)?.name || 'unknown-preset'
+      }
+      // As a config is (`bundleConfig`): a function or `null` was merged as a preset with nothing
+      // in it, or failed on a property of `null`, naming no preset.
+      if (typeof presetConfig !== 'object' || presetConfig === null) {
+        const preset = typeof subPreset === 'string' ? `Preset \`${subPreset}\` must export` : 'A preset must be'
+        throw new BambooError('CONFIG_ERROR', `💥 ${preset} an object.`)
       }
 
       // Call preset:resolved hook if available

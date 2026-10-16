@@ -87,8 +87,9 @@ export async function bundle<T extends Config = Config>(filepath: string, cwd: s
   // copied, since an ES module namespace cannot be written to and the config is. A default export
   // is the config whatever it is, `undefined` included, and only an object is copied: a function,
   // `null` or `undefined` used to pass for one with nothing in it. What is not an object is
-  // refused by `bundleConfig` for a config and `getResolvedConfig` for a preset.
-  const structured = typeof mod === 'object' && mod !== null
+  // refused by `bundleConfig` for a config and `getResolvedConfig` for a preset. A promise is
+  // left for them to wait for: spread, it was an object holding nothing.
+  const structured = typeof mod === 'object' && mod !== null && typeof mod.then !== 'function'
   const config = (structured ? ('default' in mod ? mod.default : { ...mod }) : mod) as T
 
   return {
@@ -360,9 +361,10 @@ function requireBundled(file: string, code: string) {
 /**
  * Where in the source an error raised while the bundle ran came from: the first frame of its stack
  * the bundle's source map traces back, and if that is in an installed package — a preset's own
- * check of what it was given — the first after it that is not, where the config called it. The
- * stack names the bundle at the bundle's lines: a temporary file, deleted by the time anyone
- * reads the error, or the file the CommonJS bundle was compiled as, at lines it does not have.
+ * check of what it was given — the first after it that is not, the code that called into it: the
+ * config's, or a file it imports. The stack names the bundle at the bundle's lines: a temporary
+ * file, deleted by the time anyone reads the error, or the file the CommonJS bundle was compiled
+ * as, at lines it does not have.
  *
  * Where V8 says an error is from is where it was created: an error made in one place and thrown
  * in another is placed where it was made.
@@ -376,10 +378,12 @@ async function locate(
   if (!(error instanceof Error) || typeof error.stack !== 'string') return []
   // As V8 writes a frame: an ES module by its URL, a CommonJS one by its path, either of which may
   // hold a space, then a line and a column, and a closing parenthesis if the frame named a function.
-  // The message comes first, and may name the bundle itself.
+  // The message comes first, and may name the bundle itself, or hold a stack of its own.
   const names = [pathToFileURL(bundled).href, bundled]
+  const header = describe(error)
+  const frames = error.stack.startsWith(header) ? error.stack.slice(header.length) : error.stack
   const positions: Array<[number, number]> = []
-  for (const frame of error.stack.split('\n')) {
+  for (const frame of frames.split('\n')) {
     const text = frame.trim()
     if (!text.startsWith('at ')) continue
     const name = names.find((name) => text.includes(`${name}:`))
@@ -413,8 +417,14 @@ function describe(value: unknown): string {
   try {
     return String(value)
   } catch {
-    return Object.prototype.toString.call(value)
+    // No `toString`, or one that throws.
   }
+  try {
+    return Object.prototype.toString.call(value)
+  } catch {
+    // A proxy whose traps throw.
+  }
+  return typeof value
 }
 
 export async function bundleConfig(options: ConfigFileOptions): Promise<BundleConfigResult> {
@@ -425,6 +435,8 @@ export async function bundleConfig(options: ConfigFileOptions): Promise<BundleCo
   logger.debug('config:path', filePath)
 
   const result = await bundle(filePath, cwd, { projectReferences: true })
+  // A promise of one, as a preset may be (`getResolvedConfig`).
+  result.config = await result.config
 
   if (typeof result.config !== 'object' || result.config === null) {
     throw new BambooError('CONFIG_ERROR', `💥 Config must export or return an object.`)
