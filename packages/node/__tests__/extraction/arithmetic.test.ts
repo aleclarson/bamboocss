@@ -68,6 +68,14 @@ describe('`+` in a style value', () => {
     expect(css).toContain('z-index: 2')
   })
 
+  // Only a hole read as `null` leaves it unknown whether the default stands in; a partly known
+  // object is surely not `undefined`, and what is known of it stays known.
+  test('a destructuring default keeps what is known of a partly known value', () => {
+    const { css } = extract("const { theme = {} } = { theme: { w: '2', h: compute() } }\ncss({ width: theme.w })")
+
+    expect(css).toContain('width: var(--sizes-2)')
+  })
+
   test('a string JavaScript reads as `NaN` is not read as a number', () => {
     // U+0085 is whitespace to Rust's `trim` and not to JavaScript, so `'\u00855' * 2` is `NaN`.
     expect(extract("css({ zIndex: '\\u00855' * 2 })").css).not.toContain('z-index')

@@ -253,6 +253,21 @@ describe('an array element', () => {
     ['the length of an array with a hole', 'const a = [, 2]\nexport const A = css({ zIndex: a.length })', 'z_2'],
     ['a string by index', "export const A = css({ gridArea: 'abc'[1] })", 'grid-area_b'],
     ['a string past its end', "export const A = css({ gridArea: 'abc'[5] ?? 'z' })", 'grid-area_z'],
+    [
+      'a hole read in a helper',
+      'const z = [, 2]\nconst f = () => z[0] ?? 4\nexport const A = css({ zIndex: f() })',
+      'z_4',
+    ],
+    [
+      'a hole through `Object.assign`',
+      'const t = Object.assign({}, { s: [, 2] })\nexport const A = css({ zIndex: t.s[0] ?? 7 })',
+      'z_7',
+    ],
+    [
+      'an element beside one the build cannot evaluate',
+      'const a = [compute(), 2]\nconst f = () => a[1]\nexport const A = css({ zIndex: f() })',
+      'z_2',
+    ],
   ])('%s', (_, body, className) => {
     expect(foldOf(withImport(body))).toMatchObject({ classes: [className], skipped: [] })
   })
@@ -311,6 +326,48 @@ describe('what is still not known', () => {
       'const a = [...compute(), 2]\nexport const A = css({ zIndex: a[1] ?? 5 })',
     ],
     ['an element written later', 'const a = [1, 2]\na[0] = 5\nexport const A = css({ zIndex: a[0] ?? 1 })'],
+    // An element the build cannot evaluate is held as `null` in its place, and decides nothing.
+    [
+      'an unknown element in a helper',
+      "const z = [compute()]\nconst f = () => z[0] ?? 'red.300'\nexport const A = css({ color: f() })",
+    ],
+    [
+      'an unknown element deciding a test',
+      "const z = [compute()]\nexport const A = css({ content: 'a' + (z[0] ? 'b' : 'c') })",
+    ],
+    [
+      'an element after a spread of unknown length',
+      "const w = [...unknown(), 1]\nconst z = [...w, 'x']\nconst f = () => z[1]\nexport const A = css({ gridArea: f() })",
+    ],
+    // A hole wherever it is kept converts as neither `null` nor `undefined`.
+    [
+      'a hole passed for a parameter with a default',
+      'const z = [, 2]\nconst f = (a = 1) => a ?? 2\nexport const A = css({ zIndex: f(z[0]) })',
+    ],
+    [
+      'a hole through a rest parameter',
+      'const f = (...a) => a[0] - 1\nconst z = [, 2]\nexport const A = css({ zIndex: f(z[0]) })',
+    ],
+    [
+      'a hole kept in an object',
+      'const z = [, 2]\nconst o = { a: z[0] }\nconst f = () => o.a - 1\nexport const A = css({ zIndex: f() })',
+    ],
+    [
+      'a hole kept in an array',
+      'const z = [, 2]\nconst y = [z[0]]\nconst f = () => y[0] - 1\nexport const A = css({ zIndex: f() })',
+    ],
+    [
+      'a hole through `Object.assign` converted',
+      'const t = Object.assign({}, { s: [, 2] })\nconst f = () => t.s[0] + 1\nexport const A = css({ zIndex: f() })',
+    ],
+    ['a hole as a computed key', "const f = () => ({ [[, 1][0]]: 'red.300' })\nexport const A = css(f())"],
+    [
+      'a hole as the separator of `join`',
+      'const z = [, 2]\nconst f = () => [1, 2].join(z[0])\nexport const A = css({ gridArea: f() })',
+    ],
+    ['a property of a hole', 'const z = [, 2]\nconst f = () => z[0].x\nexport const A = css({ zIndex: f() })'],
+    // A literal's whitespace is collapsed as it is read, so past a space an index is not known.
+    ['a string index past a space', "const f = () => 'a  b'[2]\nexport const A = css({ gridArea: f() })"],
     // A missing property is `undefined` unless the prototype has it.
     ['a property every object has', 'const o = {}\nexport const A = css({ zIndex: o.toString ? 1 : 2 })'],
     ['an array method', 'const s = [1, 2]\nexport const A = css({ zIndex: s.includes ? 1 : 2 })'],

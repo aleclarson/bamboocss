@@ -449,6 +449,7 @@ fn jsx_data<'a>(
                         complete: true,
                         refusal: None,
                         partial: None,
+                        nullish: false,
                     },
                     Some(JSXAttributeValue::StringLiteral(value)) => EvalResult {
                         value: Some(value.value.to_string().into()),
@@ -456,6 +457,7 @@ fn jsx_data<'a>(
                         complete: true,
                         refusal: None,
                         partial: None,
+                        nullish: false,
                     },
                     Some(JSXAttributeValue::ExpressionContainer(container)) => {
                         evaluator.evaluate_jsx_expression(&container.expression)

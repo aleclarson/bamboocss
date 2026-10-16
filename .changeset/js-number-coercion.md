@@ -13,12 +13,15 @@ Read values in style expressions as JavaScript does, where the build used Rust's
   extractor and took the process down with it.
 - An array hole or `undefined` element read by index is no longer taken for `null`. The build holds all three as `null`,
   and they convert differently, so `[, 2][0] - 1` compiled to `z-index: -1` where the runtime has `NaN`; it now fails
-  the compile as `dynamic`, as a template literal or a destructuring default on one does. Where the two agree, a read of
-  one still decides: `z[0] ?? 1`, `z[0] || 1` and `z[0] ? 1 : 2`. A `null` element is `null`.
+  the compile as `dynamic`, as a template literal, a computed key or a destructuring or parameter default on one does,
+  wherever it was kept: in an object, another array, `Object.assign`, a rest parameter. Where the two agree, a read of
+  one still decides: `z[0] ?? 1`, `z[0] || 1` and `z[0] ? 1 : 2`. A `null` element is `null`, and an element the build
+  cannot evaluate decides nothing.
 - A choice decided by an element read with a number, `sizes[0] ?? 'md'`, now compiles, as `sizes['0']` did.
 - `join` writes a `null` element as nothing, as it does a hole: `[1, null, 2].join('-')` is `1--2`, not `1-null-2`.
 - A property the prototype has is no longer read as `undefined`: `o.toString` and `[].map` are not known, and neither is
-  `'toString' in o`. A string read by index gives its character.
+  `'toString' in o`. A string read by index gives its character, unless a space comes before it, which may have been any
+  run of whitespace.
 - An array index is read only in its canonical form, so `z['01']` and `z['+1']` are `undefined`, as they are at runtime,
   rather than `z[1]`; and `'length' in z` is true.
 - Two strings compare as strings, so `'10' < '9'` is true, unless either holds whitespace, which the build collapses as

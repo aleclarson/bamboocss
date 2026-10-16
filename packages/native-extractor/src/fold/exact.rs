@@ -148,10 +148,7 @@ impl<'a> Exactness<'_, 'a, '_, '_> {
                 let test = self.evaluator.evaluate(&conditional.test);
                 // An undecided test collapses to both arms as conditions, which `exact_result`
                 // already refused; a decided one is exact only through its chosen arm.
-                let Some(truthy) = test
-                    .truthiness()
-                    .filter(|_| exact_result(&test) || nullish(&test))
-                else {
+                let Some(truthy) = test.truthiness().filter(|_| exact_result(&test)) else {
                     return false;
                 };
                 if !self.decides(&conditional.test) {
@@ -168,7 +165,7 @@ impl<'a> Exactness<'_, 'a, '_, '_> {
                     return false;
                 }
                 let left = self.evaluator.evaluate(&logical.left);
-                if !exact_result(&left) && !nullish(&left) {
+                if !exact_result(&left) {
                     return false;
                 }
                 let right_wins = match &left.value {
@@ -596,15 +593,6 @@ fn binds(pattern: &BindingPattern<'_>, symbol: oxc_syntax::symbol::SymbolId) -> 
 /// Complete, a single value, no condition fragments.
 pub(crate) fn exact_result(result: &EvalResult) -> bool {
     result.complete && result.conditions.is_empty()
-}
-
-/// `null`, whether or not it is sure: an array hole is held as `null`, and a read of one is not
-/// sure it is not `undefined`. The two decide a choice alike — nullish and falsy — so a deciding
-/// operand that is either decides as surely as `null`, once `decides` has accounted for where it
-/// came from: an element the build could not evaluate is held as `null` too, and its source is
-/// not exact.
-fn nullish(result: &EvalResult) -> bool {
-    result.conditions.is_empty() && matches!(result.value, Some(serde_json::Value::Null))
 }
 
 fn crate_truthy(value: &serde_json::Value) -> bool {
