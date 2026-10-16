@@ -62,6 +62,32 @@ jobs:
       - name: Run tests
         run: pnpm test run --shard=${{ matrix.shard }}/3
 
+  # On Windows, where nothing ran the suite before: a watcher reports `C:\app\src\a.tsx` there,
+  # a glob `C:/app/src/a.tsx`, and a drive letter in either case — the spellings `fs-path.ts`
+  # reconciles, whose miss let an edit go unseen by the dev stylesheet — and links are junctions.
+  #
+  # Not a gate yet. The suite has never been brought green on Windows, so this reports what fails
+  # there without failing the workflow; take `continue-on-error` out once it passes.
+  tests-windows:
+    name: Unit Tests (Windows)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    continue-on-error: true
+    steps:
+      # As committed. A Windows checkout writes every line ending as CRLF, and the suite reads its
+      # fixtures and snapshots as the repository holds them.
+      - name: Keep line endings as committed
+        run: git config --global core.autocrlf false
+
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install
+        uses: ./.github/composite-actions/install
+
+      - name: Run tests
+        run: pnpm test run
+
   # Separate job, not a fourth shard. The shards do collect the scenario suites
   # under sandbox/codegen/__tests__, but the strict suites assert types --
   # `@ts-expect-error` and `assertType` against each scenario's generated
