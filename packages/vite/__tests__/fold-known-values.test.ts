@@ -333,6 +333,14 @@ describe('a property written as `undefined`', () => {
     expect(foldOf(withImport(body))).toMatchObject({ classes: ['grid-area_q'], skipped: [] })
   })
 
+  // A spread whose record says which of its keys it did not know leaves the others known.
+  test('a key beside one a spread could not evaluate', () => {
+    const body =
+      'const o = { x: 1, ...{ a: f(), b: 1 } }\nconst g = () => o.b + o.x\nexport const A = css({ zIndex: g() })'
+
+    expect(foldOf(withImport(body))).toMatchObject({ classes: ['z_2'], skipped: [] })
+  })
+
   // What was not known was under the key the pattern took: the rest is known.
   test('a rest of what was known', () => {
     const body =
@@ -477,6 +485,11 @@ describe('what is still not known', () => {
     [
       'an element past what an open array said',
       "const f = () => [...['a', ...unknown()]][1] ?? 'q'\nexport const A = css({ gridArea: f() })",
+    ],
+    // A style object is walked with `for…in`, which reads what it inherits from its prototype.
+    [
+      'an object with a prototype',
+      "const base = { color: 'red.300' }\nexport const A = css({ __proto__: base, bg: 'blue.300' })",
     ],
     // `css()` drops an argument whose values are all `undefined`, and keeps one holding `null`,
     // which overrides what came before: with more arguments than one, a hole is either.

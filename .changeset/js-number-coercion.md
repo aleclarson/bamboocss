@@ -26,9 +26,11 @@ Read values in style expressions as JavaScript does, where the build used Rust's
   an object whose keys are known though a value is not.
 - A key a spread writes with a value it could not decide between, or could not evaluate, keeps nothing of what was
   there: `{ a: 'p', ...{ a: c ? '' : 'y' } }` was read as `'p'`, so a choice on it wrote one arm's rules. The same holds
-  for a JSX attribute after a spread. `__proto__: base` in an object literal sets the prototype, so keys the base has
-  are no longer read as missing, and a rest pattern that takes a key the build cannot name leaves the rest unknown
-  rather than holding every key.
+  for a JSX attribute after a spread, and a key written after a spread the build could not choose a branch of replaces
+  it in every branch. `__proto__: base` in an object literal sets the prototype, so the object is no longer read as
+  holding only its own keys — `css()` walks inherited ones too — and a rest pattern that takes a key the build cannot
+  name leaves the rest unknown rather than holding every key. `'a' in` an object holding one of several values under `a`
+  is no longer read as decided, as a branch of a spread looks the same and may not hold it.
 - `join` writes a `null` element as nothing, as it does a hole: `[1, null, 2].join('-')` is `1--2`, not `1-null-2`.
 - A property the prototype has is no longer read as `undefined`: `o.toString` and `[].map` are not known, and neither is
   `'toString' in o`. A string read by index gives its character, unless a space comes at or before it, which may have

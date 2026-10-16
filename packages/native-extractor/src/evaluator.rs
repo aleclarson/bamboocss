@@ -1700,6 +1700,9 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                                     .static_name()
                                     .is_some_and(|name| name == "__proto__")
                             {
+                                // What it inherits is the object's too: a style object is walked
+                                // with `for…in`, which reads inherited keys.
+                                complete = false;
                                 partial.get_or_insert_default().open();
                                 continue;
                             }
@@ -2265,12 +2268,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         };
         let refusal = left.refusal.or(right.refusal);
         let receiver = right.partial;
-        // Keys written with a value the object could not decide between: there, whichever it is.
-        let undecided: Vec<String> = right
-            .conditions
-            .iter()
-            .filter_map(|condition| fragment_key(condition).map(str::to_string))
-            .collect();
+        let right_conditions = right.conditions;
         let (Some(left), Some(right)) = (left.value, right.value) else {
             return EvalResult {
                 refusal,
@@ -2317,12 +2315,18 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                     // Written as `undefined`, or with a value the build could not evaluate: there,
                     // though the value leaves it out.
                     serde_json::Value::Object(_)
-                        if undecided.contains(&key)
-                            || receiver.as_ref().is_some_and(|known| {
-                                known.undefined.contains(&key) || known.unsettled.contains(&key)
-                            }) =>
+                        if receiver.as_ref().is_some_and(|known| {
+                            known.undefined.contains(&key) || known.unsettled.contains(&key)
+                        }) =>
                     {
                         Some(true.into())
+                    }
+                    // Under a value the object could not decide between: in a branch of a spread
+                    // it could not choose, it may be there in one and not in the other.
+                    serde_json::Value::Object(_)
+                        if condition_keys(&right_conditions).any(|written| *written == key) =>
+                    {
+                        None
                     }
                     // After a spread or a computed key the build could not read, any may be.
                     serde_json::Value::Object(_)
@@ -3029,13 +3033,13 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                         // What was not known was under a key the pattern took.
                         if known.is_empty() && remainder.value.is_some() {
                             remainder.complete = true;
+                            remainder.refusal = None;
                         }
                         remainder.partial = (!known.is_empty()).then(|| Arc::new(known));
                     }
-                    remainder.conditions.retain(|condition| {
-                        fragment_key(condition)
-                            .is_none_or(|key| !consumed.iter().any(|taken| taken == key))
-                    });
+                    for key in &consumed {
+                        strip_key(&mut remainder.conditions, key);
+                    }
                     // Without the key it took, which the build cannot name: any of them may be
                     // gone, and opening the rest would still say each it holds is there.
                     if unresolved {
@@ -3373,31 +3377,40 @@ impl Fragments {
     }
 
     fn extend(&mut self, conditions: Vec<serde_json::Value>) {
-        for condition in &conditions {
-            if let Some(key) = fragment_key(condition) {
-                self.keys.insert(key.to_string());
-            }
-        }
+        self.keys.extend(condition_keys(&conditions).cloned());
         self.list.extend(conditions);
     }
 
-    /// Drops the values written under `key` the object could not decide between.
+    /// Drops what the object could not decide between under `key`.
     fn replace(&mut self, key: &str) {
         if self.keys.remove(key) {
-            self.list
-                .retain(|condition| fragment_key(condition) != Some(key));
+            strip_key(&mut self.list, key);
         }
     }
 }
 
-/// The key a `{ key: value }` fragment is under.
-fn fragment_key(condition: &serde_json::Value) -> Option<&str> {
-    match condition {
-        serde_json::Value::Object(fragment) if fragment.len() == 1 => {
-            fragment.keys().next().map(String::as_str)
+/// `key` out of each value an object could not decide between: a `{ key: value }` fragment goes,
+/// and a branch of a spread it could not choose, `...(c ? { a, b } : {})`, loses the key, which a
+/// later write replaces in every branch alike.
+fn strip_key(conditions: &mut Vec<serde_json::Value>, key: &str) {
+    conditions.retain_mut(|condition| match condition {
+        serde_json::Value::Object(fragment) if fragment.contains_key(key) => {
+            fragment.shift_remove(key);
+            !fragment.is_empty()
         }
-        _ => None,
-    }
+        _ => true,
+    });
+}
+
+/// The keys under the values an object could not decide between: a fragment's, a branch's.
+fn condition_keys(conditions: &[serde_json::Value]) -> impl Iterator<Item = &String> {
+    conditions
+        .iter()
+        .filter_map(|condition| match condition {
+            serde_json::Value::Object(fragment) => Some(fragment.keys()),
+            _ => None,
+        })
+        .flatten()
 }
 
 /// One property written into an object: over what an earlier property or spread wrote under its
@@ -3456,27 +3469,40 @@ pub(crate) fn spread_value(
         return;
     };
     let source = value.partial.as_deref();
-    let undecided: Vec<String> = value
-        .conditions
-        .iter()
-        .filter_map(|condition| fragment_key(condition).map(str::to_string))
-        .collect();
+    // What it writes: its keys, those under the values it could not decide between, those it
+    // could not evaluate and those it wrote as `undefined`.
+    let undecided: Vec<String> = condition_keys(&value.conditions).cloned().collect();
     let cleared = source.into_iter().flat_map(|source| &source.undefined);
     let unknown = source.into_iter().flat_map(|source| &source.unsettled);
-    for key in values.keys().chain(&undecided).chain(cleared.clone()) {
+    for key in values
+        .keys()
+        .chain(&undecided)
+        .chain(cleared.clone())
+        .chain(unknown.clone())
+    {
         fragments.replace(key);
     }
-    for key in undecided.iter().chain(cleared).chain(unknown) {
-        output.shift_remove(key);
+    // What was there under a key it holds no value for goes; one it holds a value for keeps its
+    // place, as `extend` writes over it there.
+    for key in undecided.iter().chain(cleared).chain(unknown.clone()) {
+        if !values.contains_key(key) {
+            output.shift_remove(key);
+        }
     }
     fragments.extend(value.conditions);
     if partial.is_some() || source.is_some() || !undecided.is_empty() {
-        partial
-            .get_or_insert_default()
-            .write_spread(values.keys().chain(&undecided), source);
+        let known = partial.get_or_insert_default();
+        known.write_spread(values.keys().chain(&undecided), source);
+        // Written, with a value not known.
+        for key in unknown {
+            let child = source.and_then(|source| source.children.get(key).cloned());
+            known.write(key, false, child);
+        }
     }
     output.extend(values);
-    if !value.complete {
+    // A source not wholly known whose record does not say which keys it did not know — or says
+    // a spread of its own may have written any — may have written over anything.
+    if source.map_or(!value.complete, |source| source.open) {
         partial.get_or_insert_default().open();
     }
 }

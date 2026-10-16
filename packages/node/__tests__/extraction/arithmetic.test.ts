@@ -115,11 +115,17 @@ describe('`+` in a style value', () => {
   })
 
   test.each([
-    // There, whichever of its values it holds.
+    // A key under a value the object could not decide between is held as a branch of a spread it
+    // could not choose is, which may have it or not: neither arm is taken for sure.
     [
       'a key with one of two values is in an object',
       "const o = { a: c ? 'x' : 'y' }\ncss({ color: 'a' in o ? 'red.300' : 'blue.300' })",
-      true,
+      false,
+    ],
+    [
+      'a key in one branch of a spread',
+      "const o = { ...(c ? { a: 1 } : {}) }\ncss({ color: 'a' in o ? 'red.300' : 'blue.300' })",
+      false,
     ],
     // `__proto__: base` sets the prototype, whose keys the object inherits.
     [
@@ -138,6 +144,18 @@ describe('`+` in a style value', () => {
 
     expect(css).toContain('--colors-red-300')
     expect(css.includes('--colors-blue-300')).toBe(!decided)
+  })
+
+  // A later write of a key replaces it in every branch of a spread the build could not choose,
+  // and a spread's key it could not evaluate replaces what was undecided under it.
+  test.each([
+    ['in each branch of a spread', "const o = { ...(c ? { a: 'x', b: 'y' } : {}), a: 'z' }"],
+    ['by a spread of a value not known', "const o = { a: c ? 'x' : 'y', ...{ a: f(), b: 1 } }"],
+  ])('a key written over %s leaves no rule for what it replaced', (_, definition) => {
+    const { css } = extract(`${definition}\ncss({ display: o.a })`)
+
+    expect(css).not.toContain('display: x')
+    expect(css).not.toContain('display: y')
   })
 
   test('a string JavaScript reads as `NaN` is not read as a number', () => {
