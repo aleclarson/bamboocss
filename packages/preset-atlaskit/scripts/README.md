@@ -126,8 +126,8 @@ The generation script uses raw token data from multiple sources:
 
 This script was **built for and tested with**:
 
-- `@atlaskit/tokens` **v7.0.0**
-- `@atlaskit/motion` **v5.3.8**
+- `@atlaskit/tokens` **v20.6.0**
+- `@atlaskit/motion` **v9.4.0**
 
 **Important:** The script uses internal paths:
 
@@ -142,7 +142,7 @@ The script may break if packages have:
 
 1. **Package structure changes** - Internal paths reorganized
 2. **Token format changes** - Different typography, shadow, or motion structures
-3. **New major versions** - Breaking changes in v8+ (@atlaskit/tokens) or v6+ (@atlaskit/motion)
+3. **New major versions** - Breaking changes in v21+ (@atlaskit/tokens) or v10+ (@atlaskit/motion)
 
 ### Safety Features
 
@@ -157,8 +157,8 @@ The script may break if packages have:
 1. **Pin versions** in `package.json`:
 
    ```json
-   "@atlaskit/tokens": "7.0.0",
-   "@atlaskit/motion": "5.3.8"
+   "@atlaskit/tokens": "20.6.0",
+   "@atlaskit/motion": "9.4.0"
    ```
 
 2. **Test after updates**:

@@ -15,6 +15,15 @@ export const spacing: Tokens['spacing'] = {
   '025': { value: '2px' },
   '050': { value: '4px' },
   '075': { value: '6px' },
+  gap: {
+    large: { value: '12px' },
+    medium: { value: '8px' },
+    small: { value: '6px' },
+    xlarge: { value: '16px' },
+    xsmall: { value: '4px' },
+    xxlarge: { value: '24px' },
+    xxsmall: { value: '2px' },
+  },
   negative: {
     '100': { value: '-8px' },
     '150': { value: '-12px' },

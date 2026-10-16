@@ -84,14 +84,6 @@ export const mixins: Theme['mixins'] = {
         lineHeight: '16px',
       },
     },
-    UNSAFE_small: {
-      value: {
-        fontFamily: 'Atlassian Sans',
-        fontWeight: '400',
-        fontSize: '12px',
-        lineHeight: '16px',
-      },
-    },
   },
   metric: {
     large: {

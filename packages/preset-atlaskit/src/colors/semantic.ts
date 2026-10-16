@@ -1,11 +1,1683 @@
 import type { SemanticTokens } from '@bamboocss/types'
 
 export const semanticColors: SemanticTokens['colors'] = {
+  background: {
+    accent: {
+      lime: {
+        subtlest: {
+          DEFAULT: {
+            value: {
+              _light: '#EFFFD6',
+              _dark: '#28311B',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#D3F1A7',
+              _dark: '#37471F',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#BDE97C',
+              _dark: '#3F5224',
+            },
+          },
+        },
+        subtler: {
+          DEFAULT: {
+            value: {
+              _light: '#D3F1A7',
+              _dark: '#37471F',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#BDE97C',
+              _dark: '#3F5224',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#B3DF72',
+              _dark: '#4C6B1F',
+            },
+          },
+        },
+        subtle: {
+          DEFAULT: {
+            value: {
+              _light: '#94C748',
+              _dark: '#4C6B1F',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#B3DF72',
+              _dark: '#3F5224',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#BDE97C',
+              _dark: '#37471F',
+            },
+          },
+        },
+        bolder: {
+          DEFAULT: {
+            value: {
+              _light: '#5B7F24',
+              _dark: '#94C748',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#4C6B1F',
+              _dark: '#B3DF72',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#3F5224',
+              _dark: '#BDE97C',
+            },
+          },
+        },
+      },
+      red: {
+        subtlest: {
+          DEFAULT: {
+            value: {
+              _light: '#FFECEB',
+              _dark: '#42221F',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#FFD5D2',
+              _dark: '#5D1F1A',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#FFB8B2',
+              _dark: '#872821',
+            },
+          },
+        },
+        subtler: {
+          DEFAULT: {
+            value: {
+              _light: '#FFD5D2',
+              _dark: '#5D1F1A',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#FFB8B2',
+              _dark: '#872821',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#FD9891',
+              _dark: '#AE2E24',
+            },
+          },
+        },
+        subtle: {
+          DEFAULT: {
+            value: {
+              _light: '#F87168',
+              _dark: '#AE2E24',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#FD9891',
+              _dark: '#872821',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#FFB8B2',
+              _dark: '#5D1F1A',
+            },
+          },
+        },
+        bolder: {
+          DEFAULT: {
+            value: {
+              _light: '#C9372C',
+              _dark: '#F87168',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#AE2E24',
+              _dark: '#FD9891',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#872821',
+              _dark: '#FFB8B2',
+            },
+          },
+        },
+      },
+      orange: {
+        subtlest: {
+          DEFAULT: {
+            value: {
+              _light: '#FFF5DB',
+              _dark: '#3A2C1F',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#FCE4A6',
+              _dark: '#693200',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#FBD779',
+              _dark: '#7A3B00',
+            },
+          },
+        },
+        subtler: {
+          DEFAULT: {
+            value: {
+              _light: '#FCE4A6',
+              _dark: '#693200',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#FBD779',
+              _dark: '#7A3B00',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#FBC828',
+              _dark: '#9E4C00',
+            },
+          },
+        },
+        subtle: {
+          DEFAULT: {
+            value: {
+              _light: '#FCA700',
+              _dark: '#9E4C00',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#FBC828',
+              _dark: '#7A3B00',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#FBD779',
+              _dark: '#693200',
+            },
+          },
+        },
+        bolder: {
+          DEFAULT: {
+            value: {
+              _light: '#BD5B00',
+              _dark: '#FCA700',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#9E4C00',
+              _dark: '#FBC828',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#7A3B00',
+              _dark: '#FBD779',
+            },
+          },
+        },
+      },
+      yellow: {
+        subtlest: {
+          DEFAULT: {
+            value: {
+              _light: '#FEF7C8',
+              _dark: '#332E1B',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#F5E989',
+              _dark: '#533F04',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#EFDD4E',
+              _dark: '#614A05',
+            },
+          },
+        },
+        subtler: {
+          DEFAULT: {
+            value: {
+              _light: '#F5E989',
+              _dark: '#533F04',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#EFDD4E',
+              _dark: '#614A05',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#EED12B',
+              _dark: '#7F5F01',
+            },
+          },
+        },
+        subtle: {
+          DEFAULT: {
+            value: {
+              _light: '#EED12B',
+              _dark: '#7F5F01',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#DDB30E',
+              _dark: '#614A05',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#EFDD4E',
+              _dark: '#533F04',
+            },
+          },
+        },
+        bolder: {
+          DEFAULT: {
+            value: {
+              _light: '#946F00',
+              _dark: '#DDB30E',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#7F5F01',
+              _dark: '#EED12B',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#614A05',
+              _dark: '#EFDD4E',
+            },
+          },
+        },
+      },
+      green: {
+        subtlest: {
+          DEFAULT: {
+            value: {
+              _light: '#DCFFF1',
+              _dark: '#1C3329',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#BAF3DB',
+              _dark: '#164B35',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#97EDC9',
+              _dark: '#19573D',
+            },
+          },
+        },
+        subtler: {
+          DEFAULT: {
+            value: {
+              _light: '#BAF3DB',
+              _dark: '#164B35',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#97EDC9',
+              _dark: '#19573D',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#7EE2B8',
+              _dark: '#216E4E',
+            },
+          },
+        },
+        subtle: {
+          DEFAULT: {
+            value: {
+              _light: '#4BCE97',
+              _dark: '#216E4E',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#7EE2B8',
+              _dark: '#19573D',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#97EDC9',
+              _dark: '#164B35',
+            },
+          },
+        },
+        bolder: {
+          DEFAULT: {
+            value: {
+              _light: '#1F845A',
+              _dark: '#4BCE97',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#216E4E',
+              _dark: '#7EE2B8',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#19573D',
+              _dark: '#97EDC9',
+            },
+          },
+        },
+      },
+      teal: {
+        subtlest: {
+          DEFAULT: {
+            value: {
+              _light: '#E7F9FF',
+              _dark: '#1E3137',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#C6EDFB',
+              _dark: '#164555',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#B1E4F7',
+              _dark: '#1A5265',
+            },
+          },
+        },
+        subtler: {
+          DEFAULT: {
+            value: {
+              _light: '#C6EDFB',
+              _dark: '#164555',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#B1E4F7',
+              _dark: '#1A5265',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#9DD9EE',
+              _dark: '#206A83',
+            },
+          },
+        },
+        subtle: {
+          DEFAULT: {
+            value: {
+              _light: '#6CC3E0',
+              _dark: '#206A83',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#9DD9EE',
+              _dark: '#1A5265',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#B1E4F7',
+              _dark: '#164555',
+            },
+          },
+        },
+        bolder: {
+          DEFAULT: {
+            value: {
+              _light: '#227D9B',
+              _dark: '#6CC3E0',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#206A83',
+              _dark: '#9DD9EE',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#1A5265',
+              _dark: '#B1E4F7',
+            },
+          },
+        },
+      },
+      blue: {
+        subtlest: {
+          DEFAULT: {
+            value: {
+              _light: '#E9F2FE',
+              _dark: '#1C2B42',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#CFE1FD',
+              _dark: '#123263',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#ADCBFB',
+              _dark: '#144794',
+            },
+          },
+        },
+        subtler: {
+          DEFAULT: {
+            value: {
+              _light: '#CFE1FD',
+              _dark: '#123263',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#ADCBFB',
+              _dark: '#144794',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#8FB8F6',
+              _dark: '#1558BC',
+            },
+          },
+        },
+        subtle: {
+          DEFAULT: {
+            value: {
+              _light: '#669DF1',
+              _dark: '#1558BC',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#8FB8F6',
+              _dark: '#144794',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#ADCBFB',
+              _dark: '#123263',
+            },
+          },
+        },
+        bolder: {
+          DEFAULT: {
+            value: {
+              _light: '#1868DB',
+              _dark: '#669DF1',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#1558BC',
+              _dark: '#8FB8F6',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#144794',
+              _dark: '#ADCBFB',
+            },
+          },
+        },
+      },
+      purple: {
+        subtlest: {
+          DEFAULT: {
+            value: {
+              _light: '#F8EEFE',
+              _dark: '#35243F',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#EED7FC',
+              _dark: '#48245D',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#E3BDFA',
+              _dark: '#673286',
+            },
+          },
+        },
+        subtler: {
+          DEFAULT: {
+            value: {
+              _light: '#EED7FC',
+              _dark: '#48245D',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#E3BDFA',
+              _dark: '#673286',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#D8A0F7',
+              _dark: '#803FA5',
+            },
+          },
+        },
+        subtle: {
+          DEFAULT: {
+            value: {
+              _light: '#C97CF4',
+              _dark: '#803FA5',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#D8A0F7',
+              _dark: '#673286',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#E3BDFA',
+              _dark: '#48245D',
+            },
+          },
+        },
+        bolder: {
+          DEFAULT: {
+            value: {
+              _light: '#964AC0',
+              _dark: '#C97CF4',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#803FA5',
+              _dark: '#D8A0F7',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#673286',
+              _dark: '#E3BDFA',
+            },
+          },
+        },
+      },
+      magenta: {
+        subtlest: {
+          DEFAULT: {
+            value: {
+              _light: '#FFECF8',
+              _dark: '#3D2232',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#FDD0EC',
+              _dark: '#50253F',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#FCB6E1',
+              _dark: '#77325B',
+            },
+          },
+        },
+        subtler: {
+          DEFAULT: {
+            value: {
+              _light: '#FDD0EC',
+              _dark: '#50253F',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#FCB6E1',
+              _dark: '#77325B',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#F797D2',
+              _dark: '#943D73',
+            },
+          },
+        },
+        subtle: {
+          DEFAULT: {
+            value: {
+              _light: '#E774BB',
+              _dark: '#943D73',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#F797D2',
+              _dark: '#77325B',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#FCB6E1',
+              _dark: '#50253F',
+            },
+          },
+        },
+        bolder: {
+          DEFAULT: {
+            value: {
+              _light: '#AE4787',
+              _dark: '#E774BB',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#943D73',
+              _dark: '#F797D2',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#77325B',
+              _dark: '#FCB6E1',
+            },
+          },
+        },
+      },
+      gray: {
+        subtlest: {
+          DEFAULT: {
+            value: {
+              _light: '#F0F1F2',
+              _dark: '#303134',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#DDDEE1',
+              _dark: '#3D3F43',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#B7B9BE',
+              _dark: '#4B4D51',
+            },
+          },
+        },
+        subtler: {
+          DEFAULT: {
+            value: {
+              _light: '#DDDEE1',
+              _dark: '#4B4D51',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#B7B9BE',
+              _dark: '#63666B',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#8C8F97',
+              _dark: '#7E8188',
+            },
+          },
+        },
+        subtle: {
+          DEFAULT: {
+            value: {
+              _light: '#8C8F97',
+              _dark: '#63666B',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#B7B9BE',
+              _dark: '#4B4D51',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#DDDEE1',
+              _dark: '#3D3F43',
+            },
+          },
+        },
+        bolder: {
+          DEFAULT: {
+            value: {
+              _light: '#6B6E76',
+              _dark: '#96999E',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#505258',
+              _dark: '#A9ABAF',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#3B3D42',
+              _dark: '#BFC1C4',
+            },
+          },
+        },
+      },
+    },
+    code: {
+      added: {
+        highlight: {
+          value: {
+            _light: '#DCFFF1',
+            _dark: '#1C3329',
+          },
+        },
+        line: {
+          value: {
+            _light: '#BAF3DB66',
+            _dark: '#164B35B2',
+          },
+        },
+      },
+      default: {
+        value: {
+          _light: '#FFFFFF',
+          _dark: '#1F1F21',
+        },
+      },
+      gutter: {
+        value: {
+          _light: '#F0F1F2',
+          _dark: '#242528',
+        },
+      },
+      highlight: {
+        value: {
+          _light: '#F0F1F2',
+          _dark: '#242528',
+        },
+      },
+      removed: {
+        highlight: {
+          value: {
+            _light: '#FFECEB',
+            _dark: '#42221F',
+          },
+        },
+        line: {
+          value: {
+            _light: '#FFD5D266',
+            _dark: '#5D1F1AB2',
+          },
+        },
+      },
+    },
+    disabled: {
+      value: {
+        _light: '#0515240F',
+        _dark: '#E3E4F21F',
+      },
+    },
+    input: {
+      DEFAULT: {
+        value: {
+          _light: '#FFFFFF',
+          _dark: '#242528',
+        },
+      },
+      hovered: {
+        value: {
+          _light: '#F8F8F8',
+          _dark: '#2B2C2F',
+        },
+      },
+      pressed: {
+        value: {
+          _light: '#FFFFFF',
+          _dark: '#242528',
+        },
+      },
+    },
+    inverse: {
+      subtle: {
+        DEFAULT: {
+          value: {
+            _light: '#00000029',
+            _dark: '#FFFFFF29',
+          },
+        },
+        hovered: {
+          value: {
+            _light: '#0000003D',
+            _dark: '#FFFFFF3D',
+          },
+        },
+        pressed: {
+          value: {
+            _light: '#00000052',
+            _dark: '#FFFFFF52',
+          },
+        },
+      },
+    },
+    neutral: {
+      DEFAULT: {
+        value: {
+          _light: '#0515240F',
+          _dark: '#CECED912',
+        },
+      },
+      hovered: {
+        value: {
+          _light: '#0B120E24',
+          _dark: '#E3E4F21F',
+        },
+      },
+      pressed: {
+        value: {
+          _light: '#080F214A',
+          _dark: '#E5E9F640',
+        },
+      },
+      subtle: {
+        hovered: {
+          value: {
+            _light: '#0515240F',
+            _dark: '#CECED912',
+          },
+        },
+        pressed: {
+          value: {
+            _light: '#0B120E24',
+            _dark: '#E3E4F21F',
+          },
+        },
+      },
+      bold: {
+        DEFAULT: {
+          value: {
+            _light: '#292A2E',
+            _dark: '#CECFD2',
+          },
+        },
+        hovered: {
+          value: {
+            _light: '#3B3D42',
+            _dark: '#BFC1C4',
+          },
+        },
+        pressed: {
+          value: {
+            _light: '#505258',
+            _dark: '#A9ABAF',
+          },
+        },
+      },
+    },
+    selected: {
+      DEFAULT: {
+        value: {
+          _light: '#E9F2FE',
+          _dark: '#1C2B42',
+        },
+      },
+      hovered: {
+        value: {
+          _light: '#CFE1FD',
+          _dark: '#123263',
+        },
+      },
+      pressed: {
+        value: {
+          _light: '#8FB8F6',
+          _dark: '#1558BC',
+        },
+      },
+      bold: {
+        DEFAULT: {
+          value: {
+            _light: '#1868DB',
+            _dark: '#669DF1',
+          },
+        },
+        hovered: {
+          value: {
+            _light: '#1558BC',
+            _dark: '#8FB8F6',
+          },
+        },
+        pressed: {
+          value: {
+            _light: '#123263',
+            _dark: '#CFE1FD',
+          },
+        },
+      },
+    },
+    brand: {
+      subtlest: {
+        DEFAULT: {
+          value: {
+            _light: '#E9F2FE',
+            _dark: '#1C2B42',
+          },
+        },
+        hovered: {
+          value: {
+            _light: '#CFE1FD',
+            _dark: '#123263',
+          },
+        },
+        pressed: {
+          value: {
+            _light: '#ADCBFB',
+            _dark: '#144794',
+          },
+        },
+      },
+      bold: {
+        DEFAULT: {
+          value: {
+            _light: '#1868DB',
+            _dark: '#669DF1',
+          },
+        },
+        hovered: {
+          value: {
+            _light: '#1558BC',
+            _dark: '#8FB8F6',
+          },
+        },
+        pressed: {
+          value: {
+            _light: '#144794',
+            _dark: '#ADCBFB',
+          },
+        },
+      },
+      boldest: {
+        DEFAULT: {
+          value: {
+            _light: '#1C2B42',
+            _dark: '#E9F2FE',
+          },
+        },
+        hovered: {
+          value: {
+            _light: '#123263',
+            _dark: '#CFE1FD',
+          },
+        },
+        pressed: {
+          value: {
+            _light: '#144794',
+            _dark: '#ADCBFB',
+          },
+        },
+      },
+    },
+    danger: {
+      DEFAULT: {
+        value: {
+          _light: '#FFECEB',
+          _dark: '#42221F',
+        },
+      },
+      hovered: {
+        value: {
+          _light: '#FFD5D2',
+          _dark: '#5D1F1A',
+        },
+      },
+      pressed: {
+        value: {
+          _light: '#FFB8B2',
+          _dark: '#872821',
+        },
+      },
+      subtler: {
+        DEFAULT: {
+          value: {
+            _light: '#FFD5D2',
+            _dark: '#5D1F1A',
+          },
+        },
+        hovered: {
+          value: {
+            _light: '#FFB8B2',
+            _dark: '#872821',
+          },
+        },
+        pressed: {
+          value: {
+            _light: '#FD9891',
+            _dark: '#AE2E24',
+          },
+        },
+      },
+      subtle: {
+        DEFAULT: {
+          value: {
+            _light: '#FD9891',
+            _dark: '#AE2E24',
+          },
+        },
+      },
+      bold: {
+        DEFAULT: {
+          value: {
+            _light: '#C9372C',
+            _dark: '#F87168',
+          },
+        },
+        hovered: {
+          value: {
+            _light: '#AE2E24',
+            _dark: '#FD9891',
+          },
+        },
+        pressed: {
+          value: {
+            _light: '#872821',
+            _dark: '#FFB8B2',
+          },
+        },
+      },
+    },
+    warning: {
+      DEFAULT: {
+        value: {
+          _light: '#FFF5DB',
+          _dark: '#3A2C1F',
+        },
+      },
+      hovered: {
+        value: {
+          _light: '#FCE4A6',
+          _dark: '#693200',
+        },
+      },
+      pressed: {
+        value: {
+          _light: '#FBD779',
+          _dark: '#7A3B00',
+        },
+      },
+      subtler: {
+        DEFAULT: {
+          value: {
+            _light: '#FCE4A6',
+            _dark: '#693200',
+          },
+        },
+        hovered: {
+          value: {
+            _light: '#FBD779',
+            _dark: '#7A3B00',
+          },
+        },
+        pressed: {
+          value: {
+            _light: '#FBC828',
+            _dark: '#9E4C00',
+          },
+        },
+      },
+      subtle: {
+        DEFAULT: {
+          value: {
+            _light: '#FBD779',
+            _dark: '#9E4C00',
+          },
+        },
+      },
+    },
+    success: {
+      DEFAULT: {
+        value: {
+          _light: '#EFFFD6',
+          _dark: '#28311B',
+        },
+      },
+      hovered: {
+        value: {
+          _light: '#D3F1A7',
+          _dark: '#37471F',
+        },
+      },
+      pressed: {
+        value: {
+          _light: '#BDE97C',
+          _dark: '#3F5224',
+        },
+      },
+      subtler: {
+        DEFAULT: {
+          value: {
+            _light: '#D3F1A7',
+            _dark: '#37471F',
+          },
+        },
+        hovered: {
+          value: {
+            _light: '#BDE97C',
+            _dark: '#3F5224',
+          },
+        },
+        pressed: {
+          value: {
+            _light: '#B3DF72',
+            _dark: '#4C6B1F',
+          },
+        },
+      },
+      subtle: {
+        DEFAULT: {
+          value: {
+            _light: '#B3DF72',
+            _dark: '#4C6B1F',
+          },
+        },
+      },
+      bold: {
+        DEFAULT: {
+          value: {
+            _light: '#5B7F24',
+            _dark: '#94C748',
+          },
+        },
+        hovered: {
+          value: {
+            _light: '#4C6B1F',
+            _dark: '#B3DF72',
+          },
+        },
+        pressed: {
+          value: {
+            _light: '#3F5224',
+            _dark: '#BDE97C',
+          },
+        },
+      },
+    },
+    discovery: {
+      DEFAULT: {
+        value: {
+          _light: '#F8EEFE',
+          _dark: '#35243F',
+        },
+      },
+      hovered: {
+        value: {
+          _light: '#EED7FC',
+          _dark: '#48245D',
+        },
+      },
+      pressed: {
+        value: {
+          _light: '#E3BDFA',
+          _dark: '#673286',
+        },
+      },
+      subtler: {
+        DEFAULT: {
+          value: {
+            _light: '#EED7FC',
+            _dark: '#48245D',
+          },
+        },
+        hovered: {
+          value: {
+            _light: '#E3BDFA',
+            _dark: '#673286',
+          },
+        },
+        pressed: {
+          value: {
+            _light: '#D8A0F7',
+            _dark: '#803FA5',
+          },
+        },
+      },
+      subtle: {
+        DEFAULT: {
+          value: {
+            _light: '#D8A0F7',
+            _dark: '#803FA5',
+          },
+        },
+      },
+      bold: {
+        DEFAULT: {
+          value: {
+            _light: '#964AC0',
+            _dark: '#C97CF4',
+          },
+        },
+        hovered: {
+          value: {
+            _light: '#803FA5',
+            _dark: '#D8A0F7',
+          },
+        },
+        pressed: {
+          value: {
+            _light: '#673286',
+            _dark: '#E3BDFA',
+          },
+        },
+      },
+    },
+    information: {
+      DEFAULT: {
+        value: {
+          _light: '#E9F2FE',
+          _dark: '#1C2B42',
+        },
+      },
+      hovered: {
+        value: {
+          _light: '#CFE1FD',
+          _dark: '#123263',
+        },
+      },
+      pressed: {
+        value: {
+          _light: '#ADCBFB',
+          _dark: '#144794',
+        },
+      },
+      subtler: {
+        DEFAULT: {
+          value: {
+            _light: '#CFE1FD',
+            _dark: '#123263',
+          },
+        },
+        hovered: {
+          value: {
+            _light: '#ADCBFB',
+            _dark: '#144794',
+          },
+        },
+        pressed: {
+          value: {
+            _light: '#8FB8F6',
+            _dark: '#1558BC',
+          },
+        },
+      },
+      subtle: {
+        DEFAULT: {
+          value: {
+            _light: '#8FB8F6',
+            _dark: '#1558BC',
+          },
+        },
+      },
+      bold: {
+        DEFAULT: {
+          value: {
+            _light: '#1868DB',
+            _dark: '#669DF1',
+          },
+        },
+        hovered: {
+          value: {
+            _light: '#1558BC',
+            _dark: '#8FB8F6',
+          },
+        },
+        pressed: {
+          value: {
+            _light: '#144794',
+            _dark: '#ADCBFB',
+          },
+        },
+      },
+    },
+  },
+  border: {
+    DEFAULT: {
+      value: {
+        _light: '#0B120E24',
+        _dark: '#E3E4F21F',
+      },
+    },
+    accent: {
+      lime: {
+        DEFAULT: {
+          value: {
+            _light: '#6A9A23',
+            _dark: '#82B536',
+          },
+        },
+        subtle: {
+          value: {
+            _light: '#B3DF72',
+            _dark: '#4C6B1F',
+          },
+        },
+      },
+      red: {
+        DEFAULT: {
+          value: {
+            _light: '#E2483D',
+            _dark: '#F15B50',
+          },
+        },
+        subtle: {
+          value: {
+            _light: '#FD9891',
+            _dark: '#AE2E24',
+          },
+        },
+      },
+      orange: {
+        DEFAULT: {
+          value: {
+            _light: '#E06C00',
+            _dark: '#F68909',
+          },
+        },
+        subtle: {
+          value: {
+            _light: '#FBC828',
+            _dark: '#9E4C00',
+          },
+        },
+      },
+      yellow: {
+        DEFAULT: {
+          value: {
+            _light: '#B38600',
+            _dark: '#CF9F02',
+          },
+        },
+        subtle: {
+          value: {
+            _light: '#EED12B',
+            _dark: '#7F5F01',
+          },
+        },
+      },
+      green: {
+        DEFAULT: {
+          value: {
+            _light: '#22A06B',
+            _dark: '#2ABB7F',
+          },
+        },
+        subtle: {
+          value: {
+            _light: '#7EE2B8',
+            _dark: '#216E4E',
+          },
+        },
+      },
+      teal: {
+        DEFAULT: {
+          value: {
+            _light: '#2898BD',
+            _dark: '#42B2D7',
+          },
+        },
+        subtle: {
+          value: {
+            _light: '#9DD9EE',
+            _dark: '#206A83',
+          },
+        },
+      },
+      blue: {
+        DEFAULT: {
+          value: {
+            _light: '#357DE8',
+            _dark: '#4688EC',
+          },
+        },
+        subtle: {
+          value: {
+            _light: '#8FB8F6',
+            _dark: '#1558BC',
+          },
+        },
+      },
+      purple: {
+        DEFAULT: {
+          value: {
+            _light: '#AF59E1',
+            _dark: '#BF63F3',
+          },
+        },
+        subtle: {
+          value: {
+            _light: '#D8A0F7',
+            _dark: '#803FA5',
+          },
+        },
+      },
+      magenta: {
+        DEFAULT: {
+          value: {
+            _light: '#CD519D',
+            _dark: '#DA62AC',
+          },
+        },
+        subtle: {
+          value: {
+            _light: '#F797D2',
+            _dark: '#943D73',
+          },
+        },
+      },
+      gray: {
+        DEFAULT: {
+          value: {
+            _light: '#7D818A',
+            _dark: '#7E8188',
+          },
+        },
+        subtle: {
+          value: {
+            _light: '#B7B9BE',
+            _dark: '#4B4D51',
+          },
+        },
+      },
+    },
+    code: {
+      value: {
+        _light: '#0B120E24',
+        _dark: '#E3E4F21F',
+      },
+    },
+    disabled: {
+      value: {
+        _light: '#0515240F',
+        _dark: '#CECED912',
+      },
+    },
+    focused: {
+      value: {
+        _light: '#4688EC',
+        _dark: '#8FB8F6',
+      },
+    },
+    input: {
+      DEFAULT: {
+        value: {
+          _light: '#8C8F97',
+          _dark: '#7E8188',
+        },
+      },
+      search: {
+        value: {
+          _light: '#0B120E24',
+          _dark: '#E3E4F21F',
+        },
+      },
+    },
+    inverse: {
+      value: {
+        _light: '#FFFFFF',
+        _dark: '#18191A',
+      },
+    },
+    selected: {
+      value: {
+        _light: '#1868DB',
+        _dark: '#669DF1',
+      },
+    },
+    brand: {
+      value: {
+        _light: '#1868DB',
+        _dark: '#669DF1',
+      },
+    },
+    danger: {
+      DEFAULT: {
+        value: {
+          _light: '#E2483D',
+          _dark: '#F15B50',
+        },
+      },
+      subtle: {
+        value: {
+          _light: '#FD9891',
+          _dark: '#AE2E24',
+        },
+      },
+    },
+    warning: {
+      DEFAULT: {
+        value: {
+          _light: '#E06C00',
+          _dark: '#F68909',
+        },
+      },
+      subtle: {
+        value: {
+          _light: '#FBC828',
+          _dark: '#9E4C00',
+        },
+      },
+    },
+    success: {
+      DEFAULT: {
+        value: {
+          _light: '#6A9A23',
+          _dark: '#82B536',
+        },
+      },
+      subtle: {
+        value: {
+          _light: '#B3DF72',
+          _dark: '#4C6B1F',
+        },
+      },
+    },
+    discovery: {
+      DEFAULT: {
+        value: {
+          _light: '#AF59E1',
+          _dark: '#BF63F3',
+        },
+      },
+      subtle: {
+        value: {
+          _light: '#D8A0F7',
+          _dark: '#803FA5',
+        },
+      },
+    },
+    information: {
+      DEFAULT: {
+        value: {
+          _light: '#357DE8',
+          _dark: '#4688EC',
+        },
+      },
+      subtle: {
+        value: {
+          _light: '#8FB8F6',
+          _dark: '#1558BC',
+        },
+      },
+    },
+    bold: {
+      value: {
+        _light: '#7D818A',
+        _dark: '#7E8188',
+      },
+    },
+  },
   text: {
     DEFAULT: {
       value: {
-        _light: '#172B4D',
-        _dark: '#B6C2CF',
+        _light: '#292A2E',
+        _dark: '#CECFD2',
       },
     },
     accent: {
@@ -40,14 +1712,14 @@ export const semanticColors: SemanticTokens['colors'] = {
       orange: {
         DEFAULT: {
           value: {
-            _light: '#A54800',
-            _dark: '#FEC195',
+            _light: '#9E4C00',
+            _dark: '#FBC828',
           },
         },
         bolder: {
           value: {
-            _light: '#702E00',
-            _dark: '#FEDEC8',
+            _light: '#693200',
+            _dark: '#FCE4A6',
           },
         },
       },
@@ -55,13 +1727,13 @@ export const semanticColors: SemanticTokens['colors'] = {
         DEFAULT: {
           value: {
             _light: '#7F5F01',
-            _dark: '#F5CD47',
+            _dark: '#EED12B',
           },
         },
         bolder: {
           value: {
             _light: '#533F04',
-            _dark: '#F8E6A0',
+            _dark: '#F5E989',
           },
         },
       },
@@ -96,28 +1768,28 @@ export const semanticColors: SemanticTokens['colors'] = {
       blue: {
         DEFAULT: {
           value: {
-            _light: '#0055CC',
-            _dark: '#85B8FF',
+            _light: '#1558BC',
+            _dark: '#8FB8F6',
           },
         },
         bolder: {
           value: {
-            _light: '#09326C',
-            _dark: '#CCE0FF',
+            _light: '#123263',
+            _dark: '#CFE1FD',
           },
         },
       },
       purple: {
         DEFAULT: {
           value: {
-            _light: '#5E4DB2',
-            _dark: '#B8ACF6',
+            _light: '#803FA5',
+            _dark: '#D8A0F7',
           },
         },
         bolder: {
           value: {
-            _light: '#352C63',
-            _dark: '#DFD8FD',
+            _light: '#48245D',
+            _dark: '#EED7FC',
           },
         },
       },
@@ -138,126 +1810,206 @@ export const semanticColors: SemanticTokens['colors'] = {
       gray: {
         DEFAULT: {
           value: {
-            _light: '#44546F',
-            _dark: '#9FADBC',
+            _light: '#505258',
+            _dark: '#A9ABAF',
           },
         },
         bolder: {
           value: {
-            _light: '#091E42',
-            _dark: '#DEE4EA',
+            _light: '#1E1F21',
+            _dark: '#E2E3E4',
           },
+        },
+      },
+    },
+    code: {
+      accent: {
+        '1': {
+          value: {
+            _light: '#943D73',
+            _dark: '#F797D2',
+          },
+        },
+        '2': {
+          value: {
+            _light: '#1558BC',
+            _dark: '#8FB8F6',
+          },
+        },
+      },
+      comments: {
+        value: {
+          _light: '#505258',
+          _dark: '#A9ABAF',
+        },
+      },
+      default: {
+        value: {
+          _light: '#505258',
+          _dark: '#A9ABAF',
+        },
+      },
+      functions: {
+        value: {
+          _light: '#216E4E',
+          _dark: '#7EE2B8',
+        },
+      },
+      gutter: {
+        value: {
+          _light: '#6B6E76',
+          _dark: '#96999E',
+        },
+      },
+      keywords: {
+        value: {
+          _light: '#AE2E24',
+          _dark: '#FD9891',
+        },
+      },
+      numbers: {
+        value: {
+          _light: '#7F5F01',
+          _dark: '#EED12B',
+        },
+      },
+      operators: {
+        value: {
+          _light: '#292A2E',
+          _dark: '#CECFD2',
+        },
+      },
+      strings: {
+        value: {
+          _light: '#4C6B1F',
+          _dark: '#B3DF72',
+        },
+      },
+      tags: {
+        value: {
+          _light: '#9E4C00',
+          _dark: '#FCA700',
         },
       },
     },
     disabled: {
       value: {
-        _light: '#091E424F',
-        _dark: '#BFDBF847',
+        _light: '#080F214A',
+        _dark: '#E5E9F640',
       },
     },
     inverse: {
       value: {
         _light: '#FFFFFF',
-        _dark: '#1D2125',
+        _dark: '#1F1F21',
       },
     },
     selected: {
       value: {
-        _light: '#0C66E4',
-        _dark: '#579DFF',
+        _light: '#1868DB',
+        _dark: '#669DF1',
       },
     },
     brand: {
       value: {
-        _light: '#0C66E4',
-        _dark: '#579DFF',
+        _light: '#1868DB',
+        _dark: '#669DF1',
       },
     },
     danger: {
-      value: {
-        _light: '#AE2E24',
-        _dark: '#FD9891',
+      DEFAULT: {
+        value: {
+          _light: '#AE2E24',
+          _dark: '#FD9891',
+        },
+      },
+      bolder: {
+        value: {
+          _light: '#5D1F1A',
+          _dark: '#FFD5D2',
+        },
       },
     },
     warning: {
       DEFAULT: {
         value: {
-          _light: '#A54800',
-          _dark: '#F5CD47',
+          _light: '#9E4C00',
+          _dark: '#FBC828',
         },
       },
       inverse: {
         value: {
-          _light: '#172B4D',
-          _dark: '#1D2125',
+          _light: '#292A2E',
+          _dark: '#1F1F21',
+        },
+      },
+      bolder: {
+        value: {
+          _light: '#693200',
+          _dark: '#FCE4A6',
         },
       },
     },
     success: {
-      value: {
-        _light: '#216E4E',
-        _dark: '#7EE2B8',
+      DEFAULT: {
+        value: {
+          _light: '#4C6B1F',
+          _dark: '#B3DF72',
+        },
+      },
+      bolder: {
+        value: {
+          _light: '#37471F',
+          _dark: '#D3F1A7',
+        },
       },
     },
     discovery: {
-      value: {
-        _light: '#5E4DB2',
-        _dark: '#B8ACF6',
+      DEFAULT: {
+        value: {
+          _light: '#803FA5',
+          _dark: '#D8A0F7',
+        },
+      },
+      bolder: {
+        value: {
+          _light: '#48245D',
+          _dark: '#EED7FC',
+        },
       },
     },
     information: {
-      value: {
-        _light: '#0055CC',
-        _dark: '#85B8FF',
+      DEFAULT: {
+        value: {
+          _light: '#1558BC',
+          _dark: '#8FB8F6',
+        },
+      },
+      bolder: {
+        value: {
+          _light: '#123263',
+          _dark: '#CFE1FD',
+        },
       },
     },
     subtlest: {
       value: {
-        _light: '#626F86',
-        _dark: '#8C9BAB',
+        _light: '#6B6E76',
+        _dark: '#96999E',
       },
     },
     subtle: {
       value: {
-        _light: '#44546F',
-        _dark: '#9FADBC',
-      },
-    },
-  },
-  link: {
-    DEFAULT: {
-      value: {
-        _light: '#0C66E4',
-        _dark: '#579DFF',
-      },
-    },
-    pressed: {
-      value: {
-        _light: '#0055CC',
-        _dark: '#85B8FF',
-      },
-    },
-    visited: {
-      DEFAULT: {
-        value: {
-          _light: '#5E4DB2',
-          _dark: '#B8ACF6',
-        },
-      },
-      pressed: {
-        value: {
-          _light: '#352C63',
-          _dark: '#DFD8FD',
-        },
+        _light: '#505258',
+        _dark: '#A9ABAF',
       },
     },
   },
   icon: {
     DEFAULT: {
       value: {
-        _light: '#44546F',
-        _dark: '#9FADBC',
+        _light: '#292A2E',
+        _dark: '#CECFD2',
       },
     },
     accent: {
@@ -275,14 +2027,14 @@ export const semanticColors: SemanticTokens['colors'] = {
       },
       orange: {
         value: {
-          _light: '#E56910',
-          _dark: '#F38A3F',
+          _light: '#E06C00',
+          _dark: '#F68909',
         },
       },
       yellow: {
         value: {
           _light: '#B38600',
-          _dark: '#F5CD47',
+          _dark: '#EED12B',
         },
       },
       green: {
@@ -299,14 +2051,14 @@ export const semanticColors: SemanticTokens['colors'] = {
       },
       blue: {
         value: {
-          _light: '#1D7AFC',
-          _dark: '#388BFF',
+          _light: '#357DE8',
+          _dark: '#4688EC',
         },
       },
       purple: {
         value: {
-          _light: '#8270DB',
-          _dark: '#8F7EE7',
+          _light: '#AF59E1',
+          _dark: '#BF63F3',
         },
       },
       magenta: {
@@ -317,33 +2069,33 @@ export const semanticColors: SemanticTokens['colors'] = {
       },
       gray: {
         value: {
-          _light: '#758195',
-          _dark: '#738496',
+          _light: '#7D818A',
+          _dark: '#7E8188',
         },
       },
     },
     disabled: {
       value: {
-        _light: '#091E424F',
-        _dark: '#BFDBF847',
+        _light: '#080F214A',
+        _dark: '#E5E9F640',
       },
     },
     inverse: {
       value: {
         _light: '#FFFFFF',
-        _dark: '#1D2125',
+        _dark: '#1F1F21',
       },
     },
     selected: {
       value: {
-        _light: '#0C66E4',
-        _dark: '#579DFF',
+        _light: '#1868DB',
+        _dark: '#669DF1',
       },
     },
     brand: {
       value: {
-        _light: '#0C66E4',
-        _dark: '#579DFF',
+        _light: '#1868DB',
+        _dark: '#669DF1',
       },
     },
     danger: {
@@ -355,1415 +2107,73 @@ export const semanticColors: SemanticTokens['colors'] = {
     warning: {
       DEFAULT: {
         value: {
-          _light: '#E56910',
-          _dark: '#F5CD47',
+          _light: '#E06C00',
+          _dark: '#FBC828',
         },
       },
       inverse: {
         value: {
-          _light: '#172B4D',
-          _dark: '#1D2125',
+          _light: '#292A2E',
+          _dark: '#1F1F21',
         },
       },
     },
     success: {
       value: {
-        _light: '#22A06B',
-        _dark: '#2ABB7F',
+        _light: '#6A9A23',
+        _dark: '#82B536',
       },
     },
     discovery: {
       value: {
-        _light: '#8270DB',
-        _dark: '#8F7EE7',
+        _light: '#AF59E1',
+        _dark: '#BF63F3',
       },
     },
     information: {
       value: {
-        _light: '#1D7AFC',
-        _dark: '#388BFF',
+        _light: '#357DE8',
+        _dark: '#4688EC',
       },
     },
     subtlest: {
       value: {
-        _light: '#626F86',
-        _dark: '#8C9BAB',
+        _light: '#6B6E76',
+        _dark: '#96999E',
       },
     },
     subtle: {
       value: {
-        _light: '#626F86',
-        _dark: '#8C9BAB',
+        _light: '#505258',
+        _dark: '#A9ABAF',
       },
     },
   },
-  border: {
+  link: {
     DEFAULT: {
       value: {
-        _light: '#091E4224',
-        _dark: '#A6C5E229',
+        _light: '#1868DB',
+        _dark: '#669DF1',
       },
     },
-    accent: {
-      lime: {
-        value: {
-          _light: '#6A9A23',
-          _dark: '#82B536',
-        },
-      },
-      red: {
-        value: {
-          _light: '#E2483D',
-          _dark: '#F15B50',
-        },
-      },
-      orange: {
-        value: {
-          _light: '#E56910',
-          _dark: '#F38A3F',
-        },
-      },
-      yellow: {
-        value: {
-          _light: '#B38600',
-          _dark: '#CF9F02',
-        },
-      },
-      green: {
-        value: {
-          _light: '#22A06B',
-          _dark: '#2ABB7F',
-        },
-      },
-      teal: {
-        value: {
-          _light: '#2898BD',
-          _dark: '#42B2D7',
-        },
-      },
-      blue: {
-        value: {
-          _light: '#1D7AFC',
-          _dark: '#388BFF',
-        },
-      },
-      purple: {
-        value: {
-          _light: '#8270DB',
-          _dark: '#8F7EE7',
-        },
-      },
-      magenta: {
-        value: {
-          _light: '#CD519D',
-          _dark: '#DA62AC',
-        },
-      },
-      gray: {
-        value: {
-          _light: '#758195',
-          _dark: '#738496',
-        },
-      },
-    },
-    disabled: {
+    pressed: {
       value: {
-        _light: '#091E420F',
-        _dark: '#A1BDD914',
+        _light: '#1558BC',
+        _dark: '#8FB8F6',
       },
     },
-    focused: {
-      value: {
-        _light: '#388BFF',
-        _dark: '#85B8FF',
-      },
-    },
-    input: {
-      value: {
-        _light: '#8590A2',
-        _dark: '#738496',
-      },
-    },
-    inverse: {
-      value: {
-        _light: '#FFFFFF',
-        _dark: '#161A1D',
-      },
-    },
-    selected: {
-      value: {
-        _light: '#0C66E4',
-        _dark: '#579DFF',
-      },
-    },
-    brand: {
-      value: {
-        _light: '#0C66E4',
-        _dark: '#579DFF',
-      },
-    },
-    danger: {
-      value: {
-        _light: '#E2483D',
-        _dark: '#F15B50',
-      },
-    },
-    warning: {
-      value: {
-        _light: '#E56910',
-        _dark: '#CF9F02',
-      },
-    },
-    success: {
-      value: {
-        _light: '#22A06B',
-        _dark: '#2ABB7F',
-      },
-    },
-    discovery: {
-      value: {
-        _light: '#8270DB',
-        _dark: '#8F7EE7',
-      },
-    },
-    information: {
-      value: {
-        _light: '#1D7AFC',
-        _dark: '#388BFF',
-      },
-    },
-    bold: {
-      value: {
-        _light: '#758195',
-        _dark: '#738496',
-      },
-    },
-  },
-  background: {
-    accent: {
-      lime: {
-        subtlest: {
-          DEFAULT: {
-            value: {
-              _light: '#EFFFD6',
-              _dark: '#28311B',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#D3F1A7',
-              _dark: '#37471F',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#B3DF72',
-              _dark: '#4C6B1F',
-            },
-          },
-        },
-        subtler: {
-          DEFAULT: {
-            value: {
-              _light: '#D3F1A7',
-              _dark: '#37471F',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#B3DF72',
-              _dark: '#4C6B1F',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#94C748',
-              _dark: '#5B7F24',
-            },
-          },
-        },
-        subtle: {
-          DEFAULT: {
-            value: {
-              _light: '#94C748',
-              _dark: '#4C6B1F',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#B3DF72',
-              _dark: '#37471F',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#D3F1A7',
-              _dark: '#28311B',
-            },
-          },
-        },
-        bolder: {
-          DEFAULT: {
-            value: {
-              _light: '#5B7F24',
-              _dark: '#94C748',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#4C6B1F',
-              _dark: '#B3DF72',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#37471F',
-              _dark: '#D3F1A7',
-            },
-          },
-        },
-      },
-      red: {
-        subtlest: {
-          DEFAULT: {
-            value: {
-              _light: '#FFECEB',
-              _dark: '#42221F',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#FFD5D2',
-              _dark: '#5D1F1A',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#FD9891',
-              _dark: '#AE2E24',
-            },
-          },
-        },
-        subtler: {
-          DEFAULT: {
-            value: {
-              _light: '#FFD5D2',
-              _dark: '#5D1F1A',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#FD9891',
-              _dark: '#AE2E24',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#F87168',
-              _dark: '#C9372C',
-            },
-          },
-        },
-        subtle: {
-          DEFAULT: {
-            value: {
-              _light: '#F87168',
-              _dark: '#AE2E24',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#FD9891',
-              _dark: '#5D1F1A',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#FFD5D2',
-              _dark: '#42221F',
-            },
-          },
-        },
-        bolder: {
-          DEFAULT: {
-            value: {
-              _light: '#C9372C',
-              _dark: '#F87168',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#AE2E24',
-              _dark: '#FD9891',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#5D1F1A',
-              _dark: '#FFD5D2',
-            },
-          },
-        },
-      },
-      orange: {
-        subtlest: {
-          DEFAULT: {
-            value: {
-              _light: '#FFF3EB',
-              _dark: '#38291E',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#FEDEC8',
-              _dark: '#702E00',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#FEC195',
-              _dark: '#A54800',
-            },
-          },
-        },
-        subtler: {
-          DEFAULT: {
-            value: {
-              _light: '#FEDEC8',
-              _dark: '#702E00',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#FEC195',
-              _dark: '#A54800',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#FEA362',
-              _dark: '#C25100',
-            },
-          },
-        },
-        subtle: {
-          DEFAULT: {
-            value: {
-              _light: '#FEA362',
-              _dark: '#A54800',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#FEC195',
-              _dark: '#702E00',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#FEDEC8',
-              _dark: '#38291E',
-            },
-          },
-        },
-        bolder: {
-          DEFAULT: {
-            value: {
-              _light: '#C25100',
-              _dark: '#FEA362',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#A54800',
-              _dark: '#FEC195',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#702E00',
-              _dark: '#FEDEC8',
-            },
-          },
-        },
-      },
-      yellow: {
-        subtlest: {
-          DEFAULT: {
-            value: {
-              _light: '#FFF7D6',
-              _dark: '#332E1B',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#F8E6A0',
-              _dark: '#533F04',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#F5CD47',
-              _dark: '#7F5F01',
-            },
-          },
-        },
-        subtler: {
-          DEFAULT: {
-            value: {
-              _light: '#F8E6A0',
-              _dark: '#533F04',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#F5CD47',
-              _dark: '#7F5F01',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#E2B203',
-              _dark: '#946F00',
-            },
-          },
-        },
-        subtle: {
-          DEFAULT: {
-            value: {
-              _light: '#F5CD47',
-              _dark: '#7F5F01',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#E2B203',
-              _dark: '#533F04',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#CF9F02',
-              _dark: '#332E1B',
-            },
-          },
-        },
-        bolder: {
-          DEFAULT: {
-            value: {
-              _light: '#946F00',
-              _dark: '#E2B203',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#7F5F01',
-              _dark: '#F5CD47',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#533F04',
-              _dark: '#F8E6A0',
-            },
-          },
-        },
-      },
-      green: {
-        subtlest: {
-          DEFAULT: {
-            value: {
-              _light: '#DCFFF1',
-              _dark: '#1C3329',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#BAF3DB',
-              _dark: '#164B35',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#7EE2B8',
-              _dark: '#216E4E',
-            },
-          },
-        },
-        subtler: {
-          DEFAULT: {
-            value: {
-              _light: '#BAF3DB',
-              _dark: '#164B35',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#7EE2B8',
-              _dark: '#216E4E',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#4BCE97',
-              _dark: '#1F845A',
-            },
-          },
-        },
-        subtle: {
-          DEFAULT: {
-            value: {
-              _light: '#4BCE97',
-              _dark: '#216E4E',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#7EE2B8',
-              _dark: '#164B35',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#BAF3DB',
-              _dark: '#1C3329',
-            },
-          },
-        },
-        bolder: {
-          DEFAULT: {
-            value: {
-              _light: '#1F845A',
-              _dark: '#4BCE97',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#216E4E',
-              _dark: '#7EE2B8',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#164B35',
-              _dark: '#BAF3DB',
-            },
-          },
-        },
-      },
-      teal: {
-        subtlest: {
-          DEFAULT: {
-            value: {
-              _light: '#E7F9FF',
-              _dark: '#1E3137',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#C6EDFB',
-              _dark: '#164555',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#9DD9EE',
-              _dark: '#206A83',
-            },
-          },
-        },
-        subtler: {
-          DEFAULT: {
-            value: {
-              _light: '#C6EDFB',
-              _dark: '#164555',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#9DD9EE',
-              _dark: '#206A83',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#6CC3E0',
-              _dark: '#227D9B',
-            },
-          },
-        },
-        subtle: {
-          DEFAULT: {
-            value: {
-              _light: '#6CC3E0',
-              _dark: '#206A83',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#9DD9EE',
-              _dark: '#164555',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#C6EDFB',
-              _dark: '#1E3137',
-            },
-          },
-        },
-        bolder: {
-          DEFAULT: {
-            value: {
-              _light: '#227D9B',
-              _dark: '#6CC3E0',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#206A83',
-              _dark: '#9DD9EE',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#164555',
-              _dark: '#C6EDFB',
-            },
-          },
-        },
-      },
-      blue: {
-        subtlest: {
-          DEFAULT: {
-            value: {
-              _light: '#E9F2FF',
-              _dark: '#1C2B41',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#CCE0FF',
-              _dark: '#09326C',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#85B8FF',
-              _dark: '#0055CC',
-            },
-          },
-        },
-        subtler: {
-          DEFAULT: {
-            value: {
-              _light: '#CCE0FF',
-              _dark: '#09326C',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#85B8FF',
-              _dark: '#0055CC',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#579DFF',
-              _dark: '#0C66E4',
-            },
-          },
-        },
-        subtle: {
-          DEFAULT: {
-            value: {
-              _light: '#579DFF',
-              _dark: '#0055CC',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#85B8FF',
-              _dark: '#09326C',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#CCE0FF',
-              _dark: '#1C2B41',
-            },
-          },
-        },
-        bolder: {
-          DEFAULT: {
-            value: {
-              _light: '#0C66E4',
-              _dark: '#579DFF',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#0055CC',
-              _dark: '#85B8FF',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#09326C',
-              _dark: '#CCE0FF',
-            },
-          },
-        },
-      },
-      purple: {
-        subtlest: {
-          DEFAULT: {
-            value: {
-              _light: '#F3F0FF',
-              _dark: '#2B273F',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#DFD8FD',
-              _dark: '#352C63',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#B8ACF6',
-              _dark: '#5E4DB2',
-            },
-          },
-        },
-        subtler: {
-          DEFAULT: {
-            value: {
-              _light: '#DFD8FD',
-              _dark: '#352C63',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#B8ACF6',
-              _dark: '#5E4DB2',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#9F8FEF',
-              _dark: '#6E5DC6',
-            },
-          },
-        },
-        subtle: {
-          DEFAULT: {
-            value: {
-              _light: '#9F8FEF',
-              _dark: '#5E4DB2',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#B8ACF6',
-              _dark: '#352C63',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#DFD8FD',
-              _dark: '#2B273F',
-            },
-          },
-        },
-        bolder: {
-          DEFAULT: {
-            value: {
-              _light: '#6E5DC6',
-              _dark: '#9F8FEF',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#5E4DB2',
-              _dark: '#B8ACF6',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#352C63',
-              _dark: '#DFD8FD',
-            },
-          },
-        },
-      },
-      magenta: {
-        subtlest: {
-          DEFAULT: {
-            value: {
-              _light: '#FFECF8',
-              _dark: '#3D2232',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#FDD0EC',
-              _dark: '#50253F',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#F797D2',
-              _dark: '#943D73',
-            },
-          },
-        },
-        subtler: {
-          DEFAULT: {
-            value: {
-              _light: '#FDD0EC',
-              _dark: '#50253F',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#F797D2',
-              _dark: '#943D73',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#E774BB',
-              _dark: '#AE4787',
-            },
-          },
-        },
-        subtle: {
-          DEFAULT: {
-            value: {
-              _light: '#E774BB',
-              _dark: '#943D73',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#F797D2',
-              _dark: '#50253F',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#FDD0EC',
-              _dark: '#3D2232',
-            },
-          },
-        },
-        bolder: {
-          DEFAULT: {
-            value: {
-              _light: '#AE4787',
-              _dark: '#E774BB',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#943D73',
-              _dark: '#F797D2',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#50253F',
-              _dark: '#FDD0EC',
-            },
-          },
-        },
-      },
-      gray: {
-        subtlest: {
-          DEFAULT: {
-            value: {
-              _light: '#F1F2F4',
-              _dark: '#2C333A',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#DCDFE4',
-              _dark: '#38414A',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#B3B9C4',
-              _dark: '#454F59',
-            },
-          },
-        },
-        subtler: {
-          DEFAULT: {
-            value: {
-              _light: '#DCDFE4',
-              _dark: '#454F59',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#B3B9C4',
-              _dark: '#596773',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#8590A2',
-              _dark: '#738496',
-            },
-          },
-        },
-        subtle: {
-          DEFAULT: {
-            value: {
-              _light: '#8590A2',
-              _dark: '#596773',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#B3B9C4',
-              _dark: '#454F59',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#DCDFE4',
-              _dark: '#38414A',
-            },
-          },
-        },
-        bolder: {
-          DEFAULT: {
-            value: {
-              _light: '#626F86',
-              _dark: '#8C9BAB',
-            },
-          },
-          hovered: {
-            value: {
-              _light: '#44546F',
-              _dark: '#9FADBC',
-            },
-          },
-          pressed: {
-            value: {
-              _light: '#2C3E5D',
-              _dark: '#B6C2CF',
-            },
-          },
-        },
-      },
-    },
-    disabled: {
-      value: {
-        _light: '#091E4208',
-        _dark: '#BCD6F00A',
-      },
-    },
-    input: {
+    visited: {
       DEFAULT: {
         value: {
-          _light: '#FFFFFF',
-          _dark: '#22272B',
-        },
-      },
-      hovered: {
-        value: {
-          _light: '#F7F8F9',
-          _dark: '#282E33',
+          _light: '#803FA5',
+          _dark: '#D8A0F7',
         },
       },
       pressed: {
         value: {
-          _light: '#FFFFFF',
-          _dark: '#22272B',
+          _light: '#48245D',
+          _dark: '#EED7FC',
         },
-      },
-    },
-    inverse: {
-      subtle: {
-        DEFAULT: {
-          value: {
-            _light: '#00000029',
-            _dark: '#FFFFFF29',
-          },
-        },
-        hovered: {
-          value: {
-            _light: '#0000003D',
-            _dark: '#FFFFFF3D',
-          },
-        },
-        pressed: {
-          value: {
-            _light: '#00000052',
-            _dark: '#FFFFFF52',
-          },
-        },
-      },
-    },
-    neutral: {
-      DEFAULT: {
-        value: {
-          _light: '#091E420F',
-          _dark: '#A1BDD914',
-        },
-      },
-      hovered: {
-        value: {
-          _light: '#091E4224',
-          _dark: '#A6C5E229',
-        },
-      },
-      pressed: {
-        value: {
-          _light: '#091E424F',
-          _dark: '#BFDBF847',
-        },
-      },
-      subtle: {
-        hovered: {
-          value: {
-            _light: '#091E420F',
-            _dark: '#A1BDD914',
-          },
-        },
-        pressed: {
-          value: {
-            _light: '#091E4224',
-            _dark: '#A6C5E229',
-          },
-        },
-      },
-      bold: {
-        DEFAULT: {
-          value: {
-            _light: '#44546F',
-            _dark: '#9FADBC',
-          },
-        },
-        hovered: {
-          value: {
-            _light: '#2C3E5D',
-            _dark: '#B6C2CF',
-          },
-        },
-        pressed: {
-          value: {
-            _light: '#172B4D',
-            _dark: '#C7D1DB',
-          },
-        },
-      },
-    },
-    selected: {
-      DEFAULT: {
-        value: {
-          _light: '#E9F2FF',
-          _dark: '#1C2B41',
-        },
-      },
-      hovered: {
-        value: {
-          _light: '#CCE0FF',
-          _dark: '#09326C',
-        },
-      },
-      pressed: {
-        value: {
-          _light: '#85B8FF',
-          _dark: '#0055CC',
-        },
-      },
-      bold: {
-        DEFAULT: {
-          value: {
-            _light: '#0C66E4',
-            _dark: '#579DFF',
-          },
-        },
-        hovered: {
-          value: {
-            _light: '#0055CC',
-            _dark: '#85B8FF',
-          },
-        },
-        pressed: {
-          value: {
-            _light: '#09326C',
-            _dark: '#CCE0FF',
-          },
-        },
-      },
-    },
-    brand: {
-      subtlest: {
-        DEFAULT: {
-          value: {
-            _light: '#E9F2FF',
-            _dark: '#1C2B41',
-          },
-        },
-        hovered: {
-          value: {
-            _light: '#CCE0FF',
-            _dark: '#09326C',
-          },
-        },
-        pressed: {
-          value: {
-            _light: '#85B8FF',
-            _dark: '#0055CC',
-          },
-        },
-      },
-      bold: {
-        DEFAULT: {
-          value: {
-            _light: '#0C66E4',
-            _dark: '#579DFF',
-          },
-        },
-        hovered: {
-          value: {
-            _light: '#0055CC',
-            _dark: '#85B8FF',
-          },
-        },
-        pressed: {
-          value: {
-            _light: '#09326C',
-            _dark: '#CCE0FF',
-          },
-        },
-      },
-      boldest: {
-        DEFAULT: {
-          value: {
-            _light: '#1C2B41',
-            _dark: '#E9F2FF',
-          },
-        },
-        hovered: {
-          value: {
-            _light: '#09326C',
-            _dark: '#CCE0FF',
-          },
-        },
-        pressed: {
-          value: {
-            _light: '#0055CC',
-            _dark: '#85B8FF',
-          },
-        },
-      },
-    },
-    danger: {
-      DEFAULT: {
-        value: {
-          _light: '#FFECEB',
-          _dark: '#42221F',
-        },
-      },
-      hovered: {
-        value: {
-          _light: '#FFD5D2',
-          _dark: '#5D1F1A',
-        },
-      },
-      pressed: {
-        value: {
-          _light: '#FD9891',
-          _dark: '#AE2E24',
-        },
-      },
-      bold: {
-        DEFAULT: {
-          value: {
-            _light: '#C9372C',
-            _dark: '#F87168',
-          },
-        },
-        hovered: {
-          value: {
-            _light: '#AE2E24',
-            _dark: '#FD9891',
-          },
-        },
-        pressed: {
-          value: {
-            _light: '#5D1F1A',
-            _dark: '#FFD5D2',
-          },
-        },
-      },
-    },
-    warning: {
-      DEFAULT: {
-        value: {
-          _light: '#FFF7D6',
-          _dark: '#332E1B',
-        },
-      },
-      hovered: {
-        value: {
-          _light: '#F8E6A0',
-          _dark: '#533F04',
-        },
-      },
-      pressed: {
-        value: {
-          _light: '#F5CD47',
-          _dark: '#7F5F01',
-        },
-      },
-    },
-    success: {
-      DEFAULT: {
-        value: {
-          _light: '#DCFFF1',
-          _dark: '#1C3329',
-        },
-      },
-      hovered: {
-        value: {
-          _light: '#BAF3DB',
-          _dark: '#164B35',
-        },
-      },
-      pressed: {
-        value: {
-          _light: '#7EE2B8',
-          _dark: '#216E4E',
-        },
-      },
-      bold: {
-        DEFAULT: {
-          value: {
-            _light: '#1F845A',
-            _dark: '#4BCE97',
-          },
-        },
-        hovered: {
-          value: {
-            _light: '#216E4E',
-            _dark: '#7EE2B8',
-          },
-        },
-        pressed: {
-          value: {
-            _light: '#164B35',
-            _dark: '#BAF3DB',
-          },
-        },
-      },
-    },
-    discovery: {
-      DEFAULT: {
-        value: {
-          _light: '#F3F0FF',
-          _dark: '#2B273F',
-        },
-      },
-      hovered: {
-        value: {
-          _light: '#DFD8FD',
-          _dark: '#352C63',
-        },
-      },
-      pressed: {
-        value: {
-          _light: '#B8ACF6',
-          _dark: '#5E4DB2',
-        },
-      },
-      bold: {
-        DEFAULT: {
-          value: {
-            _light: '#6E5DC6',
-            _dark: '#9F8FEF',
-          },
-        },
-        hovered: {
-          value: {
-            _light: '#5E4DB2',
-            _dark: '#B8ACF6',
-          },
-        },
-        pressed: {
-          value: {
-            _light: '#352C63',
-            _dark: '#DFD8FD',
-          },
-        },
-      },
-    },
-    information: {
-      DEFAULT: {
-        value: {
-          _light: '#E9F2FF',
-          _dark: '#1C2B41',
-        },
-      },
-      hovered: {
-        value: {
-          _light: '#CCE0FF',
-          _dark: '#09326C',
-        },
-      },
-      pressed: {
-        value: {
-          _light: '#85B8FF',
-          _dark: '#0055CC',
-        },
-      },
-      bold: {
-        DEFAULT: {
-          value: {
-            _light: '#0C66E4',
-            _dark: '#579DFF',
-          },
-        },
-        hovered: {
-          value: {
-            _light: '#0055CC',
-            _dark: '#85B8FF',
-          },
-        },
-        pressed: {
-          value: {
-            _light: '#09326C',
-            _dark: '#CCE0FF',
-          },
-        },
-      },
-    },
-  },
-  blanket: {
-    DEFAULT: {
-      value: {
-        _light: '#091E427D',
-        _dark: '#10121499',
-      },
-    },
-    selected: {
-      value: {
-        _light: '#388BFF14',
-        _dark: '#1D7AFC14',
-      },
-    },
-    danger: {
-      value: {
-        _light: '#EF5C4814',
-        _dark: '#E3493514',
       },
     },
   },
@@ -1784,116 +2194,130 @@ export const semanticColors: SemanticTokens['colors'] = {
   skeleton: {
     DEFAULT: {
       value: {
-        _light: '#091E420F',
-        _dark: '#A1BDD914',
+        _light: '#0515240F',
+        _dark: '#CECED912',
       },
     },
     subtle: {
       value: {
-        _light: '#091E4208',
-        _dark: '#BCD6F00A',
+        _light: '#17171708',
+        _dark: '#BDBDBD0A',
+      },
+    },
+  },
+  blanket: {
+    DEFAULT: {
+      value: {
+        _light: '#050C1F75',
+        _dark: '#10121499',
+      },
+    },
+    selected: {
+      value: {
+        _light: '#388BFF14',
+        _dark: '#1D7AFC14',
+      },
+    },
+    danger: {
+      value: {
+        _light: '#EF5C4814',
+        _dark: '#E3493514',
       },
     },
   },
   chart: {
     categorical: {
       '1': {
+        DEFAULT: {
+          value: {
+            _light: '#357DE8',
+            _dark: '#4688EC',
+          },
+        },
         hovered: {
           value: {
-            _light: '#227D9B',
-            _dark: '#42B2D7',
+            _light: '#1868DB',
+            _dark: '#669DF1',
           },
         },
       },
       '2': {
         DEFAULT: {
           value: {
-            _light: '#5E4DB2',
-            _dark: '#B8ACF6',
+            _light: '#82B536',
+            _dark: '#94C748',
           },
         },
         hovered: {
           value: {
-            _light: '#352C63',
-            _dark: '#DFD8FD',
+            _light: '#6A9A23',
+            _dark: '#B3DF72',
           },
         },
       },
       '3': {
+        DEFAULT: {
+          value: {
+            _light: '#BF63F3',
+            _dark: '#C97CF4',
+          },
+        },
         hovered: {
           value: {
-            _light: '#C25100',
-            _dark: '#F38A3F',
+            _light: '#AF59E1',
+            _dark: '#D8A0F7',
           },
         },
       },
       '4': {
         DEFAULT: {
           value: {
-            _light: '#943D73',
-            _dark: '#F797D2',
+            _light: '#F68909',
+            _dark: '#FCA700',
           },
         },
         hovered: {
           value: {
-            _light: '#50253F',
-            _dark: '#FDD0EC',
+            _light: '#E06C00',
+            _dark: '#FBC828',
           },
         },
       },
       '5': {
-        DEFAULT: {
-          value: {
-            _light: '#09326C',
-            _dark: '#CCE0FF',
-          },
-        },
         hovered: {
           value: {
-            _light: '#1C2B41',
-            _dark: '#E9F2FF',
+            _light: '#123263',
+            _dark: '#1868DB',
           },
         },
       },
       '6': {
-        DEFAULT: {
-          value: {
-            _light: '#8F7EE7',
-            _dark: '#8270DB',
-          },
-        },
         hovered: {
           value: {
-            _light: '#8270DB',
-            _dark: '#8F7EE7',
+            _light: '#803FA5',
+            _dark: '#AF59E1',
           },
         },
       },
       '7': {
-        DEFAULT: {
-          value: {
-            _light: '#50253F',
-            _dark: '#FDD0EC',
-          },
-        },
         hovered: {
           value: {
-            _light: '#3D2232',
-            _dark: '#FFECF8',
+            _light: '#2898BD',
+            _dark: '#6CC3E0',
           },
         },
       },
       '8': {
         DEFAULT: {
           value: {
-            _light: '#A54800',
-            _dark: '#FEC195',
+            _light: '#BD5B00',
+            _dark: '#E06C00',
           },
         },
         hovered: {
           value: {
-            _light: '#702E00',
-            _dark: '#FEDEC8',
+            _light: '#7A3B00',
+            _dark: '#FBD779',
           },
         },
       },
@@ -1945,14 +2369,14 @@ export const semanticColors: SemanticTokens['colors'] = {
     neutral: {
       DEFAULT: {
         value: {
-          _light: '#8590A2',
-          _dark: '#738496',
+          _light: '#8C8F97',
+          _dark: '#7E8188',
         },
       },
       hovered: {
         value: {
-          _light: '#758195',
-          _dark: '#8C9BAB',
+          _light: '#7D818A',
+          _dark: '#96999E',
         },
       },
     },
@@ -2004,42 +2428,42 @@ export const semanticColors: SemanticTokens['colors'] = {
       bold: {
         DEFAULT: {
           value: {
-            _light: '#E56910',
-            _dark: '#F38A3F',
+            _light: '#E06C00',
+            _dark: '#F68909',
           },
         },
         hovered: {
           value: {
-            _light: '#C25100',
-            _dark: '#FEA362',
+            _light: '#BD5B00',
+            _dark: '#FCA700',
           },
         },
       },
       bolder: {
         DEFAULT: {
           value: {
-            _light: '#C25100',
-            _dark: '#FEA362',
+            _light: '#BD5B00',
+            _dark: '#FCA700',
           },
         },
         hovered: {
           value: {
-            _light: '#A54800',
-            _dark: '#FEC195',
+            _light: '#9E4C00',
+            _dark: '#FBC828',
           },
         },
       },
       boldest: {
         DEFAULT: {
           value: {
-            _light: '#A54800',
-            _dark: '#FEC195',
+            _light: '#7A3B00',
+            _dark: '#FBD779',
           },
         },
         hovered: {
           value: {
-            _light: '#702E00',
-            _dark: '#FEDEC8',
+            _light: '#693200',
+            _dark: '#FCE4A6',
           },
         },
       },
@@ -2055,7 +2479,7 @@ export const semanticColors: SemanticTokens['colors'] = {
         hovered: {
           value: {
             _light: '#946F00',
-            _dark: '#E2B203',
+            _dark: '#DDB30E',
           },
         },
       },
@@ -2063,13 +2487,13 @@ export const semanticColors: SemanticTokens['colors'] = {
         DEFAULT: {
           value: {
             _light: '#946F00',
-            _dark: '#E2B203',
+            _dark: '#DDB30E',
           },
         },
         hovered: {
           value: {
             _light: '#7F5F01',
-            _dark: '#F5CD47',
+            _dark: '#EED12B',
           },
         },
       },
@@ -2077,13 +2501,13 @@ export const semanticColors: SemanticTokens['colors'] = {
         DEFAULT: {
           value: {
             _light: '#7F5F01',
-            _dark: '#F5CD47',
+            _dark: '#EED12B',
           },
         },
         hovered: {
           value: {
             _light: '#533F04',
-            _dark: '#F8E6A0',
+            _dark: '#F5E989',
           },
         },
       },
@@ -2180,42 +2604,42 @@ export const semanticColors: SemanticTokens['colors'] = {
       bold: {
         DEFAULT: {
           value: {
-            _light: '#388BFF',
-            _dark: '#1D7AFC',
+            _light: '#4688EC',
+            _dark: '#357DE8',
           },
         },
         hovered: {
           value: {
-            _light: '#1D7AFC',
-            _dark: '#388BFF',
+            _light: '#357DE8',
+            _dark: '#4688EC',
           },
         },
       },
       bolder: {
         DEFAULT: {
           value: {
-            _light: '#1D7AFC',
-            _dark: '#388BFF',
+            _light: '#357DE8',
+            _dark: '#4688EC',
           },
         },
         hovered: {
           value: {
-            _light: '#0C66E4',
-            _dark: '#579DFF',
+            _light: '#1868DB',
+            _dark: '#669DF1',
           },
         },
       },
       boldest: {
         DEFAULT: {
           value: {
-            _light: '#0055CC',
-            _dark: '#85B8FF',
+            _light: '#1558BC',
+            _dark: '#8FB8F6',
           },
         },
         hovered: {
           value: {
-            _light: '#09326C',
-            _dark: '#CCE0FF',
+            _light: '#123263',
+            _dark: '#CFE1FD',
           },
         },
       },
@@ -2224,42 +2648,42 @@ export const semanticColors: SemanticTokens['colors'] = {
       bold: {
         DEFAULT: {
           value: {
-            _light: '#8F7EE7',
-            _dark: '#8270DB',
+            _light: '#BF63F3',
+            _dark: '#AF59E1',
           },
         },
         hovered: {
           value: {
-            _light: '#8270DB',
-            _dark: '#8F7EE7',
+            _light: '#AF59E1',
+            _dark: '#BF63F3',
           },
         },
       },
       bolder: {
         DEFAULT: {
           value: {
-            _light: '#8270DB',
-            _dark: '#8F7EE7',
+            _light: '#AF59E1',
+            _dark: '#BF63F3',
           },
         },
         hovered: {
           value: {
-            _light: '#6E5DC6',
-            _dark: '#9F8FEF',
+            _light: '#964AC0',
+            _dark: '#C97CF4',
           },
         },
       },
       boldest: {
         DEFAULT: {
           value: {
-            _light: '#5E4DB2',
-            _dark: '#B8ACF6',
+            _light: '#803FA5',
+            _dark: '#D8A0F7',
           },
         },
         hovered: {
           value: {
-            _light: '#352C63',
-            _dark: '#DFD8FD',
+            _light: '#48245D',
+            _dark: '#EED7FC',
           },
         },
       },
@@ -2312,42 +2736,42 @@ export const semanticColors: SemanticTokens['colors'] = {
       bold: {
         DEFAULT: {
           value: {
-            _light: '#8590A2',
-            _dark: '#738496',
+            _light: '#8C8F97',
+            _dark: '#7E8188',
           },
         },
         hovered: {
           value: {
-            _light: '#758195',
-            _dark: '#8C9BAB',
+            _light: '#7D818A',
+            _dark: '#96999E',
           },
         },
       },
       bolder: {
         DEFAULT: {
           value: {
-            _light: '#758195',
-            _dark: '#8C9BAB',
+            _light: '#7D818A',
+            _dark: '#96999E',
           },
         },
         hovered: {
           value: {
-            _light: '#626F86',
-            _dark: '#9FADBC',
+            _light: '#6B6E76',
+            _dark: '#A9ABAF',
           },
         },
       },
       boldest: {
         DEFAULT: {
           value: {
-            _light: '#44546F',
-            _dark: '#9FADBC',
+            _light: '#505258',
+            _dark: '#A9ABAF',
           },
         },
         hovered: {
           value: {
-            _light: '#2C3E5D',
-            _dark: '#B6C2CF',
+            _light: '#3B3D42',
+            _dark: '#BFC1C4',
           },
         },
       },
@@ -2355,125 +2779,101 @@ export const semanticColors: SemanticTokens['colors'] = {
     brand: {
       DEFAULT: {
         value: {
-          _light: '#1D7AFC',
-          _dark: '#388BFF',
+          _light: '#357DE8',
+          _dark: '#4688EC',
         },
       },
       hovered: {
         value: {
-          _light: '#0C66E4',
-          _dark: '#579DFF',
+          _light: '#1868DB',
+          _dark: '#669DF1',
         },
       },
     },
     danger: {
-      DEFAULT: {
-        value: {
-          _light: '#F15B50',
-          _dark: '#E2483D',
-        },
-      },
       hovered: {
         value: {
-          _light: '#E2483D',
+          _light: '#C9372C',
           _dark: '#F15B50',
         },
       },
       bold: {
         DEFAULT: {
           value: {
-            _light: '#AE2E24',
-            _dark: '#FD9891',
+            _light: '#872821',
+            _dark: '#FFB8B2',
           },
         },
         hovered: {
           value: {
             _light: '#5D1F1A',
-            _dark: '#FFD5D2',
+            _dark: '#FD9891',
           },
         },
       },
     },
     warning: {
-      DEFAULT: {
-        value: {
-          _light: '#B38600',
-          _dark: '#CF9F02',
-        },
-      },
       hovered: {
         value: {
-          _light: '#946F00',
-          _dark: '#E2B203',
+          _light: '#E06C00',
+          _dark: '#FCA700',
         },
       },
       bold: {
         DEFAULT: {
           value: {
-            _light: '#7F5F01',
-            _dark: '#F5CD47',
+            _light: '#BD5B00',
+            _dark: '#FBC828',
           },
         },
         hovered: {
           value: {
-            _light: '#533F04',
-            _dark: '#F8E6A0',
+            _light: '#9E4C00',
+            _dark: '#FCE4A6',
           },
         },
       },
     },
     success: {
-      DEFAULT: {
-        value: {
-          _light: '#22A06B',
-          _dark: '#2ABB7F',
-        },
-      },
       hovered: {
         value: {
-          _light: '#1F845A',
-          _dark: '#4BCE97',
+          _light: '#6A9A23',
+          _dark: '#94C748',
         },
       },
       bold: {
         DEFAULT: {
           value: {
-            _light: '#216E4E',
-            _dark: '#7EE2B8',
+            _light: '#5B7F24',
+            _dark: '#B3DF72',
           },
         },
         hovered: {
           value: {
-            _light: '#164B35',
-            _dark: '#BAF3DB',
+            _light: '#4C6B1F',
+            _dark: '#D3F1A7',
           },
         },
       },
     },
     discovery: {
-      DEFAULT: {
-        value: {
-          _light: '#8F7EE7',
-          _dark: '#8270DB',
-        },
-      },
       hovered: {
         value: {
-          _light: '#8270DB',
-          _dark: '#8F7EE7',
+          _light: '#AF59E1',
+          _dark: '#C97CF4',
         },
       },
       bold: {
         DEFAULT: {
           value: {
-            _light: '#5E4DB2',
-            _dark: '#B8ACF6',
+            _light: '#803FA5',
+            _dark: '#D8A0F7',
           },
         },
         hovered: {
           value: {
-            _light: '#352C63',
-            _dark: '#DFD8FD',
+            _light: '#964AC0',
+            _dark: '#EED7FC',
           },
         },
       },
@@ -2481,28 +2881,94 @@ export const semanticColors: SemanticTokens['colors'] = {
     information: {
       DEFAULT: {
         value: {
-          _light: '#388BFF',
-          _dark: '#1D7AFC',
+          _light: '#357DE8',
+          _dark: '#4688EC',
         },
       },
       hovered: {
         value: {
-          _light: '#1D7AFC',
-          _dark: '#388BFF',
+          _light: '#1868DB',
+          _dark: '#669DF1',
         },
       },
       bold: {
         DEFAULT: {
           value: {
-            _light: '#0055CC',
-            _dark: '#85B8FF',
+            _light: '#1558BC',
+            _dark: '#8FB8F6',
           },
         },
         hovered: {
           value: {
-            _light: '#09326C',
-            _dark: '#CCE0FF',
+            _light: '#123263',
+            _dark: '#CFE1FD',
           },
+        },
+      },
+    },
+  },
+  rovo: {
+    background: {
+      brand: {
+        bold: {
+          DEFAULT: {
+            value: {
+              _light: '#000000',
+              _dark: '#FFFFFF',
+            },
+          },
+          hovered: {
+            value: {
+              _light: '#1E1F21',
+              _dark: '#E2E3E4',
+            },
+          },
+          pressed: {
+            value: {
+              _light: '#292A2E',
+              _dark: '#CECFD2',
+            },
+          },
+        },
+      },
+    },
+    border: {
+      lime: {
+        value: {
+          _light: '#6A9A23',
+          _dark: '#82B536',
+        },
+      },
+      blue: {
+        value: {
+          _light: '#1868DB',
+          _dark: '#357DE8',
+        },
+      },
+      purple: {
+        value: {
+          _light: '#AF59E1',
+          _dark: '#BF63F3',
+        },
+      },
+    },
+    icon: {
+      lime: {
+        value: {
+          _light: '#6A9A23',
+          _dark: '#82B536',
+        },
+      },
+      blue: {
+        value: {
+          _light: '#1868DB',
+          _dark: '#357DE8',
+        },
+      },
+      purple: {
+        value: {
+          _light: '#AF59E1',
+          _dark: '#BF63F3',
         },
       },
     },

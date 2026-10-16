@@ -20,9 +20,9 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const srcDir = join(__dirname, '../src')
 
-// Version compatibility - this script was built for @atlaskit/tokens 7.x
-const COMPATIBLE_VERSION_RANGE = '7.x'
-const TESTED_VERSION = '7.0.0'
+// Version compatibility - this script was last run against @atlaskit/tokens 20.x
+const COMPATIBLE_VERSION_RANGE = '20.x'
+const TESTED_VERSION = '20.6.0'
 
 /**
  * Check @atlaskit/tokens version compatibility
