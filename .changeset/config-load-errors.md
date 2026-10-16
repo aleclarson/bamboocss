@@ -2,11 +2,13 @@
 '@bamboocss/config': patch
 ---
 
-Report the error a config throws, and where in the source it threw, and bundle ES module configs as ES modules.
+Report the error a config throws, and where in its source the error came from, and bundle ES module configs as ES
+modules.
 
 - An error while loading `bamboo.config.ts` used to be replaced by `Please pass in filename to use require`, after the
-  config ran a second time. The real error is reported now, with the config's path and the file, line and column it was
-  thrown from, read back through the bundle's source map. The config runs once.
+  config ran a second time. The real error is reported now, with the config's path, and the config runs once. Where its
+  stack says the error was created is read back through the bundle's source map to a file, line and column, and when
+  that is inside an installed package, so is the line of the config that called it.
 - A config is bundled as an ES module when its extension or `package.json` says it is one — `.mjs`/`.mts`, or
   `.js`/`.ts` under `"type": "module"` — so top-level `await` works there. Its syntax is not read: a `.ts` file using
   `import` with no `"type": "module"` is still bundled as CommonJS, where top-level `await` is not available. Everything
@@ -19,4 +21,5 @@ Report the error a config throws, and where in the source it threw, and bundle E
 - `import.meta.url`, `import.meta.dirname` and `import.meta.filename` work in every config, as do `__dirname` and
   `__filename`, and each file a config imports sees its own. In a CommonJS bundle `import.meta` used to be empty, so
   `fileURLToPath(import.meta.url)` threw.
-- A config exporting `null` is reported as one that does not export an object.
+- A config, or a preset named by its package, that exports something other than an object — a function, `null`, or a
+  default export that is `undefined` — is reported as not exporting one, a preset by its name.

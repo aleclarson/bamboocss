@@ -1,4 +1,4 @@
-import { omit, pick, traverse } from '@bamboocss/shared'
+import { BambooError, omit, pick, traverse } from '@bamboocss/shared'
 import type { Config, BambooHooks, Preset } from '@bamboocss/types'
 import { bundle } from './bundle-config'
 import { mergeConfigs } from './merge-config'
@@ -31,6 +31,11 @@ export async function getResolvedConfig(config: ExtendableConfig, cwd: string, h
 
       if (typeof subPreset === 'string') {
         const presetModule = await bundle(subPreset, cwd)
+        // As a config is (`bundleConfig`): a function or `null` was merged as a preset with nothing
+        // in it, or failed on a property of `null`, naming no preset.
+        if (typeof presetModule.config !== 'object' || presetModule.config === null) {
+          throw new BambooError('CONFIG_ERROR', `💥 Preset \`${subPreset}\` must export an object.`)
+        }
         presetConfig = presetModule.config
         presetName = subPreset
         externalPresets.push({

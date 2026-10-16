@@ -66,8 +66,8 @@ export async function bundle<T extends Config = Config>(filepath: string, cwd: s
   try {
     mod = esm ? await importBundled(file, code, loaded) : requireBundled(file, code)
   } catch (error) {
-    const reason = error instanceof Error ? error.message : String(error)
-    // Where it threw is said if it can be, and never in place of what it threw.
+    const reason = error instanceof Error ? error.message : describe(error)
+    // Where it was raised is said if it can be, and never in place of what was raised.
     const where = await locate(
       error,
       loaded.path,
@@ -78,17 +78,18 @@ export async function bundle<T extends Config = Config>(filepath: string, cwd: s
         return bundled.code === code ? bundled : undefined
       },
       cwd,
-    ).catch(() => undefined)
-    throw new BambooError('CONFIG_ERROR', `💥 Failed to load ${file}: ${reason}${where ? `\n    at ${where}` : ''}`, {
-      cause: error,
-    })
+    ).catch(() => [])
+    const at = where.map((place) => `\n    at ${place}`).join('')
+    throw new BambooError('CONFIG_ERROR', `💥 Failed to load ${file}: ${reason}${at}`, { cause: error })
   }
 
   // A module with no default export is its exports, as `module.exports` is in a CommonJS one —
-  // copied, since an ES module namespace cannot be written to and the config is. Only an object
-  // is copied: spread, a function or `null` passed for a config with nothing in it.
-  const exported = mod?.default !== undefined ? mod.default : mod
-  const config = (exported === mod && typeof mod === 'object' && mod !== null ? { ...mod } : exported) as T
+  // copied, since an ES module namespace cannot be written to and the config is. A default export
+  // is the config whatever it is, `undefined` included, and only an object is copied: a function,
+  // `null` or `undefined` used to pass for one with nothing in it. What is not an object is
+  // refused by `bundleConfig` for a config and `getResolvedConfig` for a preset.
+  const structured = typeof mod === 'object' && mod !== null
+  const config = (structured ? ('default' in mod ? mod.default : { ...mod }) : mod) as T
 
   return {
     config,
@@ -126,9 +127,11 @@ async function bundleFile(file: string, cwd: string, esm: boolean, options: Bund
     format: esm ? 'esm' : 'cjs',
     mainFields: ['module', 'main'],
     bundle: true,
-    // Only to say where an error came from: see `locate`.
+    // Only to say where an error came from: see `locate`. Bundled for it a second time, which says
+    // nothing the first did not.
     sourcemap: options.sourcemap ? 'external' : false,
     sourcesContent: false,
+    ...(options.sourcemap && { logLevel: 'silent' as const }),
     metafile: true,
     define: {
       __dirname: DIRNAME,
@@ -323,14 +326,20 @@ function sweepStale(dir: string) {
   if (swept.has(dir)) return
   swept.add(dir)
   const before = Date.now() - 3_600_000
+  let names: string[]
   try {
-    for (const name of readdirSync(dir)) {
-      if (!STALE_BUNDLE.test(name)) continue
-      const path = join(dir, name)
-      if (statSync(path).mtimeMs < before) unlinkSync(path)
-    }
+    names = readdirSync(dir)
   } catch {
-    // Taken by another process's sweep, or the directory gone: nothing to do.
+    return
+  }
+  for (const name of names) {
+    if (!STALE_BUNDLE.test(name)) continue
+    const path = join(dir, name)
+    try {
+      if (statSync(path).mtimeMs < before) unlinkSync(path)
+    } catch {
+      // Taken by another process's sweep, or not this one's to remove: the rest still are.
+    }
   }
 }
 
@@ -349,37 +358,63 @@ function requireBundled(file: string, code: string) {
 }
 
 /**
- * Where in the source an error the bundle threw came from: its first frame in the bundle, read back
- * through the bundle's source map. The stack names the bundle — a temporary file, or the file the
- * CommonJS bundle was compiled as — at the bundle's lines, which say nothing to whoever wrote it.
+ * Where in the source an error raised while the bundle ran came from: the first frame of its stack
+ * the bundle's source map traces back, and if that is in an installed package — a preset's own
+ * check of what it was given — the first after it that is not, where the config called it. The
+ * stack names the bundle at the bundle's lines: a temporary file, deleted by the time anyone
+ * reads the error, or the file the CommonJS bundle was compiled as, at lines it does not have.
+ *
+ * Where V8 says an error is from is where it was created: an error made in one place and thrown
+ * in another is placed where it was made.
  */
 async function locate(
   error: unknown,
   bundled: string,
   rebundle: () => Promise<{ map?: string; injections: Map<string, Injection> } | undefined>,
   cwd: string,
-): Promise<string | undefined> {
-  if (!(error instanceof Error) || typeof error.stack !== 'string') return undefined
+): Promise<string[]> {
+  if (!(error instanceof Error) || typeof error.stack !== 'string') return []
   // As V8 writes a frame: an ES module by its URL, a CommonJS one by its path, either of which may
   // hold a space, then a line and a column, and a closing parenthesis if the frame named a function.
+  // The message comes first, and may name the bundle itself.
   const names = [pathToFileURL(bundled).href, bundled]
+  const positions: Array<[number, number]> = []
   for (const frame of error.stack.split('\n')) {
     const text = frame.trim()
+    if (!text.startsWith('at ')) continue
     const name = names.find((name) => text.includes(`${name}:`))
     const position = name && /^:(\d+):(\d+)\)?$/.exec(text.slice(text.lastIndexOf(`${name}:`) + name.length))
-    if (!position) continue
-    const { map, injections } = (await rebundle()) ?? {}
-    if (!map || !injections) return undefined
-    const entry = new SourceMap(JSON.parse(map)).findEntry(Number(position[1]) - 1, Number(position[2]) - 1)
-    if (!('originalSource' in entry) || !entry.originalSource) return undefined
+    if (position) positions.push([Number(position[1]) - 1, Number(position[2]) - 1])
+  }
+  if (!positions.length) return []
+  const { map, injections } = (await rebundle()) ?? {}
+  if (!map || !injections) return []
+  const sourceMap = new SourceMap(JSON.parse(map))
+  const found: string[] = []
+  for (const [line, column] of positions) {
+    const entry = sourceMap.findEntry(line, column)
+    // Code esbuild wrote, a helper of its own, maps to nothing on its line.
+    if (!('originalSource' in entry) || !entry.originalSource || entry.generatedLine !== line) continue
     // esbuild names each source relative to where the bundle would have been written: `cwd`.
     const source = resolve(cwd, entry.originalSource)
     const injected = injections.get(source)
     const shifted = injected?.line === entry.originalLine && entry.originalColumn >= injected.column
-    const column = shifted ? Math.max(injected.column, entry.originalColumn - injected.length) : entry.originalColumn
-    return `${source}:${entry.originalLine + 1}:${column + 1}`
+    const original = shifted ? Math.max(injected.column, entry.originalColumn - injected.length) : entry.originalColumn
+    const installed = source.split(/[\\/]/).includes('node_modules')
+    if (found.length && installed) continue
+    found.push(`${source}:${entry.originalLine + 1}:${original + 1}`)
+    if (!installed) break
   }
-  return undefined
+  return found
+}
+
+/** What a thrown value says of itself — one with no `toString`, `Object.create(null)`, included. */
+function describe(value: unknown): string {
+  try {
+    return String(value)
+  } catch {
+    return Object.prototype.toString.call(value)
+  }
 }
 
 export async function bundleConfig(options: ConfigFileOptions): Promise<BundleConfigResult> {

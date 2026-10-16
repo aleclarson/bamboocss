@@ -18,6 +18,7 @@ import path, { dirname, join, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, test } from 'vitest'
 import { bundle, bundleConfig } from '../src/bundle-config'
+import { getResolvedConfig } from '../src/get-resolved-config'
 import { resolveSolutionAliases } from '../src/tsconfig-utils'
 
 describe('bundle config', () => {
@@ -560,11 +561,30 @@ describe('load config', () => {
   test.each([
     ['a function', { 'bamboo.config.cjs': `module.exports = () => ({ preflight: true })` }],
     ['`null`', { 'package.json': JSON.stringify({ type: 'module' }), 'bamboo.config.ts': `export default null` }],
+    // A helper that forgot to return its argument.
+    [
+      '`undefined` by default',
+      { 'bamboo.config.ts': `const define = (config: object) => {}\nexport default define({})` },
+    ],
   ])('a config exporting %s is refused', async (_, files) => {
     const root = project(files)
     const file = join(root, Object.keys(files).find((name) => name.startsWith('bamboo.config'))!)
 
     await expect(bundleConfig({ cwd: root, file })).rejects.toThrow('Config must export or return an object')
+  })
+
+  test.each([
+    ['`null`', `module.exports = null`],
+    ['a function', `module.exports = function preset() {}`],
+  ])('a preset named by its package exporting %s is refused, by name', async (_, source) => {
+    const root = project({
+      'node_modules/odd-preset/package.json': JSON.stringify({ name: 'odd-preset', main: 'index.js' }),
+      'node_modules/odd-preset/index.js': source,
+    })
+
+    await expect(getResolvedConfig({ presets: ['odd-preset'] }, root)).rejects.toThrow(
+      'Preset `odd-preset` must export an object',
+    )
   })
 
   // A CommonJS file inlined into an ES module bundle has the banner's `require`, which resolved from
@@ -629,6 +649,63 @@ describe('load config', () => {
       expect(error.message).toContain(`\n    at ${join(root, 'bamboo.config.ts')}:${line}:${column}`)
     })
 
+    // The message is not a frame, though it may name the bundle, as this one does.
+    test('past a message naming the bundle', async () => {
+      const source = ['const where = `${__filename}:1:1`', 'throw new Error(where)', 'export default {}']
+      const root = project({ 'bamboo.config.ts': source.join('\n') })
+      const file = join(root, 'bamboo.config.ts')
+
+      const error = await bundle(file, root).catch((error) => error)
+
+      expect(error.message).toBe(`💥 Failed to load ${file}: ${file}:1:1\n    at ${file}:2:7`)
+    })
+
+    // An installed package checking what it was given raises the error there, and the config's
+    // own line is the one that says what to change.
+    test('in an installed package, and where the config called it', async () => {
+      const library = ['exports.check = (options) => {', "  if (!options.ok) throw new Error('not ok')", '}']
+      const root = project({
+        'node_modules/checked/package.json': JSON.stringify({ name: 'checked', main: 'index.js' }),
+        'node_modules/checked/index.js': library.join('\n'),
+        'bamboo.config.ts': [`import { check } from 'checked'`, `check({})`, `export default {}`].join('\n'),
+      })
+
+      const error = await bundle(join(root, 'bamboo.config.ts'), root).catch((error) => error)
+
+      const column = library[1].indexOf('new Error') + 1
+      expect(error.message).toContain(
+        `not ok\n    at ${join(root, 'node_modules/checked/index.js')}:2:${column}\n    at ${join(root, 'bamboo.config.ts')}:2:1`,
+      )
+    })
+
+    // Bundled again for its map, the config is no longer what ran: a map of other code would
+    // point at the wrong line, so none is given.
+    test('not once a file it imports has changed', async () => {
+      const root = project({
+        'theme.ts': `export const size = 1`,
+        'bamboo.config.ts': [
+          `import { writeFileSync } from 'node:fs'`,
+          `import { size } from './theme'`,
+          `writeFileSync(__dirname + '/theme.ts', 'export const size = 22')`,
+          `throw new Error('boom ' + size)`,
+        ].join('\n'),
+      })
+      const file = join(root, 'bamboo.config.ts')
+
+      const error = await bundle(file, root).catch((error) => error)
+
+      expect(error.message).toBe(`💥 Failed to load ${file}: boom 1`)
+    })
+
+    test('for a thrown value with no `toString` of its own', async () => {
+      const root = project({ 'bamboo.config.ts': `throw Object.create(null)` })
+      const file = join(root, 'bamboo.config.ts')
+
+      const error = await bundle(file, root).catch((error) => error)
+
+      expect(error.message).toBe(`💥 Failed to load ${file}: [object Object]`)
+    })
+
     // Named for the file it bundles, so a stack through a preset's does not read as the config's.
     test('in a preset loaded by its package', async () => {
       const root = project({
@@ -645,6 +722,24 @@ describe('load config', () => {
       expect(error.message).toContain(`\n    at ${join(root, 'node_modules/esm-preset/preset.js')}:1:7`)
       expect(error.cause.stack).toContain('preset.js.timestamp-')
     })
+  })
+
+  // One it cannot remove — another process's, a directory — leaves the rest to be.
+  test('removes the old bundles in `.bamboo` past one it cannot remove', async () => {
+    const left = (name: string) => join(root, 'node_modules/.bamboo', name)
+    const root = project({
+      'package.json': JSON.stringify({ type: 'module' }),
+      'node_modules/.bamboo/bamboo.config.ts.timestamp-1-0a.mjs': '',
+      'node_modules/.bamboo/bamboo.config.ts.timestamp-1-0b.mjs': '',
+      'bamboo.config.ts': `export default {}`,
+    })
+    mkdirSync(left('bamboo.config.ts.timestamp-0-00.mjs'))
+    const old = Date.now() / 1000 - 2 * 3600
+    for (const name of readdirSync(join(root, 'node_modules/.bamboo'))) utimesSync(left(name), old, old)
+
+    await bundle(join(root, 'bamboo.config.ts'), root)
+
+    expect(readdirSync(join(root, 'node_modules/.bamboo'))).toEqual(['bamboo.config.ts.timestamp-0-00.mjs'])
   })
 
   test('removes the bundles a stopped load left in `.bamboo` once they are old', async () => {

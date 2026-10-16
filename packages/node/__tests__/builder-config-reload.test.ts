@@ -105,6 +105,35 @@ test('a watching build reads its config again only once it changed', async () =>
   expect(builder.getContextOrThrow().config.dev).toBeFalsy()
 })
 
+// No watcher journals the files a `dependencies` glob gains in a build, as a dev server's does, so
+// a watching build globs again: a token file added is read with the next rebuild.
+test('a watching build reads its config again when a `dependencies` glob gains a member', async () => {
+  const cwd = scratch('members')
+  mkdirSync(join(cwd, 'src'))
+  mkdirSync(join(cwd, 'tokens'))
+  writeFileSync(join(cwd, 'tokens/a.json'), `{ "value": "1px" }`)
+  writeFileSync(
+    join(cwd, 'bamboo.config.ts'),
+    [
+      `import { readdirSync, readFileSync } from 'node:fs'`,
+      `import { join } from 'node:path'`,
+      `const dir = join(__dirname, 'tokens')`,
+      `const sizes = Object.fromEntries(readdirSync(dir).map((name) => [name.replace('.json', ''), JSON.parse(readFileSync(join(dir, name), 'utf8'))]))`,
+      `export default { preflight: false, include: ['src/**/*.vue'], outdir: 'styled-system', dependencies: ['tokens/*.json'], theme: { extend: { tokens: { sizes } } } }`,
+    ].join('\n'),
+  )
+  const builder = new Builder()
+  await builder.setup({ cwd, watch: true })
+  await builder.setup({ cwd, watch: true })
+  expect(builder.getContextOrThrow().tokens.getByName('sizes.b')).toBeUndefined()
+
+  writeFileSync(join(cwd, 'tokens/b.json'), `{ "value": "2px" }`)
+  await builder.setup({ cwd, watch: true })
+
+  expect(builder.getContextOrThrow().tokens.getByName('sizes.b')?.value).toBe('2px')
+  expect(builder.getContextOrThrow().explicitDeps).toContain(join(cwd, 'tokens/b.json'))
+})
+
 // A plugin's `config:change` is handed the config as it reads after the edit. The Builder called
 // the hook of the context from before it, with the config the edit replaced.
 test('a config read again is handed to the plugins it now has', async () => {

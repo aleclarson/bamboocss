@@ -456,7 +456,16 @@ export class Builder {
      * anew on every reload, and Node keeps every version it imported, so a reload per rebuild
      * held one more copy of the config per rebuild for as long as the build watched.
      */
-    if ((options.dev || options.watch) && this.configGraphUnchanged(configPath, options.sourceChanges)) {
+    // A watching build has no journal of the files that came and went, as a dev server's watcher
+    // keeps (`sourceChanges`), so it globs `dependencies` again: a member gained or lost is a
+    // config input like any other, and the reload below reads it.
+    const membersMoved = Boolean(options.watch && !options.sourceChanges && this.dependencyMembersMoved(ctx))
+    const needsConfigReload = Boolean(options.sourceChanges?.needsConfigReload) || membersMoved
+    if (
+      (options.dev || options.watch) &&
+      !membersMoved &&
+      this.configGraphUnchanged(configPath, options.sourceChanges)
+    ) {
       this.affecteds = { artifacts: new Set(), hasConfigChanged: false, diffs: [] }
       this.explicitDepsMeta = this.checkFilesChanged(this.context.explicitDeps)
       this.refreshSourceState(ctx, previousTsconfigFiles, options.sourceChanges)
@@ -468,7 +477,7 @@ export class Builder {
     })
     const nextContext = this.getContextOrThrow()
     nextContext.encoder.recordOrigins = Boolean(options.atomOrigins)
-    if (options.sourceChanges?.needsConfigReload) {
+    if (needsConfigReload) {
       const { cwd: configCwd, dependencies } = nextContext.config
       nextContext.explicitDeps = dependencies
         ? nextContext.runtime.fs.glob({ include: dependencies, cwd: configCwd })
@@ -480,7 +489,7 @@ export class Builder {
     logger.debug('builder', this.affecteds)
 
     // explicit config dependencies change
-    const explicitDeps = options.sourceChanges?.needsConfigReload
+    const explicitDeps = needsConfigReload
       ? uniq([...previousExplicitDeps, ...this.context.explicitDeps])
       : this.context.explicitDeps
     const knownChanges = options.sourceChanges
@@ -525,6 +534,14 @@ export class Builder {
 
     this.refreshSourceState(ctx, previousTsconfigFiles, options.sourceChanges)
     this.snapshotConfigGraphMtimes(configPath)
+  }
+
+  /** Whether `dependencies` matches other files now than the context was built with. */
+  private dependencyMembersMoved = (ctx: BambooContext) => {
+    const { cwd, dependencies } = ctx.config
+    if (!dependencies?.length) return false
+    const members = new Set(ctx.runtime.fs.glob({ include: dependencies, cwd }))
+    return members.size !== ctx.explicitDeps.length || ctx.explicitDeps.some((file) => !members.has(file))
   }
 
   /** Every file whose content participates in the resolved config, for the dev fast path. */

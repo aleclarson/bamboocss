@@ -9,5 +9,6 @@
   never releases a module it has imported, so each rebuild left one more copy of the config, and every preset inlined
   into it, in memory until the build stopped.
 - The files checked are the config, everything it imports, its `dependencies` and the tsconfig files it resolves
-  through. A preset named by its package is not among them, so in watch mode, as in dev, it is read again only when the
-  config is.
+  through, and the `dependencies` globs are matched again on each rebuild, so a file added to one is read with the next.
+  A file the config reads without listing it in `dependencies`, and a preset named by its package, are read again only
+  when the config is, as on the dev server.
