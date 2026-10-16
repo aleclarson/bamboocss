@@ -27,12 +27,17 @@ modules.
   that is `undefined` — is reported as not being one, a preset named by its package by its name. In 1.56.7 a function
   preset was merged as one holding nothing, `null` and `undefined` presets failed with a `TypeError` naming no preset,
   and a config whose default export was `null` or `undefined` loaded as an empty one. What a `preset:resolved` hook
-  returns is checked too, unless it is nothing, or `false`, which leaves the preset out as it did; a preset that is
-  `false`, or a promise of it, is left out as it was.
+  returns is checked too, unless it is nothing, or `false`, which leaves the preset out as it did. A preset that is
+  `false` is left out as it was, whether written so, a promise of it, or the default export of a module named in
+  `presets` or written there as `import()`.
 - What a promise a config or a preset exports rejects with is reported as the module's error, with its location. A
   module written in `presets`, `import('./preset')`, is read as the module, as one a config exports is.
-- A config object is copied before the loader writes its defaults into it, so a frozen one, or the exports of a config
-  bundled to CommonJS, load: they failed with a `TypeError`. What it inherits is copied with it.
-- A promise a config's default export resolves to is read as that export would be: an object holding a `default` key is
-  kept whole, where 1.56.7 read it as that key. A CommonJS package compiled from an ES module, `__esModule` beside its
-  `default`, is read as its `default`, as it was.
+- A config the loader cannot write its defaults into — a frozen object, or the exports of a config bundled to CommonJS —
+  is copied first, so it loads: it failed with a `TypeError`. The copy holds every key a read by name finds on the
+  config, its own and those it inherits, a class's getters and a key defined as not enumerable among them. Any other
+  config is read, and written into, as it was.
+- What a config exports, or a promise of it resolves to, is read as a module only where it is one: a namespace,
+  esbuild's wrapper of a CommonJS module, or a CommonJS package compiled from an ES module, `__esModule` beside its
+  `default`, whose `default` is read, as it was. An object holding a `default` key beside keys of its own is kept whole,
+  where 1.56.7 read it as that key; one holding nothing but `default`, or nothing but getters beside it, is read as its
+  `default`, as it was.

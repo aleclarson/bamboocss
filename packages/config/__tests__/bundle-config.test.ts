@@ -20,6 +20,7 @@ import { afterEach, describe, expect, test } from 'vitest'
 import { bundle, bundleConfig } from '../src/bundle-config'
 import { getResolvedConfig } from '../src/get-resolved-config'
 import { loadConfig } from '../src/load-config'
+import { mergeHooks } from '../src/merge-hooks'
 import { resolveSolutionAliases } from '../src/tsconfig-utils'
 
 describe('bundle config', () => {
@@ -625,6 +626,34 @@ describe('load config', () => {
         { 'bamboo.config.ts': `export const presets = []\nexport const preflight = true` },
       ],
       ['a frozen object', { 'bamboo.config.ts': `export default Object.freeze({ presets: [], preflight: true })` }],
+      // Copied only where it cannot be written to, and then with every key read by name.
+      [
+        'a class instance, its getters read by name',
+        { 'bamboo.config.ts': `export default new (class { presets = []; get preflight() { return true } })()` },
+      ],
+      [
+        'a frozen class instance',
+        {
+          'bamboo.config.ts': `export default Object.freeze(new (class { presets = []; get preflight() { return true } })())`,
+        },
+      ],
+      [
+        'a key defined as not enumerable',
+        {
+          'bamboo.config.ts': `const config = { presets: [] }\nObject.defineProperty(config, 'preflight', { value: true })\nexport default config`,
+        },
+      ],
+      [
+        'plugins defined as not enumerable',
+        {
+          'bamboo.config.ts': [
+            `const config = { presets: [] }`,
+            `const plugin = { name: 'p', hooks: { 'config:resolved': ({ config }) => ({ ...config, preflight: true }) } }`,
+            `Object.defineProperty(config, 'plugins', { value: [plugin] })`,
+            `export default config`,
+          ].join('\n'),
+        },
+      ],
       // tsc's CommonJS of an ES module: imported by an ES module, its `default` is the config.
       [
         'a package compiled from an ES module',
@@ -698,6 +727,63 @@ describe('load config', () => {
     expect(config.theme?.tokens?.colors).toMatchObject({ x: { value: 'red' } })
   })
 
+  // Nothing writes to a preset, so one written in `presets` is handed on as it is.
+  test('a preset written in `presets` is the object written there', async () => {
+    const tag = Symbol.for('bamboo-test-design-system')
+    const mine = { name: 'p', [tag]: true, theme: { tokens: { colors: { x: { value: 'red' } } } } }
+    const seen: unknown[] = []
+
+    const config = await getResolvedConfig({ presets: [mine] }, tmpdir(), {
+      'preset:resolved': ({ preset }) => {
+        seen.push(preset)
+      },
+    })
+
+    expect(seen).toEqual([mine])
+    expect(seen[0]).toBe(mine)
+    expect((seen[0] as any)[tag]).toBe(true)
+    expect(config.presets).toContain(mine)
+  })
+
+  // As `false` written in `presets` is.
+  test.each([
+    ['named by its path', () => './dark.mjs'],
+    ['written as `import()`', (root: string) => import(pathToFileURL(join(root, 'dark.mjs')).href)],
+  ])('a preset module whose default export is `false`, %s, is left out', async (_, entry) => {
+    const root = project({ 'dark.mjs': `const isDark = false\nexport default isDark && { name: 'dark' }` })
+    const colors = { x: { value: 'red' } }
+
+    const config = await getResolvedConfig(
+      { presets: [entry(root) as never, { name: 'p', theme: { tokens: { colors } } }] },
+      root,
+    )
+
+    expect(config.theme?.tokens?.colors).toMatchObject(colors)
+    expect(config.presets?.map((preset: any) => preset.name)).toEqual(['p'])
+  })
+
+  test("a `preset:resolved` hook is handed an earlier plugin's `false`, and may return a preset to keep", async () => {
+    const seen: unknown[] = []
+    const colors = { y: { value: 'blue' } }
+    const hooks = mergeHooks([
+      { name: 'drop', hooks: { 'preset:resolved': () => false } },
+      {
+        name: 'keep',
+        hooks: {
+          'preset:resolved': ({ preset }) => {
+            seen.push(preset)
+            return { name: 'kept', theme: { tokens: { colors } } } as never
+          },
+        },
+      },
+    ])
+
+    const config = await getResolvedConfig({ presets: [{ name: 'p' }] }, tmpdir(), hooks)
+
+    expect(seen).toEqual([false])
+    expect(config.theme?.tokens?.colors).toMatchObject(colors)
+  })
+
   test('a function written in `presets` is refused, named, as one not called', async () => {
     function brandPreset() {
       return {}
@@ -754,6 +840,23 @@ describe('load config', () => {
     const { config } = await bundleConfig({ cwd: root, file })
 
     for (const [key, value] of Object.entries(expected)) expect((config as any)[key]).toEqual(value)
+  })
+
+  // Read as a module only where it is one, as a promise of it is.
+  test.each([
+    [
+      'beside keys of its own, is kept whole',
+      `export default { default: { preflight: false }, preflight: true }`,
+      { preflight: true, default: { preflight: false } },
+    ],
+    ['alone, is read as that key', `export default { default: { preflight: false } }`, { preflight: false }],
+  ])('a config whose default export holds a `default` key %s', async (_, source, expected) => {
+    const root = project({ 'bamboo.config.ts': source })
+
+    const { config } = await bundleConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })
+
+    for (const [key, value] of Object.entries(expected)) expect((config as any)[key]).toEqual(value)
+    if (!('default' in expected)) expect(config).not.toHaveProperty('default')
   })
 
   test('a preset named by its package exporting a promise of one is waited for', async () => {

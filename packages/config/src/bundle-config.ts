@@ -68,7 +68,7 @@ export async function bundle<T extends Config = Config>(filepath: string, cwd: s
     // A promise is settled here, so what it rejects with is reported as the module's error. What it
     // holds is read as it would be held without one: a module as a module — `module.exports =
     // import('./config.mjs')`, `export default import('./real')` — and anything else as it is.
-    config = copyOf(await settle(exportOf(await mod)))
+    config = writableOf(await settle(exportOf(await mod)))
   } catch (error) {
     const reason = reasonOf(error)
     // Where it was raised is said if it can be, and never in place of what was raised.
@@ -95,12 +95,10 @@ export async function bundle<T extends Config = Config>(filepath: string, cwd: s
 
 /**
  * What a module holds: its default export when it has one, whatever it is, `undefined` included,
- * and otherwise its exports, as `module.exports` is in a CommonJS one — copied, since an ES module
- * namespace cannot be written to and the config is. Only an object is copied: a function, `null`
- * or `undefined` used to pass for one with nothing in it. What is not an object is refused by
- * `bundleConfig` for a config and `getResolvedConfig` for a preset.
+ * and otherwise its exports, as `module.exports` is in a CommonJS one. What is not an object is
+ * refused by `bundleConfig` for a config and `getResolvedConfig` for a preset.
  */
-export function exportOf(mod: any) {
+function exportOf(mod: any) {
   if (typeof mod !== 'object' || mod === null) return mod
   return 'default' in mod ? mod.default : mod
 }
@@ -111,7 +109,7 @@ export function exportOf(mod: any) {
  * the module and every other key a getter of it; or a CommonJS module compiled from one, as tsc
  * writes it, `__esModule` beside its `default`.
  */
-export function isModule(value: unknown) {
+function isModule(value: unknown) {
   if (typeof value !== 'object' || value === null) return false
   if (Object.prototype.toString.call(value) === '[object Module]') return true
   const descriptors = Object.getOwnPropertyDescriptors(value)
@@ -144,14 +142,31 @@ export async function settle(value: any) {
 }
 
 /**
- * An object exported, copied into one the loader can write to: a namespace cannot be, nor esbuild's
- * getters of a module's exports, nor a frozen object. What it inherits is copied too, as the merge
- * that reads it would read it (`for…in`).
+ * What a module exports, as an object the loader can write its defaults into: itself, unless it
+ * cannot be written to — a namespace, a frozen object, esbuild's getters of a module's exports —
+ * and then a copy of every key a read by name finds on it, its own and those it inherits, each as
+ * enumerable as it was, so that `for…in` reads the keys it did and the merge, reading a key by
+ * name, the rest: a class's getters, a key defined as not enumerable. A symbol not enumerable is
+ * left out, as a namespace's `Symbol.toStringTag` would have the copy pass for a module.
  */
-export function copyOf(value: any) {
+function writableOf(value: any) {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return value
-  const copy: Record<string, unknown> = {}
-  for (const key in value) copy[key] = value[key]
+  if (Object.isExtensible(value)) {
+    const own: Record<PropertyKey, PropertyDescriptor> = Object.getOwnPropertyDescriptors(value)
+    if (Reflect.ownKeys(own).every((key) => own[key].writable || own[key].set)) return value
+  }
+  const copy = {}
+  const seen = new Set<PropertyKey>()
+  for (let from = value; from !== null && from !== Object.prototype; from = Object.getPrototypeOf(from)) {
+    for (const key of Reflect.ownKeys(from)) {
+      // One it holds hides one of the same name it inherits.
+      if (seen.has(key)) continue
+      seen.add(key)
+      const { enumerable } = Object.getOwnPropertyDescriptor(from, key)!
+      if (typeof key === 'symbol' && !enumerable) continue
+      Object.defineProperty(copy, key, { value: value[key], writable: true, enumerable, configurable: true })
+    }
+  }
   return copy
 }
 

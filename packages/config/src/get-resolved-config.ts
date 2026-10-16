@@ -1,6 +1,6 @@
 import { BambooError, omit, pick, traverse } from '@bamboocss/shared'
 import type { Config, BambooHooks, Preset } from '@bamboocss/types'
-import { bundle, copyOf, settle } from './bundle-config'
+import { bundle, settle } from './bundle-config'
 import { mergeConfigs } from './merge-config'
 import { rememberExternalPreset, type ExternalPresetProvenance } from './resolution-provenance'
 
@@ -50,10 +50,14 @@ export async function getResolvedConfig(config: ExtendableConfig, cwd: string, h
           index: externalPresets.length,
           specifier: subPreset,
         })
+        // A module whose default export is `false`, as `dark && preset` gives, is left out, as
+        // `false` written in `presets` is.
+        if ((presetConfig as unknown) === false) continue
       } else {
         // A module, `import('./preset')`, as one a package exports is read (`bundle`), and what a
-        // promise of `false` gives left out, as `false` written there is.
-        presetConfig = copyOf(await settle(subPreset))
+        // promise of `false` gives left out, as `false` written there is. Not copied: nothing
+        // writes to a preset, and a hook may know one by what it is.
+        presetConfig = await settle(subPreset)
         if ((presetConfig as unknown) === false) continue
         presetName = (presetConfig as any)?.name || 'unknown-preset'
       }

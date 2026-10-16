@@ -13,7 +13,8 @@ export interface BambooHooks {
   /**
    * Called when each preset is resolved, allowing modification of individual presets.
    * This hook is called for each preset during the resolution process, before they are merged together.
-   * Returning nothing keeps the preset as it is, and `false` leaves it out.
+   * Returning nothing keeps the preset as it is, and `false` leaves it out: a later plugin's hook
+   * is handed `false` for it, and may return a preset to keep.
    */
   'preset:resolved': (args: PresetResolvedHookArgs) => MaybeAsyncReturn<void | false | PresetResolvedHookArgs['preset']>
   /**

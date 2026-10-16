@@ -96,7 +96,8 @@ export default defineConfig({
 ### Modifying presets
 
 You can use the `preset:resolved` hook to modify presets after they are resolved. This is useful for customizing or
-filtering out parts of a preset.
+filtering out parts of a preset. Returning nothing keeps the preset as it is, and returning `false` leaves it out; a
+later plugin's hook is then handed `false` for it, and may return a preset to keep.
 
 ```ts
 import { defineConfig } from '@bamboocss/dev'
@@ -228,8 +229,10 @@ export interface BambooHooks {
   /**
    * Called when each preset is resolved, allowing modification of individual presets.
    * This hook is called for each preset during the resolution process, before they are merged together.
+   * Returning nothing keeps the preset as it is, and `false` leaves it out: a later plugin's hook
+   * is handed `false` for it, and may return a preset to keep.
    */
-  'preset:resolved': (args: PresetResolvedHookArgs) => MaybeAsyncReturn<void | PresetResolvedHookArgs['preset']>
+  'preset:resolved': (args: PresetResolvedHookArgs) => MaybeAsyncReturn<void | false | PresetResolvedHookArgs['preset']>
   /**
    * Called when the token engine has been created
    */

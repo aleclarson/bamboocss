@@ -101,12 +101,12 @@ const reducers = {
   'preset:resolved': createReducer<'preset:resolved'>((fns) => async (_args) => {
     const args = Object.assign({}, _args)
     const original = _args.preset
-    let preset = args.preset
+    let preset: typeof args.preset | false = args.preset
 
     for (const hookFn of fns) {
+      // `false` leaves the preset out, and is what a later plugin's hook is handed, as it always
+      // was: one that returns a preset keeps that one.
       const result = await hookFn(Object.assign(args, { preset, original }))
-      // `false` leaves the preset out, and no later hook is handed it.
-      if (result === false) return false
       if (result !== undefined) {
         preset = result
       }
