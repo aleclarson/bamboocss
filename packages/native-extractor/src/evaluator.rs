@@ -140,6 +140,33 @@ impl Partial {
         self.undefined.clear();
     }
 
+    /// Code the evaluator could not follow ran after the value was made — `(track(), styles)` —
+    /// and may have written to it, deleting a property as surely as writing one. Nothing it held
+    /// stands, and of each property in `own` only that it was written with a value not known, so
+    /// that `in` does not answer for it either.
+    fn distrust<'k>(&mut self, own: impl IntoIterator<Item = &'k String>) {
+        let mut written: HashSet<String> = own.into_iter().cloned().collect();
+        written.extend(self.undefined.iter().cloned());
+        self.open();
+        self.known_prefix = 0;
+        self.unsettled.extend(written);
+    }
+
+    /// A prototype set by `__proto__`: what it has, the object inherits, so a property it does
+    /// not hold may be there. Unlike a spread it writes over nothing — a property the object holds
+    /// shadows an inherited one — so each in `own`, and each written as `undefined`, stays as
+    /// known as it was.
+    fn inherit<'k>(&mut self, own: impl IntoIterator<Item = &'k String>) {
+        if self.open {
+            return;
+        }
+        let mut settled: HashSet<String> = own.into_iter().cloned().collect();
+        settled.extend(self.undefined.iter().cloned());
+        settled.retain(|key| !self.unsettled.contains(key));
+        self.open = true;
+        self.settled = settled;
+    }
+
     /// An array's elements from `len` on are not where they are held, as a spread of unknown
     /// length came there; those before it still are.
     fn open_after(&mut self, len: usize) {
@@ -255,7 +282,10 @@ pub(crate) struct EvalResult {
     pub complete: bool,
     /// Why the value is not known, when the evaluator refused something along the way.
     pub refusal: Option<Arc<Refusal>>,
-    /// For an incomplete object, which of its properties are still known.
+    /// For an incomplete object, which of its properties are still known. One that is not open
+    /// says every key the object has, so whatever lowers `complete` for a reason other than a
+    /// property's value — a spread it could not read, a prototype, code run that it could not
+    /// follow — opens it.
     pub partial: Option<Arc<Partial>>,
     /// `null` or `undefined`, without knowing which: an array hole or `undefined` element, held as
     /// `null`. Complete for what the two agree on — `??`, `||`, a test, `?.` — and not to be
@@ -1692,7 +1722,9 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                                 continue;
                             }
                             // `__proto__: base` sets the prototype, not a property: whatever the
-                            // base has, the object inherits, and `in` and a read see it.
+                            // base has, the object inherits, and `in` and a read of a property it
+                            // does not hold see it. `null`, or anything else not an object, sets
+                            // none to inherit from.
                             if !property.computed
                                 && !property.shorthand
                                 && property
@@ -1700,10 +1732,22 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                                     .static_name()
                                     .is_some_and(|name| name == "__proto__")
                             {
-                                // What it inherits is the object's too: a style object is walked
-                                // with `for…in`, which reads inherited keys.
-                                complete = false;
-                                partial.get_or_insert_default().open();
+                                let base = self.evaluate(&property.value);
+                                let object = matches!(
+                                    base.value,
+                                    Some(
+                                        serde_json::Value::Object(_) | serde_json::Value::Array(_)
+                                    )
+                                );
+                                if object || !base.complete || !base.conditions.is_empty() {
+                                    // What it inherits is the object's too: a style object is
+                                    // walked with `for…in`, which reads inherited keys.
+                                    complete = false;
+                                    refusal = refusal.or(base.refusal);
+                                    partial
+                                        .get_or_insert_default()
+                                        .inherit(output.keys().chain(&fragments.keys));
+                                }
                                 continue;
                             }
                             let key = if property.computed {
@@ -1817,18 +1861,40 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             }
             Expression::CallExpression(call) => self.evaluate_call(call),
             // Every expression runs, and the value is the last one's. An earlier one the
-            // evaluator cannot follow may be what changes it, as in `(track(), styles)`.
+            // evaluator cannot follow may be what changes it, as in `(track(), styles)`: then the
+            // value is not complete, and nothing said of what it holds stands either.
             Expression::SequenceExpression(sequence) => {
-                let mut complete = true;
+                let Some((last, earlier)) = sequence.expressions.split_last() else {
+                    return EvalResult::undefined();
+                };
+                let mut followed = true;
                 let mut refusal = None;
-                let mut result = EvalResult::undefined();
-                for expression in &sequence.expressions {
-                    result = self.evaluate(expression);
-                    complete &= result.complete;
-                    refusal = refusal.or_else(|| result.refusal.clone());
+                for expression in earlier {
+                    let value = self.evaluate(expression);
+                    followed &= value.complete;
+                    refusal = refusal.or(value.refusal);
                 }
-                result.complete = complete;
-                result.refusal = refusal;
+                let mut result = self.evaluate(last);
+                result.refusal = refusal.or(result.refusal);
+                if !followed {
+                    result.complete = false;
+                    let own: Option<Vec<String>> = match &result.value {
+                        Some(serde_json::Value::Object(object)) => Some(
+                            object
+                                .keys()
+                                .chain(condition_keys(&result.conditions))
+                                .cloned()
+                                .collect(),
+                        ),
+                        Some(serde_json::Value::Array(_)) => Some(Vec::new()),
+                        _ => None,
+                    };
+                    if let Some(own) = own {
+                        let mut known = result.partial.as_deref().cloned().unwrap_or_default();
+                        known.distrust(&own);
+                        result.partial = Some(Arc::new(known));
+                    }
+                }
                 result
             }
             Expression::ChainExpression(chain) => self.evaluate_chain(&chain.expression),
@@ -2258,14 +2324,10 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 ..EvalResult::unknown()
             };
         }
-        // `in` reads which keys an object has, not what they hold: an object whose keys are all
-        // known — a value not known among them, but no spread of one — answers it exactly.
-        let complete = if operator == BinaryOperator::In {
-            left.complete
-                && (right.complete || right.partial.as_deref().is_some_and(|known| !known.open))
-        } else {
-            left.complete && right.complete
-        };
+        // `in` says for itself whether its answer is exact: it reads which keys an object has, not
+        // what they hold.
+        let mut complete = left.complete && right.complete;
+        let (left_complete, right_complete) = (left.complete, right.complete);
         let refusal = left.refusal.or(right.refusal);
         let receiver = right.partial;
         let right_conditions = right.conditions;
@@ -2306,36 +2368,57 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 integer_binary(&left, &right, |a, b| ((a as u32) >> shift_count(b)).into())
             }
             // An own property is there; one the prototype has is too, which is not guessed.
+            //
+            // Each answer is exact on its own grounds, which an object known only in part may
+            // still have: a spread of something unknown writes over keys and removes none, so one
+            // the object holds is there whatever it wrote — unless code the build could not follow
+            // ran, which may have deleted it (`Partial::distrust`). That a key is not there is
+            // exact only of an object holding every key it has.
             BinaryOperator::In => {
                 let key = to_js_string(&left);
-                match right {
+                let keyed = right_complete || receiver.as_ref().is_some_and(|known| !known.open);
+                let held = |known: &Partial| !known.unsettled.contains(&key);
+                let (answer, exact) = match right {
                     serde_json::Value::Object(ref object) if object.contains_key(&key) => {
-                        Some(true.into())
+                        (Some(true), keyed || receiver.as_deref().is_some_and(held))
                     }
-                    // Written as `undefined`, or with a value the build could not evaluate: there,
-                    // though the value leaves it out.
+                    // Written as `undefined`: there, though the value leaves it out.
                     serde_json::Value::Object(_)
-                        if receiver.as_ref().is_some_and(|known| {
-                            known.undefined.contains(&key) || known.unsettled.contains(&key)
-                        }) =>
+                        if receiver
+                            .as_ref()
+                            .is_some_and(|known| known.undefined.contains(&key)) =>
                     {
-                        Some(true.into())
+                        (Some(true), true)
                     }
-                    // Under a value the object could not decide between: in a branch of a spread
-                    // it could not choose, it may be there in one and not in the other.
+                    // Written with a value the build could not evaluate.
+                    serde_json::Value::Object(_)
+                        if receiver
+                            .as_ref()
+                            .is_some_and(|known| known.unsettled.contains(&key)) =>
+                    {
+                        (Some(true), keyed)
+                    }
+                    // Under a value the object could not decide between: a key written with one
+                    // of several is there whichever it is. A branch of a spread it could not
+                    // choose may hold the key or not, but such a spread opens the object, so
+                    // after one only a key written since is surely there.
                     serde_json::Value::Object(_)
                         if condition_keys(&right_conditions).any(|written| *written == key) =>
                     {
-                        None
+                        let settled = receiver
+                            .as_ref()
+                            .is_some_and(|known| known.open && known.settled.contains(&key));
+                        let written = settled || receiver.as_ref().is_none_or(|known| !known.open);
+                        (written.then_some(true), keyed || settled)
                     }
                     // After a spread or a computed key the build could not read, any may be.
                     serde_json::Value::Object(_)
                         if receiver.as_ref().is_some_and(|known| known.open) =>
                     {
-                        None
+                        (None, false)
                     }
                     serde_json::Value::Object(_) if !OBJECT_PROTOTYPE.contains(&key.as_str()) => {
-                        Some(false.into())
+                        (Some(false), keyed)
                     }
                     // A hole is no property at all, so `0 in [, 2]` is false, and it is held as
                     // `null` and recorded nullish, like an `undefined` element, which is one.
@@ -2345,14 +2428,17 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                                 known.knows(&key) && !known.nullish.contains(&key)
                             }) =>
                         {
-                            Some((index < array.len()).into())
+                            let placed = receiver.as_ref().is_some_and(|known| known.knows(&key));
+                            (Some(index < array.len()), keyed || placed)
                         }
-                        _ if key == "length" => Some(true.into()),
-                        None if !may_be_inherited(&key) => Some(false.into()),
-                        _ => None,
+                        _ if key == "length" => (Some(true), true),
+                        None if !may_be_inherited(&key) => (Some(false), keyed),
+                        _ => (None, false),
                     },
-                    _ => None,
-                }
+                    _ => (None, false),
+                };
+                complete = left_complete && exact;
+                answer.map(serde_json::Value::Bool)
             }
             BinaryOperator::Instanceof => None,
         };
@@ -3037,9 +3123,9 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                         }
                         remainder.partial = (!known.is_empty()).then(|| Arc::new(known));
                     }
-                    for key in &consumed {
-                        strip_key(&mut remainder.conditions, key);
-                    }
+                    strip_keys(&mut remainder.conditions, |written| {
+                        consumed.iter().any(|key| key == written)
+                    });
                     // Without the key it took, which the build cannot name: any of them may be
                     // gone, and opening the rest would still say each it holds is there.
                     if unresolved {
@@ -3384,18 +3470,37 @@ impl Fragments {
     /// Drops what the object could not decide between under `key`.
     fn replace(&mut self, key: &str) {
         if self.keys.remove(key) {
-            strip_key(&mut self.list, key);
+            strip_keys(&mut self.list, |written| written == key);
+        }
+    }
+
+    /// Drops what the object could not decide between under each of `keys`, going over the
+    /// fragments once however many there are: a spread writes every key it holds, and a key at a
+    /// time went over every fragment for each.
+    fn replace_all<'k>(&mut self, keys: impl IntoIterator<Item = &'k String>) {
+        let mut replaced = HashSet::new();
+        for key in keys {
+            if self.keys.remove(key) {
+                replaced.insert(key.as_str());
+            }
+        }
+        if !replaced.is_empty() {
+            strip_keys(&mut self.list, |written| replaced.contains(written));
         }
     }
 }
 
-/// `key` out of each value an object could not decide between: a `{ key: value }` fragment goes,
-/// and a branch of a spread it could not choose, `...(c ? { a, b } : {})`, loses the key, which a
-/// later write replaces in every branch alike.
-fn strip_key(conditions: &mut Vec<serde_json::Value>, key: &str) {
+/// The keys `stripped` names out of each value an object could not decide between: a `{ key:
+/// value }` fragment goes, and a branch of a spread it could not choose, `...(c ? { a, b } :
+/// {})`, loses them, as a later write replaces a key in every branch alike.
+///
+/// A branch emptied so goes too, and with it what it said: that in one branch none of the rest
+/// is there. Nothing reads that from the list. A spread it could not choose opens the object,
+/// and after one whether a key is there is read off what was written since (`in`).
+fn strip_keys(conditions: &mut Vec<serde_json::Value>, stripped: impl Fn(&str) -> bool) {
     conditions.retain_mut(|condition| match condition {
-        serde_json::Value::Object(fragment) if fragment.contains_key(key) => {
-            fragment.shift_remove(key);
+        serde_json::Value::Object(fragment) if fragment.keys().any(|key| stripped(key)) => {
+            fragment.retain(|key, _| !stripped(key));
             !fragment.is_empty()
         }
         _ => true,
@@ -3474,20 +3579,25 @@ pub(crate) fn spread_value(
     let undecided: Vec<String> = condition_keys(&value.conditions).cloned().collect();
     let cleared = source.into_iter().flat_map(|source| &source.undefined);
     let unknown = source.into_iter().flat_map(|source| &source.unsettled);
-    for key in values
-        .keys()
-        .chain(&undecided)
-        .chain(cleared.clone())
-        .chain(unknown.clone())
-    {
-        fragments.replace(key);
-    }
+    fragments.replace_all(
+        values
+            .keys()
+            .chain(&undecided)
+            .chain(cleared.clone())
+            .chain(unknown.clone()),
+    );
     // What was there under a key it holds no value for goes; one it holds a value for keeps its
-    // place, as `extend` writes over it there.
-    for key in undecided.iter().chain(cleared).chain(unknown.clone()) {
-        if !values.contains_key(key) {
-            output.shift_remove(key);
-        }
+    // place, as `extend` writes over it there. In one pass: `shift_remove` moves every key after
+    // the one it removes.
+    let gone: HashSet<&str> = undecided
+        .iter()
+        .chain(cleared)
+        .chain(unknown.clone())
+        .filter(|key| !values.contains_key(*key))
+        .map(String::as_str)
+        .collect();
+    if !gone.is_empty() {
+        output.retain(|key, _| !gone.contains(key.as_str()));
     }
     fragments.extend(value.conditions);
     if partial.is_some() || source.is_some() || !undecided.is_empty() {

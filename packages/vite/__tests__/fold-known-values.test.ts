@@ -133,6 +133,16 @@ describe('one property of an object, whatever its siblings are', () => {
 
     expect(foldOf(withImport(body))).toMatchObject({ classes: ['w_10'], skipped: [] })
   })
+
+  // A property the object holds shadows what its prototype has, and `null` sets none to inherit.
+  test.each([
+    ['beside a prototype the build cannot evaluate', 'const o = { zIndex: 1, __proto__: base() }'],
+    ['beside a `null` prototype', 'const o = { zIndex: 1, __proto__: null }'],
+  ])('%s', (_, definition) => {
+    const body = `${definition}\nexport const A = css({ zIndex: o.zIndex })`
+
+    expect(foldOf(withImport(body))).toMatchObject({ classes: ['z_1'], skipped: [] })
+  })
 })
 
 /**
@@ -377,6 +387,38 @@ test('a hole selecting a recipe variant selects at runtime', () => {
   expect(result.code).toContain('cvaMap([sizes[1]]')
 })
 
+/**
+ * `in` decides a helper's choice, which the audit leaves to the evaluator, where the key is surely
+ * there or surely not, and nowhere else.
+ */
+describe('which keys an object has', () => {
+  const choice = (test: string, definition: string) =>
+    withImport(
+      `const c = Math.random() > 0.5\n${definition}\nconst g = () => (${test} ? 1 : 2)\nexport const A = css({ zIndex: g() })`,
+    )
+
+  test.each([
+    ['a key written with one of two values', "'a' in o", "const o = { a: c ? 'x' : 'y' }", 'z_1'],
+    ['such a key after a spread the build cannot read', "'a' in o", 'const o = { ...x(), a: c ? 1 : 2 }', 'z_1'],
+    ['such a key in a nested object', "'x' in o.a", 'const o = { a: { x: c ? 1 : 2 } }', 'z_1'],
+    ['a key held before a spread the build cannot read', "'a' in o", 'const o = { a: 1, ...x() }', 'z_1'],
+    ['a key not held, with a `null` prototype', "'dark' in o", 'const o = { __proto__: null, zIndex: 1 }', 'z_2'],
+    ['a key not held, with a number for a prototype', "'dark' in o", 'const o = { __proto__: 5, zIndex: 1 }', 'z_2'],
+  ])('%s', (_, test, definition, className) => {
+    expect(foldOf(choice(test, definition))).toMatchObject({ classes: [className], skipped: [] })
+  })
+
+  test.each([
+    ['a key a branch of a spread may hold', "'a' in o", 'const o = { ...(c ? { a: 1 } : {}) }'],
+    ['a key the prototype may hold', "'dark' in o", 'const o = { zIndex: 1, __proto__: base() }'],
+    // `track()` may have written to `s`, and the build could not follow it.
+    ['a key in a spread of a value code ran before', "'z' in { ...(track(), s) }", 'const s = { a: 1, b: f() }'],
+    ['a key `Object.assign` takes from one', "'z' in Object.assign({}, (track(), s))", 'const s = { a: 1, b: f() }'],
+  ])('not %s', (_, test, definition) => {
+    expect(foldOf(choice(test, definition))).toMatchObject({ classes: [], skipped: ['dynamic'] })
+  })
+})
+
 describe('what is still not known', () => {
   test.each([
     [
@@ -543,7 +585,27 @@ describe('what is still not known', () => {
     ],
     ['`-` on a parameter default', `export const C = (size = 10) => css({ zIndex: -size })`],
     ['`+` on a parameter default', `export const C = (size = 10) => css({ zIndex: size + 1 })`],
+    // What runs before a comma may have written to the value after it, and the build could not
+    // follow it.
+    [
+      'a property of a value code ran before',
+      'const s = { zIndex: 1, b: f() }\nconst g = () => (track(), s).zIndex\nexport const A = css({ zIndex: g() })',
+    ],
+    [
+      'a rest pattern’s object taken from one',
+      'const { b, ...rest } = (track(), { zIndex: 1, b: f() })\nconst g = () => rest\nexport const A = css(g())',
+    ],
   ])('%s', (_, body) => {
     expect(foldOf(withImport(body))).toMatchObject({ classes: [], skipped: ['dynamic'] })
+  })
+
+  // The object a rest pattern makes is without the key it took, and the reason that key was not
+  // known goes with it: a call refused for what it still holds is not said to be for that.
+  test('for a key a rest pattern did not take', () => {
+    const make = 'const make = () => { compute()\nreturn 1 }\nconst o = { zIndex: 1, b: make() }\n'
+    const refusalOf = (body: string) => createFoldFixture().fold(withImport(make + body)).skipped[0]?.refusal
+
+    expect(refusalOf('export const A = css({ ...o, color: other() })')).toMatchObject({ helper: 'make' })
+    expect(refusalOf('const { b, ...rest } = o\nexport const A = css({ ...rest, color: other() })')).toBeUndefined()
   })
 })

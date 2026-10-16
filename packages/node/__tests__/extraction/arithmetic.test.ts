@@ -115,12 +115,22 @@ describe('`+` in a style value', () => {
   })
 
   test.each([
-    // A key under a value the object could not decide between is held as a branch of a spread it
-    // could not choose is, which may have it or not: neither arm is taken for sure.
+    // A key written with one of several values is there whichever it is, after a spread the build
+    // could not read too. A branch of a spread it could not choose may hold it or not.
     [
       'a key with one of two values is in an object',
       "const o = { a: c ? 'x' : 'y' }\ncss({ color: 'a' in o ? 'red.300' : 'blue.300' })",
-      false,
+      true,
+    ],
+    [
+      'a key with one of two values after a spread the build cannot read',
+      "const o = { ...x(), a: c ? 'x' : 'y' }\ncss({ color: 'a' in o ? 'red.300' : 'blue.300' })",
+      true,
+    ],
+    [
+      'a key with one of two values in a nested object',
+      "const o = { a: { x: c ? 1 : 2 } }\ncss({ color: 'x' in o.a ? 'red.300' : 'blue.300' })",
+      true,
     ],
     [
       'a key in one branch of a spread',
@@ -156,6 +166,41 @@ describe('`+` in a style value', () => {
 
     expect(css).not.toContain('display: x')
     expect(css).not.toContain('display: y')
+  })
+
+  // `__proto__: null`, or a value that is not an object, sets no prototype: the object holds every
+  // key it has.
+  test.each([
+    ['`null`', 'null'],
+    ['a number', '5'],
+  ])('a key is not in an object whose `__proto__` is %s', (_, base) => {
+    const { css } = extract(
+      `const o = { __proto__: ${base}, a: 1 }\ncss({ color: 'dark' in o ? 'red.300' : 'blue.300' })`,
+    )
+
+    expect(css).not.toContain('--colors-red-300')
+    expect(css).toContain('--colors-blue-300')
+  })
+
+  // What runs before a comma may have written to the value after it, which the build could not
+  // follow: nothing is read from that value, as from one a spread of something unknown wrote.
+  test.each([
+    ['spread', "'z' in { ...(track(), s) }"],
+    ['`Object.assign` from', "'z' in Object.assign({}, (track(), s))"],
+  ])('a key is not known in a value code the build could not follow ran before, %s', (_, test) => {
+    const { css } = extract(`const s = { a: 1, b: f() }\nconst g = () => (${test} ? 1 : 2)\ncss({ zIndex: g() })`)
+
+    expect(css).toContain('z-index: 1')
+    expect(css).toContain('z-index: 2')
+  })
+
+  // JavaScript keeps a key where it was first written, and a spread writing over one leaves it
+  // there, whatever it writes. Extraction writes rules in that order.
+  test('a key a spread writes with one of two values keeps its place', () => {
+    const { json } = extract("css({ paddingTop: '1', marginTop: '2', ...{ paddingTop: { base: c ? '3' : '4' } } })")
+
+    const data = json[0].data
+    expect(Object.keys(data[data.length - 1])).toEqual(['paddingTop', 'marginTop'])
   })
 
   test('a string JavaScript reads as `NaN` is not read as a number', () => {
