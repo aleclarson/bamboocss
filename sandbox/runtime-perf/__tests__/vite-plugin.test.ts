@@ -3893,7 +3893,7 @@ export default defineConfig({
    * Holding the sheet back until the whole run had contributed was the old answer, and it meant
    * never pruning at all under react-router, Remix, Nuxt, SvelteKit or Qwik — every one builds
    * the client first. So the sheet is pruned against what the run knows, and a written one is
-   * pruned again from source once the last environment has written. An in-memory build has no
+   * pruned again from source once the last environment reaches its output. An in-memory build has no
    * file to finalize, so for it the guard stays: one project lost 39% of its atoms to a silent
    * version of this, `md:{display:inline-block}` among them, and that must fail rather than ship.
    */
@@ -3909,7 +3909,7 @@ export default defineConfig({
    * server-only rules, so the final bytes go under a new name and every reference to it — the
    * HTML, the manifest — is rewritten in place.
    */
-  test('a written sheet is pruned against every environment once the last has written', async () => {
+  test('a written sheet is pruned against every environment once the last has compiled', async () => {
     const html = join(cwd, '__env-index.html')
     const clientOutDir = join(cwd, '__env-finalized-client-out')
     const ssrOutDir = join(cwd, '__env-finalized-ssr-out')

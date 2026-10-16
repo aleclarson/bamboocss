@@ -11,7 +11,7 @@ import { createStaticCompilationSession, type DeferredSheet } from '../src/stati
  * The stylesheet is emitted by the environment that imports it, usually the first to build, and
  * reachability is only whole once every environment has compiled. So a written sheet goes to
  * disk pruned against what the run knew, and this is the pass that prunes it again from source
- * once the last environment has written. Usually that produces the bytes already on disk and
+ * once the last environment reaches its output. Usually that produces the bytes already on disk and
  * nothing moves; when a later environment restored a rule, the final bytes go under a new name
  * and every written reference is rewritten in place — across environments, because a server
  * bundle embeds the client's asset names, and including any copy of the provisional sheet a

@@ -1136,10 +1136,12 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
   /**
    * Prune the sheets the run wrote whole, now that every environment has contributed.
    *
-   * Reached from the write hook of whichever environment completes the run, which is the first
-   * point at which the union of every environment's reachability exists and every reference to
-   * the sheet is on disk. A run that never completes — an environment declared and never built
-   * — leaves the sheets whole, and says so as the process exits.
+   * Reached from the output hook of whichever environment completes the run, before it writes:
+   * the first point at which the union of every environment's reachability exists, with the
+   * earlier environments' references to the sheet on disk and its own still in its bundle. Its
+   * write hook reaches it too, should the output hook not have. A run that never completes — an
+   * environment declared and never built — leaves the sheets whole, and says so as the process
+   * exits.
    */
   const finalizeDeferredSheetsIfComplete = async (
     /** An environment proving it completes the run from inside its own output hook. */
@@ -1187,7 +1189,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
       if (!sheet.renamed) continue
       logger.info(
         'vite',
-        `Pruned ${sheet.originalFileName} against every environment once the last had written, which restored ` +
+        `Pruned ${sheet.originalFileName} again once every environment had compiled, which restored ` +
           `a rule the earlier prune removed: ${sheet.before} → ${sheet.after} bytes, now ${sheet.renamed}.`,
       )
     }
@@ -2366,8 +2368,8 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
         // everything marked used, so an intersection can only mean a marker that arrived after.
         //
         // Not while a written sheet is waiting to be finalized: that sheet was pruned against
-        // an incomplete run on purpose, and the finalization at the last environment's write
-        // is what restores a rule this environment reached. The guard is for the runs that
+        // an incomplete run on purpose, and the finalization once the last environment reaches
+        // its output is what restores a rule this environment reached. The guard is for the runs that
         // have no finalization coming — an in-memory build, or one that never announced its
         // environments.
         const lost =
@@ -2384,8 +2386,8 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
                 { unit: 'class', separator: '\n' },
               )}\n\n` +
               `The stylesheet was pruned before this environment compiled. A run that announces its environments ` +
-              `— \`builder\` in the Vite config, which every framework building more than one sets — holds pruning ` +
-              `back until the last one has written, so this is a run that built environments one at a time without ` +
+              `— \`builder\` in the Vite config, which every framework building more than one sets — prunes the ` +
+              `sheet again once the last one has compiled, so this is a run that built environments one at a time without ` +
               `saying so, or a rebuild of this environment alone after the sheet was finalized. These classes are ` +
               `reached only from here, so no rule for them survived.\n\n` +
               `Configure \`builder\` so the run announces its environments, rebuild every environment together, or ` +

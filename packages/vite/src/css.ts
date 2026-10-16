@@ -372,7 +372,7 @@ const pruneEmittedSheets = async (
       logger.debug(
         'vite',
         `Pruned the stylesheet against what the run knows, with ${remaining} still to compile. It is pruned ` +
-          `again from source once the last environment has written its output, and renamed only if that ` +
+          `again from source once the last environment reaches its output, and renamed only if that ` +
           `restores a rule.`,
       )
     } else {

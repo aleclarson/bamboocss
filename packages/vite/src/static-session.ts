@@ -18,7 +18,7 @@ export interface StaticOutputProjection {
  * Reachability is complete only once every environment has contributed, and the sheet is
  * emitted by whichever environment imports it — usually the client, which builds first. So the
  * sheet goes to disk pruned against what the run knows so far, under a name hashed from those
- * bytes, and is pruned again from its unpruned source once the last environment has written.
+ * bytes, and is pruned again from its unpruned source once the last environment reaches its output.
  * When that restores a rule, the final bytes go under a new name and every written reference
  * moves with them; when it does not, nothing on disk changes.
  */
