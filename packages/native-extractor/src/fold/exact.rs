@@ -132,7 +132,9 @@ impl<'a> Exactness<'_, 'a, '_, '_> {
     /// The whole argument evaluates to exactly one value the program will produce.
     pub fn check(&mut self, expression: &'a Expression<'a>) -> bool {
         let result = self.evaluator.evaluate(expression);
-        if !exact_result(&result) {
+        // A hole decides a choice as `null` or `undefined` would, but a value holding one cannot
+        // replace source: a recipe and a pattern tell the two apart.
+        if !exact_result(&result) || result.holds_nullish() {
             return false;
         }
         self.accounts(expression)

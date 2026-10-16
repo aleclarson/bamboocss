@@ -268,9 +268,41 @@ describe('an array element', () => {
       'const a = [compute(), 2]\nconst f = () => a[1]\nexport const A = css({ zIndex: f() })',
       'z_2',
     ],
+    // A spread of unknown length moves what comes after it, not what came before.
+    [
+      'an element before a spread of unknown length',
+      "const a = ['a', ...unknown()]\nconst f = () => a[0]\nexport const A = css({ gridArea: f() })",
+      'grid-area_a',
+    ],
+    [
+      'elements around one the build cannot evaluate, spread',
+      "const inc = [compute(), 'x']\nconst a = ['a', ...inc]\nconst f = () => a[0] + a[2]\nexport const A = css({ gridArea: f() })",
+      'grid-area_ax',
+    ],
+    [
+      'a source of `Object.assign` after an unknown one',
+      "const t = Object.assign({}, maybe(), { a: 'x' })\nconst f = () => t.a\nexport const A = css({ gridArea: f() })",
+      'grid-area_x',
+    ],
+    [
+      'a string by index before a space',
+      "const f = () => 'a b'[0]\nexport const A = css({ gridArea: f() })",
+      'grid-area_a',
+    ],
   ])('%s', (_, body, className) => {
     expect(foldOf(withImport(body))).toMatchObject({ classes: [className], skipped: [] })
   })
+})
+
+// A recipe takes a `null` variant for an explicit miss and `undefined` for its default, so a hole
+// is never compiled as the one or the other: the selection is made where it runs.
+test('a hole selecting a recipe variant selects at runtime', () => {
+  const result = createFoldFixture().fold(
+    `import { buttonStyle } from 'styled-system/recipes'\nconst sizes = ['sm', , 'lg']\nexport const A = buttonStyle({ size: sizes[1] })\n`,
+  )
+
+  expect(result.skipped).toEqual([])
+  expect(result.code).toContain('cvaMap([sizes[1]]')
 })
 
 describe('what is still not known', () => {
@@ -368,6 +400,26 @@ describe('what is still not known', () => {
     ['a property of a hole', 'const z = [, 2]\nconst f = () => z[0].x\nexport const A = css({ zIndex: f() })'],
     // A literal's whitespace is collapsed as it is read, so past a space an index is not known.
     ['a string index past a space', "const f = () => 'a  b'[2]\nexport const A = css({ gridArea: f() })"],
+    ['the length of a string holding a space', "const f = () => 'a  b'.length\nexport const A = css({ zIndex: f() })"],
+    // A value replacing source is `null` or `undefined`, not one that may be either.
+    ['a hole as the whole value', 'const z = [, 2]\nexport const A = css({ zIndex: z[0] })'],
+    [
+      'an element after a spread of unknown length',
+      "const a = ['a', ...unknown(), 'b']\nconst f = () => a[2]\nexport const A = css({ gridArea: f() })",
+    ],
+    [
+      'an element the build cannot evaluate, spread',
+      "const inc = [compute(), 'x']\nconst a = ['a', ...inc]\nconst f = () => a[1] ?? 'q'\nexport const A = css({ gridArea: f() })",
+    ],
+    [
+      'a property `Object.assign` takes before an unknown source',
+      "const t = Object.assign({}, { a: 'x' }, maybe())\nconst f = () => t.a\nexport const A = css({ gridArea: f() })",
+    ],
+    // What an object said of a property before a spread that may have written over it is gone.
+    [
+      'a hole a later spread may have replaced',
+      'const o = { a: [, 2][0], ...unknown() }\nconst p = { b: o.a }\nconst f = () => p.b - 1\nexport const A = css({ zIndex: f() })',
+    ],
     // A missing property is `undefined` unless the prototype has it.
     ['a property every object has', 'const o = {}\nexport const A = css({ zIndex: o.toString ? 1 : 2 })'],
     ['an array method', 'const s = [1, 2]\nexport const A = css({ zIndex: s.includes ? 1 : 2 })'],

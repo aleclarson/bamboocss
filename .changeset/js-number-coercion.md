@@ -20,8 +20,9 @@ Read values in style expressions as JavaScript does, where the build used Rust's
 - A choice decided by an element read with a number, `sizes[0] ?? 'md'`, now compiles, as `sizes['0']` did.
 - `join` writes a `null` element as nothing, as it does a hole: `[1, null, 2].join('-')` is `1--2`, not `1-null-2`.
 - A property the prototype has is no longer read as `undefined`: `o.toString` and `[].map` are not known, and neither is
-  `'toString' in o`. A string read by index gives its character, unless a space comes before it, which may have been any
-  run of whitespace.
+  `'toString' in o`. A string read by index gives its character, unless a space comes at or before it, which may have
+  been any run of whitespace as the literal was written; for the same reason the length of a string holding a space is
+  not known.
 - An array index is read only in its canonical form, so `z['01']` and `z['+1']` are `undefined`, as they are at runtime,
   rather than `z[1]`; and `'length' in z` is true.
 - Two strings compare as strings, so `'10' < '9'` is true, unless either holds whitespace, which the build collapses as
