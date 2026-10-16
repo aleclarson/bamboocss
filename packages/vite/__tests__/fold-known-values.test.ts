@@ -332,6 +332,22 @@ describe('a property written as `undefined`', () => {
 
     expect(foldOf(withImport(body))).toMatchObject({ classes: ['grid-area_q'], skipped: [] })
   })
+
+  // The rest is without the keys the pattern took, and says nothing of them.
+  test('not the key a rest pattern took out', () => {
+    const body =
+      "const { a, ...rest } = { a: undefined, b: 'x' }\nconst t = { a: 'md', ...rest }\n" +
+      "const f = () => t.a ?? 'q'\nexport const A = css({ gridArea: f() })"
+
+    expect(foldOf(withImport(body))).toMatchObject({ classes: ['grid-area_md'], skipped: [] })
+  })
+
+  // In the order JavaScript keeps the keys: the first written, wherever a later one removed one.
+  test('keeping the order of the keys left', () => {
+    const body = "export const A = css({ ...{ color: 'red.300', margin: '2', padding: '4' }, color: undefined })"
+
+    expect(foldOf(withImport(body))).toMatchObject({ classes: ['m_2 p_4'], skipped: [] })
+  })
 })
 
 // A recipe takes a `null` variant for an explicit miss and `undefined` for its default, so a hole
@@ -453,6 +469,12 @@ describe('what is still not known', () => {
     [
       'an element past what an open array said',
       "const f = () => [...['a', ...unknown()]][1] ?? 'q'\nexport const A = css({ gridArea: f() })",
+    ],
+    // `css()` drops an argument whose values are all `undefined`, and keeps one holding `null`,
+    // which overrides what came before: with more arguments than one, a hole is either.
+    [
+      'a hole among the arguments of css()',
+      "const z = [, 2]\nexport const A = css({ color: 'red.300' }, { color: z[0] })",
     ],
     // `Object.assign` keeps a source's undecided values, as a spread does.
     [

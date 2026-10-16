@@ -41,6 +41,13 @@ describe('`+` in a style value', () => {
       { zIndex: 1 },
       'z-index: 1',
     ],
+    // Which keys an object has is known though what one holds is not.
+    [
+      'a property whose value is not known is in an object',
+      "css({ zIndex: 'a' in { a: f() } ? 1 : 2 })",
+      { zIndex: 1 },
+      'z-index: 1',
+    ],
     // JavaScript trims U+FEFF from a string it converts, and not U+0085, below.
     ['a string trimmed as JavaScript trims it', "css({ zIndex: '\\ufeff5' * 2 })", { zIndex: 10 }, 'z-index: 10'],
   ])('%s', (_, body, data, declaration) => {
@@ -81,6 +88,17 @@ describe('`+` in a style value', () => {
     const { css } = extract("const { theme = {} } = { theme: { w: '2', h: compute() } }\ncss({ width: theme.w })")
 
     expect(css).toContain('width: var(--sizes-2)')
+  })
+
+  // A later write of a key replaces it, the values an earlier one could not decide between too.
+  test('a key written again leaves no rule for the values it replaced', () => {
+    const { css } = extract(
+      "const cond = Math.random() > 0.5\ncss({ color: cond ? 'red.300' : 'blue.300', color: 'green.300' })",
+    )
+
+    expect(css).toContain('--colors-green-300')
+    expect(css).not.toContain('--colors-red-300')
+    expect(css).not.toContain('--colors-blue-300')
   })
 
   test('a string JavaScript reads as `NaN` is not read as a number', () => {

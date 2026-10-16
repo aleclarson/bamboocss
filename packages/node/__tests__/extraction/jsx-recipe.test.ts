@@ -121,4 +121,16 @@ describe('recipe jsx', () => {
       }"
     `)
   })
+
+  // An attribute written as `undefined` replaces what a spread before it wrote, as a spread of an
+  // object holding one does an attribute before it.
+  test.each([
+    ['an attribute after a spread', `<Button {...{ size: 'sm' }} size={undefined} />`],
+    ['a spread after an attribute', `<Button size="sm" {...{ size: undefined }} />`],
+  ])('%s written as undefined', (_, element) => {
+    const code = `import { Button } from "styled-system/jsx"\nexport const A = () => ${element}\n`
+    const data = [...(jsxRecipeParser(code).get('button') ?? [])].map((entry) => entry.data)
+
+    expect(data).toEqual([[{}]])
+  })
 })

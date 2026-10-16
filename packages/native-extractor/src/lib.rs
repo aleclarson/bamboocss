@@ -465,21 +465,37 @@ fn jsx_data<'a>(
                     _ => EvalResult::unknown(),
                 };
                 complete &= value.complete;
+                let undefined = value.is_undefined();
                 for condition in value.conditions {
                     let mut fragment = serde_json::Map::new();
                     fragment.insert(key.clone(), condition);
                     conditions.push(fragment.into());
                 }
-                if let Some(value) = value.value {
-                    object.insert(key, value);
+                // As in an object literal: one written as `undefined`, or not known, replaces what
+                // a spread before it wrote.
+                match value.value {
+                    Some(value) => {
+                        object.insert(key, value);
+                    }
+                    None if undefined || !value.complete => {
+                        object.shift_remove(&key);
+                    }
+                    None => {}
                 }
             }
             JSXAttributeItem::SpreadAttribute(spread) => {
                 let value = evaluator.evaluate(&spread.argument);
                 complete &= value.complete;
                 conditions.extend(value.conditions);
-                if let Some(serde_json::Value::Object(value)) = value.value {
-                    object.extend(value);
+                if let Some(serde_json::Value::Object(values)) = value.value {
+                    for key in value
+                        .partial
+                        .iter()
+                        .flat_map(|known| known.written_undefined())
+                    {
+                        object.shift_remove(key);
+                    }
+                    object.extend(values);
                 } else {
                     complete = false;
                 }

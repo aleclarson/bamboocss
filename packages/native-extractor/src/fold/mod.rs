@@ -1086,7 +1086,10 @@ fn analyze_facts<'a>(
                 .all(|argument| match argument.as_expression() {
                     Some(expression) => Exactness {
                         evaluator: &mut evaluator,
-                        drops_nullish: kind == "css",
+                        // With more than one argument it does not: `css()` drops an argument
+                        // whose values are all `undefined` before merging, and keeps one holding
+                        // `null`, which then overrides what came before.
+                        drops_nullish: kind == "css" && call.arguments.len() == 1,
                     }
                     .check(expression),
                     None => false,

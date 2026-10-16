@@ -19,8 +19,11 @@ Read values in style expressions as JavaScript does, where the build used Rust's
   cannot evaluate decides nothing.
 - A choice decided by an element read with a number, `sizes[0] ?? 'md'`, now compiles, as `sizes['0']` did.
 - A property written as `undefined` replaces what was there, as at runtime: `{ ...defaults, size: undefined }` kept the
-  default, as did `Object.assign` and a spread of such an object, and `'size' in` it was false. `Object.assign` also
-  keeps a source's undecided values, as a spread does, rather than reading them as missing.
+  default, as did `Object.assign`, a spread of such an object and a JSX attribute `size={undefined}` after a spread, and
+  `'size' in` it was false. Any later write of a key drops the values an earlier one could not decide between, which
+  extraction used to write rules for, and keys removed leave the rest in the order they were written. `Object.assign`
+  also keeps a source's undecided values, as a spread does, rather than reading them as missing, and `in` is known for
+  an object whose keys are known though a value is not.
 - `join` writes a `null` element as nothing, as it does a hole: `[1, null, 2].join('-')` is `1--2`, not `1-null-2`.
 - A property the prototype has is no longer read as `undefined`: `o.toString` and `[].map` are not known, and neither is
   `'toString' in o`. A string read by index gives its character, unless a space comes at or before it, which may have
