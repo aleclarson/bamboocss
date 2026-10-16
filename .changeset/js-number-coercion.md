@@ -40,16 +40,25 @@ Read values in style expressions as JavaScript does, where the build used Rust's
   read from such a value, or a rest pattern's object taken from it, compiled.
 - `Object.assign` onto `null` or `undefined` throws, and is no longer read as an object: a rule was written for what the
   call never returns.
-- A call is given the elements of an array it spreads where the build knows how many there are, each as it knows it, and
-  a parameter up to sixteen places after a spread of an unknown length is no longer read as `undefined`: a default stood
-  in for it, and a choice on it was made. What comes after such a spread is still read, so `Object.assign` still writes
-  the sources after it.
-- A rest parameter holding a value the call could not decide between is not known, where it was read without that value:
-  `(...styles) => Object.assign({}, ...styles)` and `(...xs) => xs[0]` compiled without its rules.
-- `css.raw` of more than one style object is read as their merge, for the rules each holds, and no longer as the first
-  of them, which compiled without the others.
+- A call is given the elements of an array it spreads where the build knows how many there are, each as it knows it. A
+  spread of an unknown length was read as one argument, so a parameter after it was given what was written one place on,
+  or `undefined`, and a default stood in for it: now a parameter up to sixteen places after such a spread is not known.
+  `Object.assign` still writes the sources after one.
+- An element of a rest parameter that the call could not decide between is not known, where it was read without what it
+  could be: `(...xs) => xs[0]` given `{ color: c ? 'a' : 'b' }` compiled with no color. The rest's other elements are
+  still known, and so is how many there are.
+- `css.raw` of more than one style object was read as the first of them, so `css()` of one, from a module the compiler
+  does not transform, compiled without the others. Extraction now writes the rules of each, and the call fails the
+  compile as `dynamic`. What `css.raw` leaves out at runtime — `undefined`, `null`, `false`, an object with nothing
+  defined in it — is left out, so `css.raw(style, undefined)` is still read as `style`; and `css.raw` of an array, which
+  throws, is not known, where the compile itself failed on it.
 - An enum with a member the build cannot evaluate is still known by its other members: `E.A` beside `B = compute()`
-  compiles, and so does `'A' in` it. An enum exported from another module is read as one in the module itself is.
+  compiles, and so does `'A' in` it. An enum exported from another module is read as one in the module itself is, and
+  one declared more than once, or merged with a namespace, is not known: it was read as its first declaration, so a
+  member another added was dropped.
+- `fallback()` of a value the build cannot evaluate is not known: it was read as `undefined`, so
+  `css({ height: fallback(p.h, '100vh') })` compiled with no height. It writes `null` and `undefined` as nothing, as the
+  runtime's `join` does, where `undefined` dropped the property and `null` was written as `null`.
 - `join` writes a `null` element as nothing, as it does a hole: `[1, null, 2].join('-')` is `1--2`, not `1-null-2`.
 - A property the prototype has is no longer read as `undefined`: `o.toString` and `[].map` are not known, and neither is
   `'toString' in o`. A string read by index gives its character, unless a space comes at or before it, which may have

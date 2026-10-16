@@ -34,7 +34,9 @@ use crate::{NativeEntrypoint, NativePathMapping, NativeProjectOptions, NativeTok
 const MAX_CALL_DEPTH: u32 = 64;
 
 /// How many arguments a spread of a length the build does not know stands for: more than a helper
-/// takes, so no parameter after it is bound as `undefined`, which a missing argument is.
+/// takes, so no parameter after it is bound as `undefined`, which a missing argument is. A helper
+/// is given nothing written after the spread, which it would take as the argument after the run
+/// (`positional`), so a parameter past it is still `undefined`.
 const SPREAD_ARGUMENTS: usize = 16;
 
 /// How many helper calls one outermost call may make. Depth does not bound a recursion that
@@ -1183,9 +1185,16 @@ impl<'a> ProjectEvaluator<'a> {
                         // keeps a bare function value out of style data.
                         return EvalResult::unknown();
                     }
-                    // As one in the module itself is read.
+                    // As one in the module itself is read: refused once anything writes to it, and
+                    // not known declared twice (`evaluate_symbol`).
                     Declaration::TSEnumDeclaration(enumeration) if enumeration.id.name == name => {
-                        return evaluator.evaluate_enum(enumeration);
+                        return enumeration
+                            .id
+                            .symbol_id
+                            .get()
+                            .map_or_else(EvalResult::unknown, |symbol| {
+                                evaluator.evaluate_symbol(symbol)
+                            });
                     }
                     _ => {}
                 }
@@ -2045,6 +2054,14 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                         .cloned()
                         .unwrap_or_else(EvalResult::unknown)
                 }
+                // Declared again — another enum of the name, a namespace — it holds what each
+                // declaration adds, and the first is all that is read here: what another adds was
+                // read as a known `undefined`, and the property dropped.
+                AstKind::TSEnumDeclaration(_)
+                    if !self.scoping.symbol_redeclarations(symbol).is_empty() =>
+                {
+                    EvalResult::unknown()
+                }
                 AstKind::TSEnumDeclaration(declaration) => self.evaluate_enum(declaration),
                 _ => EvalResult::unknown(),
             }
@@ -2525,6 +2542,8 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
 
     fn evaluate_call(&mut self, call: &'a CallExpression<'a>) -> EvalResult {
         let mut arguments = Vec::with_capacity(call.arguments.len());
+        // Where the run standing for a spread of unknown length ends — see `positional`.
+        let mut positioned = None;
         for argument in &call.arguments {
             let Argument::SpreadElement(spread) = argument else {
                 arguments.push(
@@ -2536,14 +2555,17 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             };
             // Of a spread whose length is not known, neither is what a parameter from here on is
             // given: it used to be `undefined`, a parameter given nothing. What comes after it is
-            // still read — `Object.assign` writes each source whatever came before it — though no
-            // longer where it lands.
+            // still read — `Object.assign` writes each source whatever came before it — though not
+            // by a helper, which would take it as the argument after the run.
             match spread_arguments(self.evaluate(&spread.argument)) {
                 Ok(elements) => arguments.extend(elements),
-                Err(refusal) => arguments.extend((0..SPREAD_ARGUMENTS).map(|_| EvalResult {
-                    refusal: refusal.clone(),
-                    ..EvalResult::unknown()
-                })),
+                Err(refusal) => {
+                    arguments.extend((0..SPREAD_ARGUMENTS).map(|_| EvalResult {
+                        refusal: refusal.clone(),
+                        ..EvalResult::unknown()
+                    }));
+                    positioned = positioned.or(Some(arguments.len()));
+                }
             }
         }
 
@@ -2614,39 +2636,60 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                     if entrypoint.kind == "css"
                         && path.first().is_some_and(|name| name == "fallback")
                     {
-                        if arguments.iter().any(|value| value.value.is_none()) {
-                            return EvalResult::undefined();
+                        // `fallback(${values.join(', ')})`, which writes `null` and `undefined` as
+                        // nothing. Of a value not known, or one of several, neither is what it
+                        // writes: it was taken for `undefined`, and the property dropped.
+                        if arguments
+                            .iter()
+                            .any(|value| !value.complete || !value.conditions.is_empty())
+                        {
+                            return EvalResult {
+                                refusal: arguments.iter().find_map(|value| value.refusal.clone()),
+                                ..EvalResult::unknown()
+                            };
                         }
                         return EvalResult::known(format!(
                             "fallback({})",
                             arguments
                                 .iter()
-                                .map(|value| to_js_string(value.value.as_ref().unwrap()))
+                                .map(|value| value.value.as_ref().map_or_else(String::new, joined))
                                 .collect::<Vec<_>>()
                                 .join(", ")
                         ));
                     }
                     if path.get(1).is_some_and(|name| name == "raw") {
-                        // Of one style object, that object; of more, their merge, which was read
-                        // as the first of them. Merged here for the rules each holds, and not
-                        // complete: the runtime's merge is not this one.
-                        if arguments.len() > 1 {
-                            return merged_styles(arguments);
-                        }
-                        return arguments
+                        // What holds no style is left out, as `compactStyles` leaves it, and an
+                        // array throws there. Of one style object left, that object, as
+                        // `mergeCss` gives it back; of more, their merge, which was read as the
+                        // first of them. Merged here for the rules each holds, and not complete:
+                        // the runtime's merge is not this one.
+                        let mut styles: Vec<EvalResult> = arguments
                             .into_iter()
-                            .next()
-                            .unwrap_or_else(EvalResult::undefined);
+                            .filter(|style| !holds_no_style(style))
+                            .collect();
+                        if styles
+                            .iter()
+                            .any(|style| matches!(style.value, Some(serde_json::Value::Array(_))))
+                        {
+                            return EvalResult::unknown();
+                        }
+                        return match styles.len() {
+                            0 => EvalResult::known(serde_json::Map::new()),
+                            1 => styles.remove(0),
+                            _ => merged_styles(styles),
+                        };
                     }
                 }
                 if members.is_empty() {
-                    return self
-                        .project
-                        .call_imported(self.filename, &binding, arguments);
+                    return self.project.call_imported(
+                        self.filename,
+                        &binding,
+                        positional(arguments, positioned),
+                    );
                 }
             }
             if members.is_empty() {
-                return self.call_symbol(symbol, arguments);
+                return self.call_symbol(symbol, positional(arguments, positioned));
             }
             // `helpers.size('sm')` on a local object literal. Values evaluate to JSON, which
             // cannot hold a function, so the callee is found in the source instead: walk the
@@ -2657,6 +2700,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 && let Some(callee) = self.object_member_expression(symbol, &members)
             {
                 let name = format!("{}.{}", self.scoping.symbol_name(symbol), members.join("."));
+                let arguments = positional(arguments, positioned);
                 return self.with_helper(name, |evaluator| {
                     evaluator.call_expression_value(callee, arguments)
                 });
@@ -2668,7 +2712,10 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             crate::fold::exact::unwrap(&call.callee),
             Expression::ArrowFunctionExpression(_) | Expression::FunctionExpression(_)
         ) {
-            return self.call_expression_value(crate::fold::exact::unwrap(&call.callee), arguments);
+            return self.call_expression_value(
+                crate::fold::exact::unwrap(&call.callee),
+                positional(arguments, positioned),
+            );
         }
 
         // Object.assign({}, a, b) is common in helper modules and remains deterministic.
@@ -3079,22 +3126,27 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         }
         if let Some(rest) = &parameters.rest {
             let values = &arguments[parameters.items.len().min(arguments.len())..];
-            // An array holds its elements' undecided values under no index of theirs, so one
-            // holding any is not known: spread on into another call, it passed as exact what it
-            // had lost (`merge(...styles)`).
+            // An array holds its elements' undecided values under no index of theirs, so the rest
+            // holds none of them, and an element with any is not known: spread on into another
+            // call, it passed as exact what it had lost (`merge(...styles)`). The others still
+            // are, and so is how many there are.
             let complete = values.iter().all(|value| {
-                value.complete && value.value.is_some() && value.conditions.is_empty()
+                value.complete && (value.value.is_some() || !value.conditions.is_empty())
             });
             let value = complete.then(|| {
                 values
                     .iter()
-                    .filter_map(|value| value.value.clone())
+                    .map(|value| value.value.clone().unwrap_or(serde_json::Value::Null))
                     .collect::<Vec<_>>()
                     .into()
             });
             let mut partial = Partial::default();
+            let mut decided = true;
             for (index, value) in values.iter().enumerate() {
-                if value.nullish || value.partial.is_some() {
+                if !value.conditions.is_empty() {
+                    decided = false;
+                    partial.write(&index.to_string(), false, None);
+                } else if value.nullish || value.partial.is_some() {
                     partial.write_value(&index.to_string(), value);
                 }
             }
@@ -3103,7 +3155,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 EvalResult {
                     value,
                     conditions: Vec::new(),
-                    complete,
+                    complete: complete && decided,
                     refusal: values.iter().find_map(|value| value.refusal.clone()),
                     partial: (complete && !partial.is_empty()).then(|| Arc::new(partial)),
                     nullish: false,
@@ -3634,18 +3686,23 @@ pub(crate) fn spread_value(
     let source = value.partial.as_deref();
     // A guess as a whole (`EvalResult::partial`): what it holds it may not, so a key it writes is
     // not known to be there, unless the object surely held it already, which a spread does not
-    // remove — not one an earlier guess, a branch or code it could not follow wrote, which its
-    // record says it does not know is there.
+    // remove, whether its value is known or not. Not one an earlier guess, a branch or code it
+    // could not follow wrote: after a write it could not attribute to a key, a key is surely there
+    // only if written since, or held from before with nothing it could not read written over it
+    // since, which would have left it unsettled. One only under a branch may be a spread's it
+    // could not choose.
     let held = |key: &String| {
-        let present = output.contains_key(key)
-            || fragments.keys.contains(key)
-            || partial
-                .as_ref()
-                .is_some_and(|known| known.undefined.contains(key));
-        present
-            && partial.as_ref().is_none_or(|known| {
-                !known.unsettled.contains(key) && (!known.open || known.settled.contains(key))
-            })
+        let holds = output.contains_key(key) || fragments.keys.contains(key);
+        match partial.as_ref() {
+            None => holds,
+            Some(known) if !known.open => {
+                holds || known.unsettled.contains(key) || known.undefined.contains(key)
+            }
+            Some(known) => {
+                known.settled.contains(key)
+                    || (output.contains_key(key) && !known.unsettled.contains(key))
+            }
+        }
     };
     let guessed: Vec<String> = if source.is_none() && !value.complete {
         values.keys().filter(|key| !held(key)).cloned().collect()
@@ -3699,6 +3756,22 @@ pub(crate) fn spread_value(
     }
 }
 
+/// Whether `compactStyles` leaves a style argument out, as it does one that is not an object, or
+/// an object holding nothing but `undefined`: known to be one, `null` or `undefined` included.
+fn holds_no_style(style: &EvalResult) -> bool {
+    if style.nullish || style.is_undefined() {
+        return true;
+    }
+    if !style.complete || !style.conditions.is_empty() {
+        return false;
+    }
+    match &style.value {
+        Some(serde_json::Value::Object(object)) => object.is_empty(),
+        Some(serde_json::Value::Array(_)) | None => false,
+        Some(_) => true,
+    }
+}
+
 /// Style objects merged, a later key over an earlier one and an object into an object, for what
 /// extraction writes rules for: incomplete, as `css.raw`'s own merge may differ. Not an object
 /// among them, nothing is known.
@@ -3743,6 +3816,15 @@ fn merged_styles(arguments: Vec<EvalResult>) -> EvalResult {
         partial: None,
         nullish: false,
     }
+}
+
+/// What a helper is given of `arguments`, which it takes by position: nothing past `end`, where the
+/// run standing for a spread of unknown length ends, as where any of it lands is not known.
+fn positional(mut arguments: Vec<EvalResult>, end: Option<usize>) -> Vec<EvalResult> {
+    if let Some(end) = end {
+        arguments.truncate(end);
+    }
+    arguments
 }
 
 /// What a spread of `value` passes a call, where how many it passes is known: an array known

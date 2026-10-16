@@ -293,12 +293,14 @@ describe('per-module transform cost', () => {
     parseOnly(WRITTEN_OUT_MODULE)
   })
 
-  bench('analyze only (spread arguments module)', () => {
-    parseOnly(SPREAD_MODULE)
-  })
-
   bench('analyze only (helper module)', () => {
     parseOnly(HELPER_MODULE)
+  })
+
+  // Read against the helper module above: helpers of the same kind, given their arguments by a
+  // spread.
+  bench('analyze only (spread arguments module)', () => {
+    parseOnly(SPREAD_MODULE)
   })
 
   for (const { file, code } of SANDBOX_FILES) {

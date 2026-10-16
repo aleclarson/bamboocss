@@ -418,6 +418,26 @@ describe('which keys an object has', () => {
       'const o = { a: { y: 1 }, ...x() }',
       'z_2',
     ],
+    // However much is known of what it holds, and whatever a spread the build could not read wrote
+    // over it.
+    [
+      'a key held before a spread the build cannot read, and a guess after it',
+      "'y' in { y: 0, ...x(), ...o.a }",
+      'const o = { a: { y: 1 }, ...x() }',
+      'z_2',
+    ],
+    [
+      'such a key, through `Object.assign`, and a guess after it',
+      "'y' in Object.assign({ y: 0 }, x(), o.a)",
+      'const o = { a: { y: 1 }, ...x() }',
+      'z_2',
+    ],
+    [
+      'a key held with a value known in part, and a guess after it',
+      "'y' in { y: { ...x() }, ...o.a }",
+      'const o = { a: { y: 1 }, ...x() }',
+      'z_2',
+    ],
     ['a member of an enum not wholly known', "'A' in { ...E }", 'enum E { A = 1, B = f() }', 'z_2'],
   ])('%s', (_, test, definition, className) => {
     expect(foldOf(value(test, definition))).toMatchObject({ classes: [className], skipped: [] })
@@ -483,6 +503,38 @@ describe('what a call is given', () => {
     const code = withImport(`import { Tone } from './tone'\nexport const A = css({ zIndex: Tone.zIndex })`)
 
     expect(foldOf(code, files)).toMatchObject({ classes: ['z_1'], skipped: [] })
+  })
+
+  // An element the call could not decide between is not known, and the others still are.
+  test.each([
+    [
+      'an element of a rest parameter beside one holding one of two values',
+      "const first = (...xs) => xs[0]\nexport const A = (p) => css(first({ color: 'red.300' }, { color: p.on ? 'green.300' : 'blue.300' }))",
+      'c_red.300',
+    ],
+    [
+      'how many elements a rest parameter holds, one holding one of two values',
+      "const count = (...xs) => xs.length\nexport const A = (p) => css({ zIndex: count({ color: 'red.300' }, { color: p.on ? 'green.300' : 'blue.300' }) })",
+      'z_2',
+    ],
+  ])('%s', (_, body, className) => {
+    expect(foldOf(withImport(body))).toMatchObject({ classes: [className], skipped: [] })
+  })
+
+  // `compactStyles` leaves out what holds no style, and gives back one style object left alone.
+  test.each([
+    ['`undefined`', 'undefined'],
+    ['`null`', 'null'],
+    ['`false`', 'false'],
+    ['an empty object', '{}'],
+    ['an object holding only `undefined`', '{ color: undefined }'],
+  ])('`css.raw` of one style object beside %s, in a module the compiler does not transform', (_, beside) => {
+    const files = {
+      'app/src/button.ts': `import { css } from 'styled-system/css'\nexport const button = css.raw({ color: 'red.300' }, ${beside})\n`,
+    }
+    const code = withImport(`import { button } from './button'\nexport const A = css(button)`)
+
+    expect(foldOf(code, files)).toMatchObject({ classes: ['c_red.300'], skipped: [] })
   })
 })
 
@@ -676,8 +728,57 @@ describe('what is still not known', () => {
       'a rest pattern’s object taken from one',
       'const { b, ...rest } = (track(), { zIndex: 1, b: f() })\nconst g = () => rest\nexport const A = css(g())',
     ],
+    // Declared again, an enum holds what each declaration adds, not what the first does alone.
+    [
+      'a member another declaration of an enum adds',
+      'enum Tone { zIndex = 1 }\nenum Tone { lifted = 2 }\nexport const A = css({ zIndex: Tone.lifted })',
+    ],
+    [
+      'a member a namespace adds to an enum',
+      "enum Tone { zIndex = 1 }\nnamespace Tone { export const margin = '2' }\nexport const A = css({ color: 'red.300', margin: Tone.margin })",
+    ],
   ])('%s', (_, body) => {
     expect(foldOf(withImport(body))).toMatchObject({ classes: [], skipped: ['dynamic'] })
+  })
+
+  // Read as one in the module itself is, so not known where that one is not.
+  test.each([
+    [
+      'written to by `Object.assign`',
+      'export enum Tone { zIndex = 1 }\nObject.assign(Tone, { zIndex: 5 })\n',
+      'css({ zIndex: Tone.zIndex })',
+    ],
+    [
+      'written to through a cast',
+      'export enum Tone { zIndex = 1 }\n;(Tone as any).zIndex = 5\n',
+      'css({ zIndex: Tone.zIndex })',
+    ],
+    [
+      'merged with a namespace',
+      "export enum Tone { zIndex = 1 }\nexport namespace Tone { export const margin = '2' }\n",
+      "css({ color: 'red.300', margin: Tone.margin })",
+    ],
+    [
+      'declared twice',
+      'export enum Tone { zIndex = 1 }\nexport enum Tone { lifted = 2 }\n',
+      'css({ zIndex: Tone.lifted })',
+    ],
+  ])('an enum another module exports, %s', (_, tone, call) => {
+    const files = { 'app/src/tone.ts': tone }
+    const code = withImport(`import { Tone } from './tone'\nexport const A = ${call}`)
+
+    expect(foldOf(code, files)).toMatchObject({ classes: [], skipped: ['dynamic'] })
+  })
+
+  // It throws there.
+  test('`css.raw` of an array, in a module the compiler does not transform', () => {
+    const files = {
+      'app/src/button.ts':
+        "import { css } from 'styled-system/css'\nexport const button = css.raw([{ color: 'red.300' }])\n",
+    }
+    const code = withImport(`import { button } from './button'\nexport const A = css(button)`)
+
+    expect(foldOf(code, files)).toMatchObject({ classes: [], skipped: ['dynamic'] })
   })
 
   // Their merge is not the first of them.
@@ -702,5 +803,30 @@ describe('what is still not known', () => {
 
     expect(refusalOf('export const A = css({ ...o, color: other() })')).toMatchObject({ helper: 'make' })
     expect(refusalOf('const { b, ...rest } = o\nexport const A = css({ ...rest, color: other() })')).toBeUndefined()
+  })
+})
+
+describe('`fallback()`', () => {
+  const withFallback = (body: string) => `import { css, fallback } from 'styled-system/css'\n${body}\n`
+
+  // It was taken for `undefined`, and the property dropped.
+  test('of a value the build cannot evaluate is not known', () => {
+    const code = withFallback("export const A = (p) => css({ height: fallback(p.h, '100vh') })")
+
+    expect(foldOf(code)).toMatchObject({ classes: [], skipped: ['dynamic'] })
+  })
+
+  // As the runtime's `join` writes them, which the candidates are then read without.
+  test.each([
+    ['`undefined`', "fallback(undefined, '100vh')"],
+    ['`null`', "fallback(null, '100vh')"],
+    ['a hole spread into it', "fallback(...[, '100vh'])"],
+  ])('writes %s as nothing', (_, call) => {
+    const { classes, skipped, css } = foldOf(withFallback(`export const A = css({ height: ${call} })`))
+
+    expect(skipped).toEqual([])
+    expect(classes).toEqual(['h_fallback(,_100vh)'])
+    expect(css).toContain('height: 100vh')
+    expect(css).not.toContain('null')
   })
 })
