@@ -442,6 +442,19 @@ describe('which keys an object has', () => {
     ['a key of `Object.assign` onto `null`', "'a' in Object.assign(null, { a: 1 })", ''],
     // A numeric member names its value too, which the build does not hold.
     ['a key an enum gives a numeric member', "'1' in E", 'enum E { A = 1, B = f() }'],
+    // What a guess wrote, a later spread does not make surely there, nor what a branch wrote.
+    ['a key two guesses may hold', "'y' in { ...o.a, ...o.b }", 'const o = { a: { y: 1 }, b: { y: 2 }, ...x() }'],
+    ['a key a guess wrote, spread again', "'y' in { ...o.a, ...o.a }", 'const o = { a: { y: 1 }, ...x() }'],
+    [
+      'a key `Object.assign` takes from two guesses',
+      "'y' in Object.assign({}, o.a, o.b)",
+      'const o = { a: { y: 1 }, b: { y: 2 }, ...x() }',
+    ],
+    [
+      'a key a branch wrote before a guess',
+      "'y' in { ...(c ? { y: 1 } : {}), ...o.a }",
+      'const o = { a: { y: 1 }, ...x() }',
+    ],
   ])('not %s', (_, test, definition) => {
     expect(foldOf(value(test, definition))).toMatchObject({ classes: [], skipped: ['dynamic'] })
   })
@@ -454,6 +467,22 @@ describe('which keys an object has', () => {
       `const g = () => ('x' in o.a ? 1 : 2)\nexport const A = css({ zIndex: g() })`
 
     expect(foldOf(withImport(body))).toMatchObject({ classes: [], skipped: ['dynamic'] })
+  })
+})
+
+describe('what a call is given', () => {
+  // An array whose record says where each element is passes them all, and nothing after them.
+  test('past a spread of an array of known length, a parameter is given nothing', () => {
+    const body = `const f = (a, b, c = 'red.300') => c\nexport const A = css({ color: f(...[1, g()]) })`
+
+    expect(foldOf(withImport(body))).toMatchObject({ classes: ['c_red.300'], skipped: [] })
+  })
+
+  test('an enum exported from another module is read as one in the module itself', () => {
+    const files = { 'app/src/tone.ts': 'export enum Tone { zIndex = 1 }\n' }
+    const code = withImport(`import { Tone } from './tone'\nexport const A = css({ zIndex: Tone.zIndex })`)
+
+    expect(foldOf(code, files)).toMatchObject({ classes: ['z_1'], skipped: [] })
   })
 })
 
@@ -629,6 +658,15 @@ describe('what is still not known', () => {
       'a property of a value code ran before',
       'const s = { zIndex: 1, b: f() }\nconst g = () => (track(), s).zIndex\nexport const A = css({ zIndex: g() })',
     ],
+    // A rest parameter holding a value the call could not decide between holds it under no index.
+    [
+      'what a rest parameter held, spread on',
+      "const merge = (...styles) => Object.assign({}, ...styles)\nexport const A = (p) => css(merge({ margin: '2' }, { color: p.on ? 'red.300' : 'blue.300' }))",
+    ],
+    [
+      'an element of a rest parameter holding one of two values',
+      "const first = (...xs) => xs[0]\nexport const A = (p) => css(first({ color: p.on ? 'red.300' : 'blue.300' }))",
+    ],
     // How many a spread of an unknown length passes is not known, so neither is a parameter after it.
     [
       'a parameter after a spread of unknown length',
@@ -640,6 +678,20 @@ describe('what is still not known', () => {
     ],
   ])('%s', (_, body) => {
     expect(foldOf(withImport(body))).toMatchObject({ classes: [], skipped: ['dynamic'] })
+  })
+
+  // Their merge is not the first of them.
+  test.each([
+    ['written out', "export const A = css(css.raw({ color: 'red.300' }, { margin: '2' }))"],
+    [
+      'passed through a helper',
+      "const sx = (...styles) => css.raw(...styles)\nexport const A = css(sx({ color: 'red.300' }, { margin: '2' }))",
+    ],
+  ])('`css.raw` of more than one style object, %s', (_, body) => {
+    const { classes, skipped } = foldOf(withImport(body))
+
+    expect(classes).toEqual([])
+    expect(skipped).toContain('dynamic')
   })
 
   // The object a rest pattern makes is without the key it took, and the reason that key was not

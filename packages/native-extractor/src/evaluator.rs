@@ -1183,6 +1183,10 @@ impl<'a> ProjectEvaluator<'a> {
                         // keeps a bare function value out of style data.
                         return EvalResult::unknown();
                     }
+                    // As one in the module itself is read.
+                    Declaration::TSEnumDeclaration(enumeration) if enumeration.id.name == name => {
+                        return evaluator.evaluate_enum(enumeration);
+                    }
                     _ => {}
                 }
             }
@@ -2530,25 +2534,16 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 );
                 continue;
             };
-            // An array known element by element is its elements, as the call spreads them. Of any
-            // other, how many it spreads is not known, so neither is what a parameter from here on
-            // is given: it used to be `undefined`, a parameter given nothing.
-            let value = self.evaluate(&spread.argument);
-            let exact = value.complete
-                && value.conditions.is_empty()
-                && value.partial.is_none()
-                && !value.nullish;
-            match value.value {
-                Some(serde_json::Value::Array(items)) if exact => {
-                    arguments.extend(items.into_iter().map(EvalResult::known));
-                }
-                _ => {
-                    arguments.extend((0..SPREAD_ARGUMENTS).map(|_| EvalResult {
-                        refusal: value.refusal.clone(),
-                        ..EvalResult::unknown()
-                    }));
-                    break;
-                }
+            // Of a spread whose length is not known, neither is what a parameter from here on is
+            // given: it used to be `undefined`, a parameter given nothing. What comes after it is
+            // still read — `Object.assign` writes each source whatever came before it — though no
+            // longer where it lands.
+            match spread_arguments(self.evaluate(&spread.argument)) {
+                Ok(elements) => arguments.extend(elements),
+                Err(refusal) => arguments.extend((0..SPREAD_ARGUMENTS).map(|_| EvalResult {
+                    refusal: refusal.clone(),
+                    ..EvalResult::unknown()
+                })),
             }
         }
 
@@ -2632,6 +2627,12 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                         ));
                     }
                     if path.get(1).is_some_and(|name| name == "raw") {
+                        // Of one style object, that object; of more, their merge, which was read
+                        // as the first of them. Merged here for the rules each holds, and not
+                        // complete: the runtime's merge is not this one.
+                        if arguments.len() > 1 {
+                            return merged_styles(arguments);
+                        }
                         return arguments
                             .into_iter()
                             .next()
@@ -3078,9 +3079,12 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         }
         if let Some(rest) = &parameters.rest {
             let values = &arguments[parameters.items.len().min(arguments.len())..];
-            let complete = values
-                .iter()
-                .all(|value| value.complete && value.value.is_some());
+            // An array holds its elements' undecided values under no index of theirs, so one
+            // holding any is not known: spread on into another call, it passed as exact what it
+            // had lost (`merge(...styles)`).
+            let complete = values.iter().all(|value| {
+                value.complete && value.value.is_some() && value.conditions.is_empty()
+            });
             let value = complete.then(|| {
                 values
                     .iter()
@@ -3629,19 +3633,22 @@ pub(crate) fn spread_value(
     };
     let source = value.partial.as_deref();
     // A guess as a whole (`EvalResult::partial`): what it holds it may not, so a key it writes is
-    // not known to be there, unless the object held it already, which a spread does not remove.
-    let guessed: Vec<String> = if source.is_none() && !value.complete {
-        values
-            .keys()
-            .filter(|key| {
-                !output.contains_key(*key)
-                    && !fragments.keys.contains(*key)
-                    && partial
-                        .as_ref()
-                        .is_none_or(|known| !known.undefined.contains(*key))
+    // not known to be there, unless the object surely held it already, which a spread does not
+    // remove — not one an earlier guess, a branch or code it could not follow wrote, which its
+    // record says it does not know is there.
+    let held = |key: &String| {
+        let present = output.contains_key(key)
+            || fragments.keys.contains(key)
+            || partial
+                .as_ref()
+                .is_some_and(|known| known.undefined.contains(key));
+        present
+            && partial.as_ref().is_none_or(|known| {
+                !known.unsettled.contains(key) && (!known.open || known.settled.contains(key))
             })
-            .cloned()
-            .collect()
+    };
+    let guessed: Vec<String> = if source.is_none() && !value.complete {
+        values.keys().filter(|key| !held(key)).cloned().collect()
     } else {
         Vec::new()
     };
@@ -3690,6 +3697,102 @@ pub(crate) fn spread_value(
             known.write(key, false, None);
         }
     }
+}
+
+/// Style objects merged, a later key over an earlier one and an object into an object, for what
+/// extraction writes rules for: incomplete, as `css.raw`'s own merge may differ. Not an object
+/// among them, nothing is known.
+fn merged_styles(arguments: Vec<EvalResult>) -> EvalResult {
+    fn merge(
+        into: &mut serde_json::Map<String, serde_json::Value>,
+        from: serde_json::Map<String, serde_json::Value>,
+    ) {
+        for (key, value) in from {
+            match (into.get_mut(&key), value) {
+                (Some(serde_json::Value::Object(nested)), serde_json::Value::Object(value)) => {
+                    merge(nested, value)
+                }
+                (_, value) => {
+                    into.insert(key, value);
+                }
+            }
+        }
+    }
+    let mut output = serde_json::Map::new();
+    let mut conditions = Vec::new();
+    let mut refusal = None;
+    for argument in arguments {
+        refusal = refusal.or(argument.refusal);
+        conditions.extend(argument.conditions);
+        match argument.value {
+            Some(serde_json::Value::Object(value)) => merge(&mut output, value),
+            None if argument.complete => {}
+            _ => {
+                return EvalResult {
+                    refusal,
+                    ..EvalResult::unknown()
+                };
+            }
+        }
+    }
+    EvalResult {
+        value: Some(output.into()),
+        conditions,
+        complete: false,
+        refusal,
+        partial: None,
+        nullish: false,
+    }
+}
+
+/// What a spread of `value` passes a call, where how many it passes is known: an array known
+/// element by element, or one whose record says where each element is, each as the record has
+/// it. Otherwise how many is not known, and the refusal, if any, says why.
+fn spread_arguments(value: EvalResult) -> Result<Vec<EvalResult>, Option<Arc<Refusal>>> {
+    let counted = value.conditions.is_empty()
+        && !value.nullish
+        && value
+            .partial
+            .as_deref()
+            .map_or(value.complete, |record| !record.open);
+    let Some(serde_json::Value::Array(items)) = value.value.filter(|_| counted) else {
+        return Err(value.refusal);
+    };
+    let Some(record) = value.partial else {
+        return Ok(items.into_iter().map(EvalResult::known).collect());
+    };
+    let refusal = value.refusal;
+    Ok(items
+        .into_iter()
+        .enumerate()
+        .map(|(index, item)| {
+            let key = index.to_string();
+            if let Some(child) = record.children.get(&key) {
+                // An object known only in part: what is known of it, with its record.
+                return EvalResult {
+                    value: Some(item),
+                    partial: Some(child.clone()),
+                    refusal: refusal.clone(),
+                    ..EvalResult::unknown()
+                };
+            }
+            if record.nullish.contains(&key) {
+                // A hole, or `undefined`, held as `null`.
+                return EvalResult {
+                    nullish: true,
+                    ..EvalResult::known(item)
+                };
+            }
+            if record.knows(&key) {
+                EvalResult::known(item)
+            } else {
+                EvalResult {
+                    refusal: refusal.clone(),
+                    ..EvalResult::unknown()
+                }
+            }
+        })
+        .collect())
 }
 
 /// The array index a property name is, as JavaScript reads one: the canonical decimal form of an

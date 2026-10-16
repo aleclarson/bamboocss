@@ -40,10 +40,16 @@ Read values in style expressions as JavaScript does, where the build used Rust's
   read from such a value, or a rest pattern's object taken from it, compiled.
 - `Object.assign` onto `null` or `undefined` throws, and is no longer read as an object: a rule was written for what the
   call never returns.
-- A call is given the elements of an array it spreads, where the build knows them, and a parameter after a spread of an
-  unknown length is no longer read as `undefined`: a default stood in for it, and a choice on it was made.
+- A call is given the elements of an array it spreads where the build knows how many there are, each as it knows it, and
+  a parameter up to sixteen places after a spread of an unknown length is no longer read as `undefined`: a default stood
+  in for it, and a choice on it was made. What comes after such a spread is still read, so `Object.assign` still writes
+  the sources after it.
+- A rest parameter holding a value the call could not decide between is not known, where it was read without that value:
+  `(...styles) => Object.assign({}, ...styles)` and `(...xs) => xs[0]` compiled without its rules.
+- `css.raw` of more than one style object is read as their merge, for the rules each holds, and no longer as the first
+  of them, which compiled without the others.
 - An enum with a member the build cannot evaluate is still known by its other members: `E.A` beside `B = compute()`
-  compiles, and so does `'A' in` it.
+  compiles, and so does `'A' in` it. An enum exported from another module is read as one in the module itself is.
 - `join` writes a `null` element as nothing, as it does a hole: `[1, null, 2].join('-')` is `1--2`, not `1-null-2`.
 - A property the prototype has is no longer read as `undefined`: `o.toString` and `[].map` are not known, and neither is
   `'toString' in o`. A string read by index gives its character, unless a space comes at or before it, which may have

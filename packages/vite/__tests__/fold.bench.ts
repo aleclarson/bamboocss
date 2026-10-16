@@ -166,6 +166,28 @@ export const layered${index} = css(layer(theme, ${LAYERS}))
 ).join('')}
 `
 
+/**
+ * Helpers given their arguments by a spread, which nothing else here is: of an array the build knows,
+ * passed element by element, of a rest parameter passed on, and of a value it does not know, padded
+ * so no parameter after it is taken for `undefined`.
+ */
+const SPREAD_MODULE = `
+import { css } from 'styled-system/css'
+
+const box = (padding, margin, color) => ({ padding, margin, color })
+const merge = (...styles) => Object.assign({}, ...styles)
+const steps = ['1', '2', 'red.300']
+
+${Array.from(
+  { length: 12 },
+  (_, index) => `
+export const known${index} = css(box(...steps))
+export const merged${index} = css(merge({ padding: '${index % 4}' }, { color: '${TONES[index % 3]}' }))
+export const open${index} = (props) => css(box(...props.steps))
+`,
+).join('')}
+`
+
 const layered = (depth: number): string =>
   depth > 0 ? `{ '& > div': ${layered(depth - 1)}, padding: '2' }` : `{ color: 'blue.500' }`
 
@@ -269,6 +291,10 @@ describe('per-module transform cost', () => {
   // The control for the one below: the same styles, with no helper to call.
   bench('analyze only (helper module, written out)', () => {
     parseOnly(WRITTEN_OUT_MODULE)
+  })
+
+  bench('analyze only (spread arguments module)', () => {
+    parseOnly(SPREAD_MODULE)
   })
 
   bench('analyze only (helper module)', () => {

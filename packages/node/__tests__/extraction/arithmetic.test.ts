@@ -220,6 +220,25 @@ describe('`+` in a style value', () => {
     expect(css).toContain('--spacing-2')
   })
 
+  // Rules are written for every style object `css.raw` merges, and for every source `Object.assign`
+  // writes after a spread of an unknown length.
+  test.each([
+    [
+      '`css.raw` of several, through a helper',
+      "const sx = (...styles) => css.raw(...styles)\ncss(sx({ color: 'red.300' }, { margin: '2' }))",
+      ['--colors-red-300', '--spacing-2'],
+    ],
+    [
+      '`Object.assign` past a spread of an unknown length',
+      "export const A = (p) => css(Object.assign({}, ...p.l, { color: 'red.300' }))",
+      ['--colors-red-300'],
+    ],
+  ])('%s', (_, body, rules) => {
+    const { css } = extract(body)
+
+    for (const rule of rules) expect(css).toContain(rule)
+  })
+
   test('a string JavaScript reads as `NaN` is not read as a number', () => {
     // U+0085 is whitespace to Rust's `trim` and not to JavaScript, so `'\u00855' * 2` is `NaN`.
     expect(extract("css({ zIndex: '\\u00855' * 2 })").css).not.toContain('z-index')
