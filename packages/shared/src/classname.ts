@@ -78,10 +78,15 @@ export function createCssUncached(context: CreateCssContext) {
     return [...finalized, formatClassName(className)].join(':')
   }
 
-  /** The class for one declaration. */
+  /**
+   * The class for one declaration. Whether it is important is read off the value its name is
+   * made from: sanitizing writes each run of whitespace as one space, and the mark's whitespace
+   * may be any, so asking the value as written once named an important rule's class without `!`.
+   */
   const atomicName = (prop: string, value: any, conditions: string[]) => {
-    const important = isImportant(value)
-    const transformed = utility.transform(prop, withoutImportant(sanitize(value)))
+    const clean = sanitize(value)
+    const important = isImportant(clean)
+    const transformed = utility.transform(prop, withoutImportant(clean))
     const className = hashFn(conditions, transformed.className)
     return important ? `${className}!` : className
   }

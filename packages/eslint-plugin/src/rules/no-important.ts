@@ -11,6 +11,25 @@ import { type TSESTree } from '@typescript-eslint/utils'
 // lines in a template literal does not split the message.
 const keywordOf = (value: string) => (importantMark(value) ?? '!').replaceAll(/\s+/g, ' ')
 
+// The fix writes the value back as source, so it is escaped the way its literal reads: a string
+// literal for its quote, a template for its backtick and `${`. Written as the value reads, `"\"hi\"
+// !"` became `""hi""`, and `'a\\\\! !'` came back with an escape fewer and a mark again.
+const inString = (quote: string) => (value: string) =>
+  value.replaceAll(/[\\\n\r\u2028\u2029'"]/g, (character) => {
+    if (character === '\\') return '\\\\'
+    if (character === '\n') return '\\n'
+    if (character === '\r') return '\\r'
+    if (character === '\u2028') return '\\u2028'
+    if (character === '\u2029') return '\\u2029'
+    return character === quote ? `\\${character}` : character
+  })
+
+const inTemplate = (value: string) => value.replaceAll(/\\|`|\$\{/g, (match) => `\\${match}`)
+
+// A JSX attribute's string has no escapes, and an entity in it is read as its character, so the
+// value is written back only where its text is the value.
+const inAttribute = (text: string, value: string) => (fixed: string) => (text === value ? fixed : undefined)
+
 export const RULE_NAME = 'no-important'
 
 const rule = createRule({
@@ -59,31 +78,42 @@ const rule = createRule({
       return Boolean(result)
     }
 
-    // Unified function to handle reporting
-    const handleNodeValue = (node: TSESTree.Node, value: string) => {
+    // Unified function to handle reporting. `write` gives the source for the fixed value between
+    // the node's delimiters, or nothing where it cannot be written there.
+    const handleNodeValue = (node: TSESTree.Node, value: string, write: (fixed: string) => string | undefined) => {
       if (!value || !isImportant(value)) {
         return
       }
 
       // Every mark goes, as the build strips every one, and an escape hatch keeps its brackets.
-      const fixed = String(withoutImportant(value))
+      const fixed = write(String(withoutImportant(value)))
       const keyword = keywordOf(value)
 
       context.report({
         data: { keyword },
         messageId: 'important',
         node,
-        suggest: [
-          {
-            data: { keyword },
-            fix: (fixer) => {
-              return fixer.replaceTextRange(removeQuotes(node.range as [number, number]), fixed)
-            },
-            messageId: 'remove',
-          },
-        ],
+        suggest:
+          fixed === undefined
+            ? []
+            : [
+                {
+                  data: { keyword },
+                  fix: (fixer) => fixer.replaceTextRange(removeQuotes(node.range as [number, number]), fixed),
+                  messageId: 'remove',
+                },
+              ],
       })
     }
+
+    // A string literal's value, and how a fixed one is written back into it.
+    const literal = (node: TSESTree.Literal) => {
+      const value = node.value?.toString() ?? ''
+      return [value, inString(node.raw[0] ?? "'")] as const
+    }
+
+    // A template written with nothing interpolated: its value is what it cooks to, as the build reads it.
+    const template = (node: TSESTree.TemplateLiteral) => [node.quasis[0].value.cooked ?? '', inTemplate] as const
 
     return {
       // JSX Attributes
@@ -100,16 +130,14 @@ const rule = createRule({
 
         if (isLiteral(valueNode)) {
           const value = valueNode.value?.toString() ?? ''
-          handleNodeValue(valueNode, value)
+          handleNodeValue(valueNode, value, inAttribute(valueNode.raw.slice(1, -1), value))
         } else if (isJSXExpressionContainer(valueNode)) {
           const expr = valueNode.expression
 
           if (isLiteral(expr)) {
-            const value = expr.value?.toString() ?? ''
-            handleNodeValue(expr, value)
+            handleNodeValue(expr, ...literal(expr))
           } else if (isTemplateLiteral(expr) && expr.expressions.length === 0) {
-            const value = expr.quasis[0].value.raw
-            handleNodeValue(expr.quasis[0], value)
+            handleNodeValue(expr.quasis[0], ...template(expr))
           }
         }
       },
@@ -131,11 +159,9 @@ const rule = createRule({
         const valueNode = node.value
 
         if (isLiteral(valueNode)) {
-          const value = valueNode.value?.toString() ?? ''
-          handleNodeValue(valueNode, value)
+          handleNodeValue(valueNode, ...literal(valueNode))
         } else if (isTemplateLiteral(valueNode) && valueNode.expressions.length === 0) {
-          const value = valueNode.quasis[0].value.raw
-          handleNodeValue(valueNode.quasis[0], value)
+          handleNodeValue(valueNode.quasis[0], ...template(valueNode))
         }
       },
     }

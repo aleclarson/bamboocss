@@ -24,8 +24,15 @@ describe('important and space handling', () => {
       ['red !\timportant', true],
       ['red important', false],
       ['red !x important', false],
-      // The space inside a mark is CSS's: to the browser, `! important` is no mark.
-      ['red ! important', false],
+      // Any whitespace: the build writes each run of it as one space, so the browser reads a mark.
+      ['red !\u00a0important', true],
+      ['red !\u3000important', true],
+      // A comment is whitespace to CSS, after the mark or inside it; an unclosed one is not.
+      ['red !important /* c */', true],
+      ['red !/**/important', true],
+      ['red ! /* a */ /* b */ important', true],
+      ['red /* c */', false],
+      ['red !/*/important', false],
       // A `!` ending a string, a bracket or an escape is the value's, and ` important` a word after it.
       ['"a!" important', false],
       ['[a!] important', false],
@@ -38,10 +45,16 @@ describe('important and space handling', () => {
       ['[absolute!]', true],
       ['[red !important]', true],
       ['[a!b]', false],
+      ['[[a]!]', true],
+      // Brackets that are not the whole value are no escape hatch: line names around a track.
+      ['[a] [b!]', false],
+      ['[a] 1fr [b!]', false],
       // A mark ending a fallback candidate marks the declaration, as one after the call does.
       ['fallback(red !important, blue)', true],
       ['fallback(red, blue)!', true],
       ['fallback("a!", blue)', false],
+      // A candidate that is an escape hatch holding the mark, as `[a!]` alone is.
+      ['fallback([a!], b)', true],
       // Only a mark that ends the value is one: a `!` anywhere else is part of the value.
       ['a!b', false],
       ['"!"', false],
@@ -70,11 +83,27 @@ describe('important and space handling', () => {
       ['[red ! important]', '! important'],
       // The candidate that carries it, not a `!` in a later one.
       ['fallback("a" !important, "b!")', '!important'],
+      ['fallback([a!], b)', '!'],
+      // Without what follows it: the comment is not the mark.
+      ['red !important /* c */', '!important'],
       ['"!"', undefined],
       ['red', undefined],
     ])('%j -> %j', (value, expected) => {
       expect(importantMark(value)).toBe(expected)
     })
+  })
+
+  // The fold names a class from the value sanitized; the stylesheet's decoder reads a config's
+  // value as written. Both have to find the same mark, or a class names a rule that is not there.
+  test.each([
+    'red !\u00a0important',
+    'red !\u2028important',
+    'red\t!\u3000important',
+    'red  !  important',
+    'red ! important',
+  ])('reads %j as sanitizing it reads it', (value) => {
+    expect(isImportant(value)).toBe(isImportant(sanitize(value)))
+    expect(withoutImportant(value)).toBe(withoutImportant(sanitize(value)))
   })
 
   describe('withoutImportant', () => {
@@ -100,6 +129,18 @@ describe('important and space handling', () => {
       expect(withoutImportant('[absolute!]')).toBe('[absolute]')
       expect(withoutImportant('[red !important]')).toBe('[red]')
       expect(withoutImportant('[absolute!]!')).toBe('[absolute]')
+      expect(withoutImportant('fallback([a!], b)')).toBe('fallback([a], b)')
+    })
+
+    test('leaves a `!` in brackets that are not the whole value', () => {
+      expect(withoutImportant('[a] 1fr [b!]')).toBe('[a] 1fr [b!]')
+    })
+
+    test('strips a mark with a comment after it or inside it, and the comment with it', () => {
+      expect(withoutImportant('red !important /* c */')).toBe('red')
+      expect(withoutImportant('red !/**/important')).toBe('red')
+      // No mark: the comment is the value's.
+      expect(withoutImportant('red /* c */')).toBe('red /* c */')
     })
 
     test('strips a long run of marks', () => {

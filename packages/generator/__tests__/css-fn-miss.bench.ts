@@ -52,3 +52,28 @@ describe('grouped css() runtime, uncached', () => {
     MISS_BUDGET,
   )
 })
+
+/**
+ * The important path, per leaf on every miss: finding the mark, naming the class from the value
+ * without it, and splitting a fallback to look for one in each candidate. A plain value never
+ * reaches any of it, so the atomic case above cannot show a cost here.
+ */
+describe('important css() runtime, uncached', () => {
+  const css = buildCss()
+
+  bench(
+    `high-cardinality css() with a marked value x${ITERATIONS}`,
+    () => {
+      for (let i = 0; i < ITERATIONS; i++) css({ color: 'red !important', width: `${i}px` })
+    },
+    MISS_BUDGET,
+  )
+
+  bench(
+    `high-cardinality css() with a marked fallback x${ITERATIONS}`,
+    () => {
+      for (let i = 0; i < ITERATIONS; i++) css({ height: 'fallback(100dvh !important, 100vh)', width: `${i}px` })
+    },
+    MISS_BUDGET,
+  )
+})

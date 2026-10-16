@@ -192,8 +192,65 @@ eslintTester.run(RULE_NAME, rule, {
         },
       ],
     },
+
+    // The fix is written back as source, escaped the way the literal reads. Written as the value
+    // reads, the quotes inside came out bare and closed the string.
+    {
+      code: String.raw`import { css } from './bamboo/css';
+const styles = css({ content: "\"hi\" !" })`,
+      errors: [
+        {
+          messageId: 'important',
+          suggestions: [
+            {
+              messageId: 'remove',
+              output: String.raw`import { css } from './bamboo/css';
+const styles = css({ content: "\"hi\"" })`,
+            },
+          ],
+        },
+      ],
+    },
+
+    // An escaped `!` stays escaped: written as the value reads, `a\!` came back as `a!`, a mark.
+    {
+      code: String.raw`import { css } from './bamboo/css';
+const styles = css({ color: 'a\\! !' })`,
+      errors: [
+        {
+          messageId: 'important',
+          suggestions: [
+            {
+              messageId: 'remove',
+              output: String.raw`import { css } from './bamboo/css';
+const styles = css({ color: 'a\\!' })`,
+            },
+          ],
+        },
+      ],
+    },
+
+    // A template is read as it cooks, as the build reads it: `red\!` is `red!`, a mark.
+    {
+      code: "import { css } from './bamboo/css';\nconst styles = css({ color: `red\\!` })",
+      errors: [
+        {
+          messageId: 'important',
+          suggestions: [
+            {
+              messageId: 'remove',
+              output: "import { css } from './bamboo/css';\nconst styles = css({ color: `red` })",
+            },
+          ],
+        },
+      ],
+    },
   ],
   valid: [
+    // Cooked, `foo\\!` is `foo\!`, an escaped `!`; read raw, it was a mark after an escaped backslash.
+    {
+      code: "import { css } from './bamboo/css';\nconst styles = css({ color: `foo\\\\!` })",
+    },
     {
       code: multiline`
   import { css } from './bamboo/css';

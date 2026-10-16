@@ -2,6 +2,8 @@ import { FALLBACK_SEPARATOR, parseFallbackValue } from './fallback-value'
 
 const IMPORTANT = 'important'
 const BANG = 0x21
+const STAR = 0x2a
+const SLASH = 0x2f
 const BACKSLASH = 0x5c
 const OPEN_BRACKET = 0x5b
 const CLOSE_BRACKET = 0x5d
@@ -10,27 +12,39 @@ const whitespaceRegex = /\s/
 /**
  * Where the important mark ending `value` — read up to `end` — starts, or -1.
  *
- * A mark is a `!`, then optionally CSS whitespace and the keyword in any case, then only
- * whitespace. Only one that ends the value counts. Any `!` used to — the one in `content: '"!"'`,
- * in a quoted font name, in an SVG data URI's `<!--` — and it was cut out of the value as the
- * declaration was marked: `content: "" !important`.
+ * A mark is a `!`, then optionally whitespace and the keyword in any case, then only whitespace.
+ * Only one that ends the value counts. Any `!` used to — the one in `content: '"!"'`, in a quoted
+ * font name, in an SVG data URI's `<!--` — and it was cut out of the value as the declaration was
+ * marked: `content: "" !important`.
  *
- * The space inside a mark is CSS's. `red ! important` reaches the browser as an important
- * declaration whatever this says, so a class naming it as an ordinary one would be ordered, and
- * composed, as something it is not; `! important` is no mark to the browser, and is left
- * as written. Nor is an escaped `\!`, which is part of the identifier before it.
+ * Whitespace is any run of it, not only CSS's: the build writes each run as one space, so
+ * `red !\u00a0important` reaches the browser as `red ! important`, a mark. Read as CSS's alone,
+ * the class was named for an ordinary declaration and the rule for an important one. A comment
+ * is whitespace to CSS, before the keyword or after it. An escaped `\!` is no mark: it is part
+ * of the identifier before it.
  *
  * Read from the end, so finding one costs the whitespace around the keyword and its nine
  * characters, and stripping a run of them is linear however long the value is.
  */
 function markAt(value: string, end = value.length): number {
-  while (end > 0 && isWhitespace(value.charCodeAt(end - 1))) end--
+  end = beforeTrivia(value, end)
   if (end > 0 && value.charCodeAt(end - 1) === BANG) return isEscaped(value, end - 1) ? -1 : end - 1
   const keyword = end - IMPORTANT.length
   if (keyword <= 0 || !isKeyword(value, keyword)) return -1
-  let bang = keyword
-  while (bang > 0 && isCssWhitespace(value.charCodeAt(bang - 1))) bang--
+  const bang = beforeTrivia(value, keyword)
   return bang > 0 && value.charCodeAt(bang - 1) === BANG && !isEscaped(value, bang - 1) ? bang - 1 : -1
+}
+
+/** Where the whitespace and comments that end `value` before `end` begin. */
+function beforeTrivia(value: string, end: number): number {
+  for (;;) {
+    while (end > 0 && isWhitespace(value.charCodeAt(end - 1))) end--
+    // `/* … */`, whose opening `*` cannot be its closing one: `/*/` is no comment.
+    if (end < 4 || value.charCodeAt(end - 1) !== SLASH || value.charCodeAt(end - 2) !== STAR) return end
+    const open = value.lastIndexOf('/*', end - 4)
+    if (open === -1) return end
+    end = open
+  }
 }
 
 /** Whether the character at `at` follows an odd run of backslashes, which escapes it. */
@@ -38,11 +52,6 @@ function isEscaped(value: string, at: number): boolean {
   let backslashes = 0
   while (at - backslashes > 0 && value.charCodeAt(at - backslashes - 1) === BACKSLASH) backslashes++
   return backslashes % 2 === 1
-}
-
-/** CSS's whitespace: space, tab and the line breaks — not the wider set `trim` removes. */
-function isCssWhitespace(code: number): boolean {
-  return code === 0x20 || code === 0x09 || code === 0x0a || code === 0x0c || code === 0x0d
 }
 
 /** What `trim` removes: WhiteSpace and LineTerminator, the set `\s` matches. */
@@ -80,8 +89,9 @@ function stripMarks(value: string): string {
 /**
  * Whether `value` is an arbitrary value, `[absolute!]`, whose brackets hold the mark.
  *
- * The escape hatch keeps its contents as written, so the mark sits inside it. Expects a trimmed
- * value, which `stripMarks` returns.
+ * The escape hatch keeps its contents as written, so the mark sits inside it. Its brackets are
+ * the whole value: `[a] 1fr [b!]` is two line names and a track, and its `!` is no mark. Expects
+ * a trimmed value, which `stripMarks` returns.
  */
 function isMarkedArbitrary(value: string): boolean {
   const close = value.length - 1
@@ -89,8 +99,31 @@ function isMarkedArbitrary(value: string): boolean {
     close > 0 &&
     value.charCodeAt(0) === OPEN_BRACKET &&
     value.charCodeAt(close) === CLOSE_BRACKET &&
+    closingBracket(value) === close &&
     markAt(value, close) !== -1
   )
+}
+
+/** Where the bracket opening `value` closes, or -1. */
+function closingBracket(value: string): number {
+  let depth = 0
+  for (let index = 0; index < value.length; index++) {
+    const code = value.charCodeAt(index)
+    if (code === OPEN_BRACKET) depth++
+    else if (code === CLOSE_BRACKET && --depth === 0) return index
+  }
+  return -1
+}
+
+/** Whether a mark ends `value`, or an escape hatch that is the whole of it holds one. */
+function isMarked(value: string): boolean {
+  return markAt(value) !== -1 || isMarkedArbitrary(value.trim())
+}
+
+/** `value` without the marks that end it, nor the one inside an escape hatch that is all of it. */
+function unmarked(value: string): string {
+  const stripped = stripMarks(value)
+  return isMarkedArbitrary(stripped) ? `[${stripMarks(stripped.slice(1, -1))}]` : stripped
 }
 
 /**
@@ -104,7 +137,7 @@ function isMarkedArbitrary(value: string): boolean {
  */
 function markedFallback(value: string): string[] | undefined {
   const candidates = parseFallbackValue(value)
-  return candidates?.some((candidate) => markAt(candidate) !== -1) ? candidates : undefined
+  return candidates?.some(isMarked) ? candidates : undefined
 }
 
 // The four below run per style leaf on every `css()` cache miss, and for the values that
@@ -139,9 +172,7 @@ export function sanitize<T>(value: T): T {
 
 export function isImportant<T extends string | number | boolean>(value: T) {
   if (typeof value !== 'string' || !value.includes('!')) return false
-  if (markAt(value) !== -1) return true
-  const trimmed = value.trim()
-  return isMarkedArbitrary(trimmed) || markedFallback(trimmed) !== undefined
+  return isMarked(value) || markedFallback(value.trim()) !== undefined
 }
 
 /**
@@ -153,14 +184,19 @@ export function isImportant<T extends string | number | boolean>(value: T) {
 export function importantMark(value: string): string | undefined {
   if (!value.includes('!')) return undefined
   const trimmed = value.trim()
-  const at = markAt(trimmed)
-  if (at !== -1) return trimmed.slice(at)
-  if (isMarkedArbitrary(trimmed)) {
-    const close = trimmed.length - 1
-    return trimmed.slice(markAt(trimmed, close), close).trim()
-  }
-  const candidate = markedFallback(trimmed)?.find((candidate) => markAt(candidate) !== -1)
-  return candidate === undefined ? undefined : candidate.slice(markAt(candidate)).trim()
+  const own = markOf(trimmed)
+  if (own !== undefined) return own
+  const candidate = markedFallback(trimmed)?.find(isMarked)
+  return candidate === undefined ? undefined : markOf(candidate.trim())
+}
+
+/** The mark ending a trimmed `value`, or the one inside an escape hatch that is all of it. */
+function markOf(value: string): string | undefined {
+  const at = markAt(value)
+  if (at !== -1) return value.slice(at, beforeTrivia(value, value.length))
+  if (!isMarkedArbitrary(value)) return undefined
+  const close = value.length - 1
+  return value.slice(markAt(value, close), beforeTrivia(value, close)).trim()
 }
 
 // `string | T` is stated rather than inferred: `T` is a literal type at most call sites, and
@@ -174,7 +210,7 @@ export function withoutImportant<T extends string | number | boolean>(value: T):
   if (!stripped.includes('!')) return stripped
   if (isMarkedArbitrary(stripped)) return `[${stripMarks(stripped.slice(1, -1))}]`
   const candidates = markedFallback(stripped)
-  return candidates ? `fallback(${candidates.map(stripMarks).join(', ')})` : stripped
+  return candidates ? `fallback(${candidates.map(unmarked).join(', ')})` : stripped
 }
 
 export function withoutSpace<T extends string | number | boolean>(str: T): string | T {

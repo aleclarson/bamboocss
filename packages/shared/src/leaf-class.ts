@@ -56,10 +56,11 @@ export function leafClass(prefix: string, value: unknown): string | undefined {
 
 /** The full pipeline `createCss` runs, for a value that needs it. */
 function slowLeaf(prefix: string, value: string): string {
-  // Tested against the raw value, exactly where `createCss` tests it — before `sanitize`
-  // has collapsed the whitespace that `\s*!` is allowed to match.
-  const important = isImportant(value)
-  const className = `${prefix}${withoutSpace(withoutImportant(sanitize(value)))}`
+  // Tested against the sanitized value, exactly where `createCss` tests it, so the mark is read
+  // off the value the name is made from.
+  const clean = sanitize(value)
+  const important = isImportant(clean)
+  const className = `${prefix}${withoutSpace(withoutImportant(clean))}`
 
   return important ? `${className}!` : className
 }
