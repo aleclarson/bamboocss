@@ -33,6 +33,8 @@ describe('`+` in a style value', () => {
     // Two strings compare by code unit, not as numbers.
     ['two strings compare as strings', "css({ zIndex: '10' < '9' ? 1 : 2 })", { zIndex: 1 }, 'z-index: 1'],
     ['`length` is in an array', "css({ zIndex: 'length' in [1] ? 1 : 2 })", { zIndex: 1 }, 'z-index: 1'],
+    ['a `null` element is in an array', 'css({ zIndex: 0 in [null, 2] ? 1 : 2 })', { zIndex: 1 }, 'z-index: 1'],
+    ['a missing property is not in an object', "css({ zIndex: 'a' in {} ? 1 : 2 })", { zIndex: 2 }, 'z-index: 2'],
     // JavaScript trims U+FEFF from a string it converts, and not U+0085, below.
     ['a string trimmed as JavaScript trims it', "css({ zIndex: '\\ufeff5' * 2 })", { zIndex: 10 }, 'z-index: 10'],
   ])('%s', (_, body, data, declaration) => {
@@ -50,6 +52,20 @@ describe('`+` in a style value', () => {
   ])('%s on an array hole is not guessed', (_, body) => {
     // A hole is `undefined`, and `undefined + 1` is `NaN`: nothing a rule should be written for.
     expect(extract(body).css).not.toContain('z-index')
+  })
+
+  // Each is true or false at runtime, and not what the build would have said: both are written.
+  test.each([
+    ['`in` for what the prototype has', "css({ zIndex: 'toString' in {} ? 1 : 2 })"],
+    ['`in` for an array method', "css({ zIndex: 'map' in [1] ? 1 : 2 })"],
+    ['`in` for a hole', 'css({ zIndex: 0 in [, 2] ? 1 : 2 })'],
+    // Whitespace in a string literal is collapsed as it is read, and a tab orders before a space.
+    ['strings holding whitespace compared', "css({ zIndex: 'a\\tb' < 'a b' ? 1 : 2 })"],
+  ])('%s is left undecided', (_, body) => {
+    const { css } = extract(body)
+
+    expect(css).toContain('z-index: 1')
+    expect(css).toContain('z-index: 2')
   })
 
   test('a string JavaScript reads as `NaN` is not read as a number', () => {

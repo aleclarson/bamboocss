@@ -119,6 +119,12 @@ impl Partial {
         self.open = true;
         self.settled.clear();
     }
+
+    /// Whether every property is known and none holds an object known only in part, so there is
+    /// nothing to record.
+    fn is_empty(&self) -> bool {
+        !self.open && self.unsettled.is_empty() && self.children.is_empty()
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -1441,9 +1447,10 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                     output.push_str(raw);
                     if let Some(expression) = template.expressions.get(index) {
                         let value = self.evaluate(expression);
+                        let unsure = unsure_null(&value);
                         complete &= value.complete;
                         refusal = refusal.or(value.refusal);
-                        let Some(value) = value.value else {
+                        let Some(value) = value.value.filter(|_| !unsure) else {
                             return EvalResult {
                                 refusal,
                                 ..EvalResult::unknown()
@@ -1462,6 +1469,12 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 let mut conditions = Vec::new();
                 let mut complete = true;
                 let mut refusal = None;
+                // The elements that are not exactly what the array holds for them. A hole and an
+                // `undefined` element are held as `null`, as a `null` one is, and an element the
+                // build cannot evaluate as `null` in its place; a read of one of these is not
+                // sure of its value. After a spread of an unknown length nothing is where it is
+                // held, so the array is open.
+                let mut partial = Partial::default();
                 for element in &array.elements {
                     match element {
                         oxc_ast::ast::ArrayExpressionElement::SpreadElement(spread) => {
@@ -1470,12 +1483,42 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                             refusal = refusal.or(value.refusal);
                             conditions.extend(value.conditions);
                             if let Some(serde_json::Value::Array(values)) = value.value {
+                                if !partial.open {
+                                    let offset = output.len();
+                                    match &value.partial {
+                                        // Every element is exactly what it is held as.
+                                        None if value.complete => {}
+                                        None => {
+                                            for position in 0..values.len() {
+                                                let key = (offset + position).to_string();
+                                                partial.write(&key, false, None);
+                                            }
+                                        }
+                                        // A spread reads through the iterator, which turns a hole
+                                        // into `undefined`: held the same, and as unsure.
+                                        Some(spread) => {
+                                            for position in 0..values.len() {
+                                                let key = position.to_string();
+                                                let known = spread.knows(&key);
+                                                let child = spread.children.get(&key).cloned();
+                                                if !known || child.is_some() {
+                                                    let key = (offset + position).to_string();
+                                                    partial.write(&key, known, child);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
                                 output.extend(values);
                             } else {
                                 complete = false;
+                                partial.open();
                             }
                         }
                         oxc_ast::ast::ArrayExpressionElement::Elision(_) => {
+                            if !partial.open {
+                                partial.write(&output.len().to_string(), false, None);
+                            }
                             output.push(serde_json::Value::Null)
                         }
                         _ => {
@@ -1485,6 +1528,11 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                             complete &= value.complete;
                             refusal = refusal.or(value.refusal);
                             conditions.extend(value.conditions);
+                            // `undefined` is known, but held as `null` all the same.
+                            let exact = value.complete && value.value.is_some();
+                            if !partial.open && (!exact || value.partial.is_some()) {
+                                partial.write(&output.len().to_string(), exact, value.partial);
+                            }
                             output.push(value.value.unwrap_or(serde_json::Value::Null));
                         }
                     }
@@ -1494,7 +1542,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                     conditions,
                     complete,
                     refusal,
-                    partial: None,
+                    partial: (!partial.is_empty()).then(|| Arc::new(partial)),
                 }
             }
             Expression::ObjectExpression(object) => {
@@ -1538,6 +1586,13 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                                     false,
                                     value.partial.clone(),
                                 );
+                            } else if value.partial.is_some() {
+                                // Known, and known only in part inside: an array with a hole.
+                                partial.get_or_insert_default().write(
+                                    &key,
+                                    true,
+                                    value.partial.clone(),
+                                );
                             } else if let Some(known) = &mut partial {
                                 known.write(&key, true, None);
                             }
@@ -1561,9 +1616,14 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                                 // any other may have written anything.
                                 if !value.complete {
                                     partial.get_or_insert_default().open();
-                                } else if let Some(known) = &mut partial {
+                                } else if partial.is_some() || value.partial.is_some() {
+                                    let known = partial.get_or_insert_default();
                                     for key in values.keys() {
-                                        known.write(key, true, None);
+                                        let child = value
+                                            .partial
+                                            .as_ref()
+                                            .and_then(|spread| spread.children.get(key).cloned());
+                                        known.write(key, true, child);
                                     }
                                 }
                                 output.extend(values);
@@ -1579,7 +1639,9 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                     conditions,
                     complete,
                     refusal,
-                    partial: partial.filter(|_| !complete).map(Arc::new),
+                    partial: partial
+                        .filter(|partial| !complete || !partial.is_empty())
+                        .map(Arc::new),
                 }
             }
             Expression::Identifier(identifier) => {
@@ -1601,7 +1663,12 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             Expression::ComputedMemberExpression(member) => {
                 let object = self.evaluate(&member.object);
                 let property = self.evaluate(&member.expression);
-                let Some(property) = property.value.map(|value| to_js_string(&value)) else {
+                let property = if unsure_null(&property) {
+                    None
+                } else {
+                    property.value
+                };
+                let Some(property) = property.map(|value| to_js_string(&value)) else {
                     return EvalResult::unknown();
                 };
                 member_value(object, &property)
@@ -1737,11 +1804,13 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         let property = match key {
             MemberKey::Static(name) => name.to_string(),
             MemberKey::Computed(expression) => {
-                match self
-                    .evaluate(expression)
-                    .value
-                    .map(|value| to_js_string(&value))
-                {
+                let property = self.evaluate(expression);
+                let property = if unsure_null(&property) {
+                    None
+                } else {
+                    property.value
+                };
+                match property.map(|value| to_js_string(&value)) {
                     Some(property) => property,
                     None => return ChainLink::value(EvalResult::unknown()),
                 }
@@ -2030,6 +2099,12 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         {
             return EvalResult::known(!truthy);
         }
+        if unsure_null(&result) {
+            return EvalResult {
+                refusal: result.refusal,
+                ..EvalResult::unknown()
+            };
+        }
         let Some(value) = result.value else {
             return EvalResult {
                 refusal: result.refusal,
@@ -2080,8 +2155,15 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         left: EvalResult,
         right: EvalResult,
     ) -> EvalResult {
+        if unsure_null(&left) || unsure_null(&right) {
+            return EvalResult {
+                refusal: left.refusal.or(right.refusal),
+                ..EvalResult::unknown()
+            };
+        }
         let complete = left.complete && right.complete;
         let refusal = left.refusal.or(right.refusal);
+        let receiver = right.partial;
         let (Some(left), Some(right)) = (left.value, right.value) else {
             return EvalResult {
                 refusal,
@@ -2118,22 +2200,29 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             BinaryOperator::ShiftRightZeroFill => {
                 integer_binary(&left, &right, |a, b| ((a as u32) >> shift_count(b)).into())
             }
-            BinaryOperator::In => match right {
-                serde_json::Value::Object(ref object) => {
-                    Some(object.contains_key(&to_js_string(&left)).into())
-                }
-                // A hole is no property at all, so `0 in [, 2]` is false; it is held as `null`,
-                // like a `null` element, which is one.
-                serde_json::Value::Array(ref array) => {
-                    let key = to_js_string(&left);
-                    match array_index(&key).map(|index| array.get(index)) {
-                        Some(Some(serde_json::Value::Null)) => None,
-                        Some(element) => Some(element.is_some().into()),
-                        None => Some((key == "length").into()),
+            // An own property is there; one the prototype has is too, which is not guessed.
+            BinaryOperator::In => {
+                let key = to_js_string(&left);
+                match right {
+                    serde_json::Value::Object(ref object) if object.contains_key(&key) => {
+                        Some(true.into())
                     }
+                    serde_json::Value::Object(_) if !OBJECT_PROTOTYPE.contains(&key.as_str()) => {
+                        Some(false.into())
+                    }
+                    // A hole is no property at all, so `0 in [, 2]` is false, and it is held as
+                    // `null`, like a `null` element, which is one.
+                    serde_json::Value::Array(ref array) => match array_index(&key) {
+                        Some(index) if receiver.as_ref().is_none_or(|known| known.knows(&key)) => {
+                            Some((index < array.len()).into())
+                        }
+                        _ if key == "length" => Some(true.into()),
+                        None if !may_be_inherited(&key) => Some(false.into()),
+                        _ => None,
+                    },
+                    _ => None,
                 }
-                _ => None,
-            },
+            }
             BinaryOperator::Instanceof => None,
         };
         match value {
@@ -2214,7 +2303,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                     value: Some(
                         values
                             .iter()
-                            .map(to_js_string)
+                            .map(joined)
                             .collect::<Vec<_>>()
                             .join(&separator)
                             .into(),
@@ -2731,8 +2820,15 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             BindingPattern::AssignmentPattern(pattern) => {
                 let value = if value.value.is_none() && value.complete {
                     self.evaluate(&pattern.right)
-                } else {
+                } else if value.complete {
                     value
+                } else {
+                    // The default stands in for `undefined`, and a value not known — a hole held
+                    // as `null` among them — does not say whether it is.
+                    EvalResult {
+                        refusal: value.refusal,
+                        ..EvalResult::unknown()
+                    }
                 };
                 self.bind_pattern(&pattern.left, value);
             }
@@ -2780,14 +2876,26 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 }
                 if let Some(rest) = &pattern.rest {
                     let mut remainder = value;
+                    let skipped = pattern.elements.len();
                     remainder.value = match remainder.value {
-                        Some(serde_json::Value::Array(array)) => Some(
-                            array
-                                .into_iter()
-                                .skip(pattern.elements.len())
-                                .collect::<Vec<_>>()
-                                .into(),
-                        ),
+                        Some(serde_json::Value::Array(array)) => {
+                            // What is not known of the elements the rest takes, where they land.
+                            remainder.partial = remainder.partial.take().and_then(|known| {
+                                let mut rest = Partial::default();
+                                for position in 0..array.len().saturating_sub(skipped) {
+                                    let key = (position + skipped).to_string();
+                                    let child = known.children.get(&key).cloned();
+                                    if !known.knows(&key) || child.is_some() {
+                                        rest.write(&position.to_string(), known.knows(&key), child);
+                                    }
+                                }
+                                if known.open {
+                                    rest.open();
+                                }
+                                (!rest.is_empty()).then(|| Arc::new(rest))
+                            });
+                            Some(array.into_iter().skip(skipped).collect::<Vec<_>>().into())
+                        }
                         _ => None,
                     };
                     if remainder.value.is_none() {
@@ -3107,38 +3215,77 @@ fn member_value(mut result: EvalResult, property: &str) -> EvalResult {
             result.refusal = None;
         }
     }
-    result.value = match result.value {
-        Some(serde_json::Value::Object(object)) => object.get(property).cloned(),
-        Some(serde_json::Value::Array(array)) => {
-            if property == "length" {
-                Some(array.len().into())
-            } else {
-                match array_index(property).and_then(|index| array.get(index)) {
-                    // A hole and an `undefined` element are held as `null`, like a `null` one,
-                    // and the three are not the same value: `undefined` writes `undefined`,
-                    // converts to `NaN` and takes a destructuring default, where `null` writes
-                    // `null`, converts to 0 and does not. So `[, 2][0] - 1` compiled to
-                    // `z_-1`. Which one an element is cannot be told here, so it is not
-                    // guessed.
-                    Some(serde_json::Value::Null) => {
-                        result.complete = false;
-                        None
-                    }
-                    element => element.cloned(),
-                }
-            }
+    // What the receiver holds under `property`, and whether, holding nothing, it is known to have
+    // nothing there: a missing property on a known object is JavaScript's known `undefined`, but
+    // one its prototype has — `toString`, an array's `map` — is not, and is not guessed.
+    let (value, absent) = match result.value {
+        Some(serde_json::Value::Object(object)) => match object.get(property) {
+            Some(value) => (Some(value.clone()), false),
+            None => (None, !OBJECT_PROTOTYPE.contains(&property)),
+        },
+        Some(serde_json::Value::Array(array)) if property == "length" => {
+            (Some(array.len().into()), false)
         }
+        // A hole is held as `null`, and the array's `partial` says it is not known.
+        Some(serde_json::Value::Array(array)) => match array_index(property) {
+            Some(index) => (array.get(index).cloned(), true),
+            None => (None, !may_be_inherited(property)),
+        },
         Some(serde_json::Value::String(value)) if property == "length" => {
-            Some(value.encode_utf16().count().into())
+            (Some(value.encode_utf16().count().into()), false)
         }
-        _ => None,
+        // A string's index reads its UTF-16 code unit; half a surrogate pair has no `String`.
+        Some(serde_json::Value::String(value)) => match array_index(property) {
+            Some(index) => match value.encode_utf16().nth(index) {
+                Some(unit) => (
+                    char::from_u32(u32::from(unit)).map(|unit| unit.to_string().into()),
+                    false,
+                ),
+                None => (None, true),
+            },
+            None => (None, !may_be_inherited(property)),
+        },
+        _ => (None, false),
     };
-    // A missing property on a known value is JavaScript's known `undefined`; only a member of
-    // an unknown receiver remains unresolved.
-    if result.value.is_none() && !object_was_known {
+    result.value = value;
+    if result.value.is_none() && !(absent && object_was_known) {
         result.complete = false;
     }
     result
+}
+
+/// What every object has from `Object.prototype`, so a read or an `in` of one is not a missing
+/// property's `undefined` or `false`.
+const OBJECT_PROTOTYPE: &[&str] = &[
+    "constructor",
+    "hasOwnProperty",
+    "isPrototypeOf",
+    "propertyIsEnumerable",
+    "toLocaleString",
+    "toString",
+    "valueOf",
+    "__proto__",
+    "__defineGetter__",
+    "__defineSetter__",
+    "__lookupGetter__",
+    "__lookupSetter__",
+];
+
+/// Whether an array or a string may have `property` from its prototype. Every name one has there is
+/// an identifier, so `'01'` and `'-1'` are known to be missing, and `map` is not.
+fn may_be_inherited(property: &str) -> bool {
+    property
+        .chars()
+        .next()
+        .is_some_and(|first| first.is_ascii_alphabetic() || first == '_' || first == '$')
+}
+
+/// A `null` the build is not sure of: a hole or an `undefined` element held as one, or an element
+/// it could not evaluate. It is nullish and falsy whichever it is, so it decides `??`, `||` and
+/// a test; it converts as neither, since `null` is 0 and `"null"` where `undefined` is `NaN` and
+/// `"undefined"`.
+fn unsure_null(result: &EvalResult) -> bool {
+    !result.complete && matches!(result.value, Some(serde_json::Value::Null))
 }
 
 fn module_name<'a>(name: &'a ModuleExportName<'a>) -> &'a str {
@@ -3283,6 +3430,16 @@ fn normalize_whitespace(value: &str) -> String {
     output
 }
 
+/// An element as `Array.prototype.join` writes it: a `null` or `undefined` one — and a hole, which
+/// the array evaluator holds as `null` — as nothing. `[1, , 2].join('-')` is `1--2`.
+fn joined(value: &serde_json::Value) -> String {
+    if value.is_null() {
+        String::new()
+    } else {
+        to_js_string(value)
+    }
+}
+
 fn truthy(value: &serde_json::Value) -> bool {
     match value {
         serde_json::Value::Null => false,
@@ -3301,19 +3458,7 @@ fn to_js_string(value: &serde_json::Value) -> String {
         serde_json::Value::Bool(value) => value.to_string(),
         serde_json::Value::Number(value) => js_number_string(value.as_f64().unwrap_or(f64::NAN)),
         serde_json::Value::String(value) => value.clone(),
-        // `Array.prototype.join`, which writes a `null` or `undefined` element — and a hole,
-        // which the array evaluator stores as `null` — as nothing.
-        serde_json::Value::Array(values) => values
-            .iter()
-            .map(|value| {
-                if value.is_null() {
-                    String::new()
-                } else {
-                    to_js_string(value)
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(","),
+        serde_json::Value::Array(values) => values.iter().map(joined).collect::<Vec<_>>().join(","),
         serde_json::Value::Object(_) => "[object Object]".to_string(),
     }
 }
@@ -3463,6 +3608,11 @@ fn compare_binary(
     operation: impl FnOnce(f64, f64) -> bool,
 ) -> Option<serde_json::Value> {
     if let (serde_json::Value::String(left), serde_json::Value::String(right)) = (left, right) {
+        // A string literal's whitespace is collapsed to one space as it is read, so a space may
+        // have been a tab, an NBSP or a run of them, which order differently.
+        if left.contains(' ') || right.contains(' ') {
+            return None;
+        }
         let order = left.encode_utf16().cmp(right.encode_utf16()) as i8;
         return Some(operation(f64::from(order), 0.0).into());
     }

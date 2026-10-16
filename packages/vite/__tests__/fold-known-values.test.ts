@@ -217,6 +217,47 @@ describe('arithmetic', () => {
   })
 })
 
+/**
+ * An element read by index. A hole and an `undefined` element are held as `null`, as a `null` one
+ * is, so a read of one is known to be nullish without being known to be either: enough to decide
+ * `??`, `||` and a test, where the two agree, and not to convert, where `null` is 0 and `"null"`
+ * and `undefined` is `NaN` and `"undefined"` — below.
+ */
+describe('an array element', () => {
+  test.each([
+    ['a hole decides `??`', 'const z = [, 2]\nexport const A = css({ zIndex: z[0] ?? 1 })', 'z_1'],
+    ['a hole decides `||`', 'const z = [, 2]\nexport const A = css({ zIndex: z[0] || 1 })', 'z_1'],
+    ['a hole decides a test', 'const z = [, 2]\nexport const A = css({ zIndex: z[0] ? 1 : 2 })', 'z_2'],
+    [
+      'a hole in a nested array',
+      'const theme = { z: [, 2] }\nexport const A = css({ zIndex: theme.z[0] ?? 3 })',
+      'z_3',
+    ],
+    [
+      'a `null` element',
+      "const t = ['red.300', null]\nexport const A = css({ color: t[1] ?? 'blue.300' })",
+      'c_blue.300',
+    ],
+    [
+      'a `null` element written out',
+      'const z = [null, 2]\nexport const A = css({ gridArea: `${z[0]}x` })',
+      'grid-area_nullx',
+    ],
+    ['an element beside a hole', 'const theme = { z: [, 2] }\nexport const A = css({ zIndex: theme.z[1] })', 'z_2'],
+    [
+      'an element a rest takes beside a hole',
+      'const [, ...r] = [1, , 3]\nexport const A = css({ zIndex: r[1] })',
+      'z_3',
+    ],
+    ['holes joined', "const a = [1, , 2]\nexport const A = css({ gridArea: a.join('-') })", 'grid-area_1--2'],
+    ['the length of an array with a hole', 'const a = [, 2]\nexport const A = css({ zIndex: a.length })', 'z_2'],
+    ['a string by index', "export const A = css({ gridArea: 'abc'[1] })", 'grid-area_b'],
+    ['a string past its end', "export const A = css({ gridArea: 'abc'[5] ?? 'z' })", 'grid-area_z'],
+  ])('%s', (_, body, className) => {
+    expect(foldOf(withImport(body))).toMatchObject({ classes: [className], skipped: [] })
+  })
+})
+
 describe('what is still not known', () => {
   test.each([
     [
@@ -257,8 +298,22 @@ describe('what is still not known', () => {
     ['`-` on an array hole', `const z = [, 2]\nexport const A = css({ zIndex: z[0] - 1 })`],
     ['`-` on an `undefined` element', `const z = [undefined, 2]\nexport const A = css({ zIndex: z[0] - 1 })`],
     ['an array hole in a template literal', 'const z = [, 2]\nexport const A = css({ gridArea: `${z[0]}x` })'],
-    // Held as `null` like a hole, so a `null` element cannot be told from one either.
-    ['a `null` element in a template literal', 'const z = [null, 2]\nexport const A = css({ gridArea: `${z[0]}x` })'],
+    [
+      'a hole in a nested array converted',
+      'const theme = { z: [, 2] }\nexport const A = css({ zIndex: theme.z[0] - 1 })',
+    ],
+    ['a hole spread into an array', 'const z = [...[, 2]]\nexport const A = css({ zIndex: z[0] - 1 })'],
+    ['a hole a rest element takes', 'const [, ...r] = [1, , 3]\nexport const A = css({ zIndex: r[0] - 1 })'],
+    // A default stands in for `undefined`, and a hole read as `null` does not say it is one.
+    ['a destructuring default on a hole', 'const [a = 1] = [, 2]\nexport const A = css({ zIndex: a ?? 3 })'],
+    [
+      'an element after a spread the build cannot evaluate',
+      'const a = [...compute(), 2]\nexport const A = css({ zIndex: a[1] ?? 5 })',
+    ],
+    ['an element written later', 'const a = [1, 2]\na[0] = 5\nexport const A = css({ zIndex: a[0] ?? 1 })'],
+    // A missing property is `undefined` unless the prototype has it.
+    ['a property every object has', 'const o = {}\nexport const A = css({ zIndex: o.toString ? 1 : 2 })'],
+    ['an array method', 'const s = [1, 2]\nexport const A = css({ zIndex: s.includes ? 1 : 2 })'],
     // The audit does not walk an operator's operands; the evaluator refuses these itself.
     ['`+` on a binding written later', `let base = 10\nbase = 20\nexport const A = css({ zIndex: base + 1 })`],
     ['`*` on a binding written later', `let base = 10\nbase = 20\nexport const A = css({ zIndex: base * 2 })`],
