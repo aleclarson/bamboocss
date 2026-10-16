@@ -1884,11 +1884,11 @@ const runPartialEnvironmentWatchRebuild = async (
 /**
  * Build the client first, as a framework does, then rebuild it alone, then SSR alone.
  *
- * The client's sheet is pruned against the client and finalized once SSR has written, with SSR's
- * class restored. Rolldown hands each watch generation of an output the same options, and the loss
- * history kept under them carried that first pruning on into the client's rebuild: the SSR rebuild
- * after it, compiling the class it always had, failed naming it as pruned, though the sheet holds
- * its rule.
+ * The client's sheet is pruned against the client, then pruned again with SSR's class restored
+ * once SSR's build reaches its output, before it writes. Rolldown hands each watch generation of
+ * an output the same options, and the loss history kept under them carried that first pruning on
+ * into the client's rebuild: the SSR rebuild after it, compiling the class it always had, failed
+ * naming it, and the class the client's edit restored, as pruned, though the sheet holds both.
  */
 const runClientFirstWatchRebuild = async (
   create: (config: Record<string, unknown>) => Promise<unknown>,
@@ -1901,6 +1901,9 @@ const runClientFirstWatchRebuild = async (
   const clientOutDir = join(cwd, `__client-first-client-${label}-out`)
   const ssrOutDir = join(cwd, `__client-first-ssr-${label}-out`)
   const calls = { client: 0, ssr: 0 }
+  // What a run stopped before its `finally` left would be read as this one's.
+  rmSync(clientOutDir, { force: true, recursive: true })
+  rmSync(ssrOutDir, { force: true, recursive: true })
 
   const environmentSource: VitePlugin = {
     name: `bamboocss:test-client-first-source-${label}`,
@@ -1984,7 +1987,9 @@ const runClientFirstWatchRebuild = async (
     expect(firstCss).toContain(`.${esc(`w_[${widths.client}]`)}`)
     expect(firstCss).not.toContain(widths.edited)
 
-    // The client alone, now compiling the class its first sheet pruned.
+    // The client alone, now compiling the class its first sheet pruned. Its sheet is written under
+    // a name of its own, beside the first, so only what the rebuild writes is read.
+    rmSync(clientOutDir, { force: true, recursive: true })
     const rebuiltClient = watchCycleUntil(
       clientWatcher,
       () => readOutputFiles(clientOutDir, '.css').includes(widths.edited),

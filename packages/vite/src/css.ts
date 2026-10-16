@@ -250,8 +250,9 @@ const chunkOwnership = (bundle: object, environment: string, session: StaticComp
  *
  * So while environments remain, the sheet is pruned against what the run knows so far and
  * written under a name hashed from those bytes, and it is recorded as deferred with its unpruned
- * source. When the last environment writes its output, `bamboocss:output-write-observer` prunes
- * that source again against the union of every environment's reachability. Usually the result is
+ * source. When the last environment reaches its output — in its output hook, before it writes, or
+ * else as it writes (`bamboocss:output-write-observer`) — that source is pruned again against the
+ * union of every environment's reachability. Usually the result is
  * the bytes already on disk, and nothing moves. When a later environment restored a rule, the
  * final bytes go under a new name, every written reference moves with them, and so does any copy
  * of the provisional sheet another output carries. A single-environment build, a run whose
