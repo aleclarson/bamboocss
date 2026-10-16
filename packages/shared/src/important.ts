@@ -9,6 +9,8 @@ const STAR = 0x2a
 const SLASH = 0x2f
 const BACKSLASH = 0x5c
 const OPEN_BRACKET = 0x5b
+const OPEN_PAREN = 0x28
+const CLOSE_PAREN = 0x29
 const whitespaceRegex = /\s/
 
 /**
@@ -42,43 +44,106 @@ function beforeTrivia(value: string, end: number): number {
   for (;;) {
     while (end > 0 && isTrivia(value.charCodeAt(end - 1))) end--
     if (end < 4 || value.charCodeAt(end - 1) !== SLASH || value.charCodeAt(end - 2) !== STAR) return end
-    const open = commentEndingAt(value, end)
-    if (open === -1) return end
+    const open = commentsOf(value).get(end)
+    if (open === undefined) return end
     end = open
   }
 }
 
+let commentsFor: string | undefined
+let comments = new Map<number, number>()
+
 /**
- * Where the comment ending at `end` opens, or -1.
- *
- * CSS's comments do not nest, and a `/*` in a string opens none, so it is found from the start of
- * the value. A comment holding a second `/*` and a `!` before it is one comment, whose `!` is no
- * mark; looking back for the nearest `/*` cut it in two, stripped the `!` as a mark and left the
- * comment unclosed, swallowing the rules after it.
+ * The comments in `value`, by where each ends, to where it opens. Found once for a value — a run
+ * of marks each with a comment after it is stripped one mark at a time, and looking for each
+ * comment from the start again made that quadratic.
  */
-function commentEndingAt(value: string, end: number): number {
+function commentsOf(value: string): Map<number, number> {
+  if (value !== commentsFor) {
+    commentsFor = value
+    comments = findComments(value)
+  }
+  return comments
+}
+
+/**
+ * Where each comment in `value` ends, and where it opens: CSS's comments, read as its tokenizer
+ * reads them, in one pass from the start.
+ *
+ * They do not nest, and a `/*` in a string or an unquoted `url()` opens none. A comment holding a
+ * second `/*` and a `!` before it is one comment, whose `!` is no mark; looking back for the
+ * nearest `/*` cut it in two, stripped the `!` as a mark and left the comment unclosed, swallowing
+ * the rules after it.
+ */
+function findComments(value: string): Map<number, number> {
+  const found = new Map<number, number>()
   let index = 0
-  while (index < end) {
+  while (index < value.length) {
     const code = value.charCodeAt(index)
     if (code === BACKSLASH) {
       index += 2
     } else if (code === QUOTE || code === APOSTROPHE) {
-      index++
-      while (index < value.length && value.charCodeAt(index) !== code) {
-        index += value.charCodeAt(index) === BACKSLASH ? 2 : 1
-      }
-      index++
+      index = afterString(value, index)
     } else if (code === SLASH && value.charCodeAt(index + 1) === STAR) {
       // Its opening `*` is not its closing one: `/*/` is no comment.
       const close = value.indexOf('*/', index + 2)
-      if (close === -1) return -1
-      if (close + 2 === end) return index
+      if (close === -1) break
+      found.set(close + 2, index)
       index = close + 2
+    } else if (isUrlStart(value, index)) {
+      index = afterUrl(value, index + 4)
     } else {
       index++
     }
   }
-  return -1
+  return found
+}
+
+/** Past the string opening at `start`, to its closing quote or the end of the value. */
+function afterString(value: string, start: number): number {
+  const quote = value.charCodeAt(start)
+  let index = start + 1
+  while (index < value.length && value.charCodeAt(index) !== quote) {
+    index += value.charCodeAt(index) === BACKSLASH ? 2 : 1
+  }
+  return index + 1
+}
+
+/** Whether `url(` starts at `at`, as a function name, in any case. */
+function isUrlStart(value: string, at: number): boolean {
+  return (
+    value.charCodeAt(at + 3) === OPEN_PAREN &&
+    (value.charCodeAt(at) | 0x20) === 0x75 &&
+    (value.charCodeAt(at + 1) | 0x20) === 0x72 &&
+    (value.charCodeAt(at + 2) | 0x20) === 0x6c &&
+    (at === 0 || !isNameCode(value.charCodeAt(at - 1)))
+  )
+}
+
+/**
+ * Past a `url(` whose contents start at `start`: quoted, a string the scan reads on; unquoted, a
+ * token to its unescaped `)`, holding whatever it holds, `/*` included.
+ */
+function afterUrl(value: string, start: number): number {
+  let index = start
+  while (index < value.length && isTrivia(value.charCodeAt(index))) index++
+  const code = value.charCodeAt(index)
+  if (code === QUOTE || code === APOSTROPHE) return index
+  while (index < value.length && value.charCodeAt(index) !== CLOSE_PAREN) {
+    index += value.charCodeAt(index) === BACKSLASH ? 2 : 1
+  }
+  return index + 1
+}
+
+/** A character an identifier may hold: so `myurl(` is not `url(`. */
+function isNameCode(code: number): boolean {
+  return (
+    code === 0x2d ||
+    code === 0x5f ||
+    (code >= 0x30 && code <= 0x39) ||
+    ((code | 0x20) >= 0x61 && (code | 0x20) <= 0x7a) ||
+    code >= 0x80
+  )
 }
 
 /** What the build writes as one space, or as nothing: whitespace, and NUL. */
@@ -130,16 +195,14 @@ function stripMarks(value: string): string {
  * `undefined`.
  *
  * The escape hatch keeps its contents as written, so the mark sits inside it. Its brackets are the
- * whole value, as `getArbitraryValue` reads one, up to the whitespace and comments ending it:
+ * whole value, as `getArbitraryValue` reads one when it unwraps the value for the stylesheet:
  * `[a] 1fr [b!]` is two line names and a track, and its `!` is no mark. Expects a trimmed value,
  * which `stripMarks` returns.
  */
 function markedHatch(value: string): string | undefined {
   if (value.charCodeAt(0) !== OPEN_BRACKET) return undefined
-  const end = beforeTrivia(value, value.length)
-  const whole = end === value.length ? value : value.slice(0, end)
-  const inside = getArbitraryValue(whole)
-  return inside !== whole && markAt(inside) !== -1 ? inside : undefined
+  const inside = getArbitraryValue(value)
+  return inside !== value && markAt(inside) !== -1 ? inside : undefined
 }
 
 /** Whether a mark ends `value`, or an escape hatch that is the whole of it holds one. */
@@ -200,7 +263,16 @@ export function sanitize<T>(value: T): T {
 
 export function isImportant<T extends string | number | boolean>(value: T) {
   if (typeof value !== 'string' || !value.includes('!')) return false
-  return isMarked(value) || markedFallback(value.trim()) !== undefined
+  const text = withoutNul(value)
+  return isMarked(text) || markedFallback(text.trim()) !== undefined
+}
+
+/**
+ * `value` without NUL, as `sanitize` leaves it: the class is named from the value sanitized and
+ * the stylesheet's rule from the value as written, and both have to find the same mark.
+ */
+function withoutNul(value: string): string {
+  return value.includes(FALLBACK_SEPARATOR) ? value.replaceAll(FALLBACK_SEPARATOR, '') : value
 }
 
 /**
@@ -211,7 +283,7 @@ export function isImportant<T extends string | number | boolean>(value: T) {
  */
 export function importantMark(value: string): string | undefined {
   if (!value.includes('!')) return undefined
-  const trimmed = value.trim()
+  const trimmed = withoutNul(value).trim()
   const own = markOf(trimmed)
   if (own !== undefined) return own
   const candidate = markedFallback(trimmed)?.find(isMarked)
@@ -231,7 +303,7 @@ function markOf(value: string): string | undefined {
 export function withoutImportant<T extends string | number | boolean>(value: T): string | T {
   if (typeof value !== 'string') return value
   if (!value.includes('!')) return value.trim()
-  const stripped = stripMarks(value)
+  const stripped = stripMarks(withoutNul(value))
   // The common case, `red !important`: nothing left that a bracket or a candidate could hold.
   if (!stripped.includes('!')) return stripped
   const inside = markedHatch(stripped)

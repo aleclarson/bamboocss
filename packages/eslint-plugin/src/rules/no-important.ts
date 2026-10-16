@@ -14,13 +14,16 @@ const keywordOf = (value: string) => (importantMark(value) ?? '!').replaceAll(/\
 // The fix writes the value back as source, so it is escaped the way its literal reads: a string
 // literal for its quote, a template for its backtick and `${`. Written as the value reads, `"\"hi\"
 // !"` became `""hi""`, and `'a\\\\! !'` came back with an escape fewer and a mark again.
-// Half a surrogate pair cannot be written to a UTF-8 file, so it goes as an escape, as does a line
+// Half a surrogate pair cannot be written to a UTF-8 file, so it goes as an escape, as does a
+// control character, which makes the file look binary to git and to editors, and a line
 // separator, which would read back as written but not as obviously.
 const codeUnit = (character: string) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`
 
 const inString = (quote: string) => (value: string) =>
   value.replaceAll(
-    /[\\\n\r\u2028\u2029'"]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,
+    // The control characters are what it is for.
+    // eslint-disable-next-line no-control-regex
+    /[\\\n\r\u2028\u2029'"\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,
     (character) => {
       if (character === '\\') return '\\\\'
       if (character === '\n') return '\\n'
@@ -32,10 +35,14 @@ const inString = (quote: string) => (value: string) =>
 
 // A raw CR in a template reads back as LF, so it is written as an escape too.
 const inTemplate = (value: string) =>
-  value.replaceAll(/\\|`|\$\{|\r|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, (match) => {
-    if (match === '\r') return '\\r'
-    return match.length === 1 && match >= '\uD800' && match <= '\uDFFF' ? codeUnit(match) : `\\${match}`
-  })
+  value.replaceAll(
+    // eslint-disable-next-line no-control-regex
+    /\\|`|\$\{|\r|[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,
+    (match) => {
+      if (match === '\r') return '\\r'
+      return match === '\\' || match === '`' || match === '${' ? `\\${match}` : codeUnit(match)
+    },
+  )
 
 // A JSX attribute's string has no escapes, and an entity in it is read as its character, so the
 // value is written back only where its text is the value.

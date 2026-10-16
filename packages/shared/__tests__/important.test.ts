@@ -37,6 +37,13 @@ describe('important and space handling', () => {
       ['red /* wow! /* x */', false],
       ['red !important /* a /* b */', true],
       ['"!/*" */', false],
+      // An unquoted `url()` is one token, holding whatever it holds, `/*` included.
+      ['url(/*) !important /* x */', true],
+      ["url('/*') !important /* x */", true],
+      ['myurl(/*) !important /* x */', false],
+      // NUL goes wherever it is, as `sanitize` removes it.
+      ['\u0000[a!]', true],
+      ['fallback(\u0000[a!], b)', true],
       // NUL is removed with the whitespace by `sanitize`, so it is read as whitespace here.
       ['red !\u0000important', true],
       ['red !important\u0000', true],
@@ -56,9 +63,9 @@ describe('important and space handling', () => {
       // Brackets that are not the whole value are no escape hatch: line names around a track.
       ['[a] [b!]', false],
       ['[a] 1fr [b!]', false],
-      // Up to the whitespace and comments ending it.
-      ['[a!] /* x */', true],
-      ['fallback([a!] /* c */, b)', true],
+      // The whole value, as the stylesheet unwraps one: with a comment after it, no escape hatch.
+      ['[a!] /* x */', false],
+      ['fallback([a!] /* c */, b)', false],
       // A mark ending a fallback candidate marks the declaration, as one after the call does.
       ['fallback(red !important, blue)', true],
       ['fallback(red, blue)!', true],
@@ -94,7 +101,7 @@ describe('important and space handling', () => {
       // The candidate that carries it, not a `!` in a later one.
       ['fallback("a" !important, "b!")', '!important'],
       ['fallback([a!], b)', '!'],
-      ['[a!] /* x */', '!'],
+      ['[a!] /* x */', undefined],
       // Without what follows it: the comment is not the mark.
       ['red !important /* c */', '!important'],
       ['"!"', undefined],
@@ -114,6 +121,9 @@ describe('important and space handling', () => {
     'red ! important',
     'red !\u0000important',
     'red !important\u0000',
+    '\u0000[a!]',
+    'red \u0000!',
+    '[a\u0000!]',
   ])('reads %j as sanitizing it reads it', (value) => {
     expect(isImportant(value)).toBe(isImportant(sanitize(value)))
     expect(withoutImportant(value)).toBe(withoutImportant(sanitize(value)))
@@ -155,12 +165,14 @@ describe('important and space handling', () => {
       // No mark: the comment is the value's.
       expect(withoutImportant('red /* c */')).toBe('red /* c */')
       expect(withoutImportant('red /* wow! /* x */')).toBe('red /* wow! /* x */')
-      expect(withoutImportant('[a!] /* x */')).toBe('[a]')
+      expect(withoutImportant('[a!] /* x */')).toBe('[a!] /* x */')
     })
 
     test('strips a long run of marks', () => {
       // Read from the end, so this is one pass rather than a rescan per mark.
       expect(withoutImportant(`red${' !'.repeat(50_000)}`)).toBe('red')
+      // The comments are found once for the value, not again for each mark.
+      expect(withoutImportant(`red${' !/**/'.repeat(50_000)}`)).toBe('red')
     })
 
     test('strips a mark ending a fallback candidate', () => {

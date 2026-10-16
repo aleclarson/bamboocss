@@ -262,6 +262,24 @@ const styles = css({ color: 'a\\!' })`,
       ],
     },
 
+    // A control character is written as an escape: raw, it makes the file look binary.
+    {
+      code: String.raw`import { css } from './bamboo/css';
+const styles = css({ content: 'a\u0001 !' })`,
+      errors: [
+        {
+          messageId: 'important',
+          suggestions: [
+            {
+              messageId: 'remove',
+              output: String.raw`import { css } from './bamboo/css';
+const styles = css({ content: 'a\u0001' })`,
+            },
+          ],
+        },
+      ],
+    },
+
     // Half a surrogate pair cannot be written to the file, so it stays an escape.
     {
       code: String.raw`import { css } from './bamboo/css';
