@@ -1605,35 +1605,43 @@ const nextEnvironmentWatchCycle = (watcher: TestBuildWatcher) =>
  *
  * Waiting for an edit a plugin is set to reject, `failing` is what its error says: then only a
  * cycle failing so, having done what `done` checks for, is the one, and a clean one is not — the
- * rejection test read a late clean cycle's `undefined` as the error it was waiting for.
+ * rejection test read a late clean cycle's `undefined` as the error it was waiting for. A cycle
+ * failing otherwise is no replay to wait past: its error fails the wait at once.
  */
 const watchCycleUntil = (watcher: TestBuildWatcher, done: () => boolean, what: string, failing?: string) => {
   const cycle = new Promise<Error | undefined>((resolve, reject) => {
-    let error: Error | undefined
+    // Every error a cycle reports: Rolldown runs each configured output as a task of its own.
+    let errors: Error[] = []
     let others = 0
-    let otherError: string | undefined
+    const stop = () => {
+      clearTimeout(timer)
+      watcher.off('event', onEvent)
+    }
     const timer = setTimeout(() => {
       watcher.off('event', onEvent)
-      const last = otherError ? `, the last failing with ${otherError}` : ' clean'
-      reject(new Error(`No watch cycle ${what} within 60s; ${others} other cycle(s) ended${last}`))
+      reject(new Error(`No watch cycle ${what} within 60s; ${others} other cycle(s) ended`))
     }, 60_000)
     // Not to hold the process open after a test that failed before awaiting this.
     timer.unref?.()
     const onEvent = (event: TestWatchEvent) => {
-      if (event.code === 'ERROR') error = event.error
+      if (event.code === 'ERROR') {
+        if (failing !== undefined && !event.error.message.includes(failing)) {
+          stop()
+          reject(new Error(`A watch cycle ${what} failed otherwise: ${event.error.message}`, { cause: event.error }))
+          return
+        }
+        errors.push(event.error)
+      }
       if (event.code !== 'END') return
-      const ended = error
-      error = undefined
-      const ours =
-        failing === undefined ? ended !== undefined || done() : ended?.message.includes(failing) === true && done()
+      const ended = errors
+      errors = []
+      const ours = failing === undefined ? ended.length > 0 || done() : ended.length > 0 && done()
       if (!ours) {
         others++
-        if (ended) otherError = ended.message
         return
       }
-      clearTimeout(timer)
-      watcher.off('event', onEvent)
-      resolve(ended)
+      stop()
+      resolve(ended[0])
     }
     watcher.on('event', onEvent)
   })
@@ -1647,27 +1655,73 @@ const watchCycleUntil = (watcher: TestBuildWatcher, done: () => boolean, what: s
  * Resolves once none of `watchers` has reported anything for `ms`, a cycle under way included, so
  * a rebuild a doubled file event started has run its course before what it wrote, or how many
  * times a plugin transformed, is read.
+ *
+ * Kept per watcher, and any event short of `END` says one is under way, its `START` seen or not.
+ * Watchers that never go quiet — a rebuild feeding itself — fail it after a minute, rather than
+ * holding the test to its timeout with them still open.
  */
 const watchersQuiet = (watchers: TestBuildWatcher[], ms = 500) =>
-  new Promise<void>((resolve) => {
-    let running = 0
+  new Promise<void>((resolve, reject) => {
+    const running = new Set<TestBuildWatcher>()
+    const listeners = new Map<TestBuildWatcher, (event: TestWatchEvent) => void>()
+    let started = 0
     let timer: ReturnType<typeof setTimeout> | undefined
-    const quiet = () => {
-      for (const watcher of watchers) watcher.off('event', onEvent)
-      resolve()
+    const stop = () => {
+      clearTimeout(timer)
+      clearTimeout(deadline)
+      for (const [watcher, listener] of listeners) watcher.off('event', listener)
     }
+    const deadline = setTimeout(() => {
+      stop()
+      reject(new Error(`Watchers not quiet within 60s: ${running.size} running, ${started} cycle(s) started`))
+    }, 60_000)
+    deadline.unref?.()
     const arm = () => {
       clearTimeout(timer)
-      if (running === 0) timer = setTimeout(quiet, ms)
+      if (running.size > 0) return
+      timer = setTimeout(() => {
+        stop()
+        resolve()
+      }, ms)
     }
-    const onEvent = (event: TestWatchEvent) => {
-      if (event.code === 'START') running++
-      if (event.code === 'END') running = Math.max(0, running - 1)
-      arm()
+    for (const watcher of watchers) {
+      const listener = (event: TestWatchEvent) => {
+        if (event.code === 'START') started++
+        if (event.code === 'END') running.delete(watcher)
+        else running.add(watcher)
+        arm()
+      }
+      listeners.set(watcher, listener)
+      watcher.on('event', listener)
     }
-    for (const watcher of watchers) watcher.on('event', onEvent)
     arm()
   })
+
+/**
+ * How many watch cycles `watcher` starts from here, read by calling what this returns, which stops
+ * counting. A transform count cannot say an environment rebuilt: on Vite 7 a cycle Rollup's cache
+ * answers transforms nothing, though it was started.
+ */
+const cyclesStartedBy = (watcher: TestBuildWatcher) => {
+  let started = 0
+  const onEvent = (event: TestWatchEvent) => {
+    if (event.code === 'START') started++
+  }
+  watcher.on('event', onEvent)
+  return () => {
+    watcher.off('event', onEvent)
+    return started
+  }
+}
+
+/** Resolves once `condition` holds, polled, or rejects naming `what` after `ms`. */
+const until = async (condition: () => boolean, what: string, ms = 10_000) => {
+  const deadline = Date.now() + ms
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error(`Not ${what} within ${ms / 1000}s`)
+    await new Promise((settle) => setTimeout(settle, 50))
+  }
+}
 
 const runPartialEnvironmentWatchRebuild = async (
   create: (config: Record<string, unknown>) => Promise<unknown>,
@@ -1711,8 +1765,8 @@ const runPartialEnvironmentWatchRebuild = async (
       `export const freshClient = css({ width: '[${widths.freshClient}]' })\n` +
       `export const freshSsr = css({ width: '[${widths.freshSsr}]' })\n`,
   )
-  writeFileSync(clientTrigger, 'first\n')
-  writeFileSync(ssrTrigger, 'first\n')
+  writeWatchTrigger(clientTrigger, 'first')
+  writeWatchTrigger(ssrTrigger, 'first')
   writeFileSync(envClientEntry, `import 'virtual:bamboo.css'\nexport { className } from './__env-shared'\n`)
   writeFileSync(envSsrEntry, `export { className } from './__env-shared'\n`)
   writeIsolatedBambooConfig(configPath, ['./src/__env-shared.tsx', './src/__env-client.tsx', './src/__env-ssr.tsx'])
@@ -1776,10 +1830,12 @@ const runPartialEnvironmentWatchRebuild = async (
     )
     await new Promise((settle) => setTimeout(settle, 800))
     const beforeClientEdit = { ...calls }
-    writeFileSync(clientTrigger, 'second\n')
+    const ssrStarted = cyclesStartedBy(ssrWatcher)
+    writeWatchTrigger(clientTrigger, 'second')
     expect(await rebuiltClient).toBeUndefined()
     await watchersQuiet([clientWatcher, ssrWatcher])
 
+    expect(ssrStarted(), 'the client-only edit started SSR').toBe(0)
     expect(calls.ssr, 'the client-only edit did not start or transform SSR').toBe(beforeClientEdit.ssr)
     expect(calls.client).toBeGreaterThan(beforeClientEdit.client)
     expect(calls.client).toBeLessThanOrEqual(beforeClientEdit.client + 2)
@@ -1798,10 +1854,12 @@ const runPartialEnvironmentWatchRebuild = async (
     )
     await new Promise((settle) => setTimeout(settle, 800))
     const beforeSsrEdit = { ...calls }
-    writeFileSync(ssrTrigger, 'second\n')
+    const clientStarted = cyclesStartedBy(clientWatcher)
+    writeWatchTrigger(ssrTrigger, 'second')
     const ssrError = await rebuiltSsr
     await watchersQuiet([clientWatcher, ssrWatcher])
 
+    expect(clientStarted(), 'the SSR-only edit started the client').toBe(0)
     expect(calls.client, 'the SSR-only edit did not start or transform the client').toBe(beforeSsrEdit.client)
     expect(calls.ssr).toBeGreaterThan(beforeSsrEdit.ssr)
     expect(calls.ssr).toBeLessThanOrEqual(beforeSsrEdit.ssr + 2)
@@ -1966,6 +2024,9 @@ const runRejectedOutputWatchRebuild = async (
     `./src/__output-transaction-client-${label}.tsx`,
     `./src/__output-transaction-sibling-${label}.tsx`,
   ])
+  // Before the watchers start, so a late event for one of these writes cannot start a rebuild
+  // read as an edit's.
+  await settled()
 
   const builder = (await create({
     root: cwd,
@@ -2023,10 +2084,14 @@ const runRejectedOutputWatchRebuild = async (
     expect(cleanCss).toContain(widths.sibling)
     expect(cleanCss).not.toContain(widths.rejected)
 
+    // The hook rejects whatever the client bundle names, so what it rejected says which cycle it
+    // was: a late one for the source before the edit is rejected as surely.
+    rejectedJs = ''
+    rejectedCss = ''
     rejectClientOutput = true
     const rejectedBuild = watchCycleUntil(
       clientWatcher,
-      () => true,
+      () => rejectedJs.includes(`w_[${widths.rejected}]`),
       'rejecting the client output',
       `test rejected client output (${label})`,
     )
@@ -2051,6 +2116,7 @@ const runRejectedOutputWatchRebuild = async (
     // client's transforms are counted, here and after the sibling's edit.
     await watchersQuiet([clientWatcher, siblingWatcher], 800)
     const clientCallsAfterFailure = calls.client
+    const clientStartedAfterFailure = cyclesStartedBy(clientWatcher)
     rmSync(siblingOutDir, { force: true, recursive: true })
     const siblingBuild = watchCycleUntil(
       siblingWatcher,
@@ -2060,6 +2126,7 @@ const runRejectedOutputWatchRebuild = async (
     writeWatchTrigger(siblingTrigger, `export const generation = 'second'`)
     expect(await siblingBuild).toBeUndefined()
     await watchersQuiet([clientWatcher, siblingWatcher])
+    expect(clientStartedAfterFailure(), 'the sibling-only edit started the rejected client').toBe(0)
     expect(calls.client, 'the sibling-only edit unexpectedly rebuilt the rejected client graph').toBe(
       clientCallsAfterFailure,
     )
@@ -2093,6 +2160,7 @@ const runRejectedOutputWatchRebuild = async (
 
     await watchersQuiet([clientWatcher, siblingWatcher], 800)
     const clientCallsAfterWrite = calls.client
+    const clientStartedAfterWrite = cyclesStartedBy(clientWatcher)
     rmSync(siblingOutDir, { force: true, recursive: true })
     const siblingAfterWrite = watchCycleUntil(
       siblingWatcher,
@@ -2102,6 +2170,7 @@ const runRejectedOutputWatchRebuild = async (
     writeWatchTrigger(siblingTrigger, `export const generation = 'third'`)
     expect(await siblingAfterWrite).toBeUndefined()
     await watchersQuiet([clientWatcher, siblingWatcher])
+    expect(clientStartedAfterWrite(), 'the sibling-only edit started the client').toBe(0)
     expect(calls.client).toBe(clientCallsAfterWrite)
     const cssAfterWrite = readOutputFiles(siblingOutDir, '.css')
     expect(cssAfterWrite).toContain(widths.written)
@@ -2128,6 +2197,7 @@ const runRejectedOutputWatchRebuild = async (
 
     await watchersQuiet([clientWatcher, siblingWatcher], 800)
     const callsAfterEarlyWrite = calls.client
+    const clientStartedAfterEarlyWrite = cyclesStartedBy(clientWatcher)
     rmSync(siblingOutDir, { force: true, recursive: true })
     const siblingAfterEarlyWrite = watchCycleUntil(
       siblingWatcher,
@@ -2137,6 +2207,7 @@ const runRejectedOutputWatchRebuild = async (
     writeWatchTrigger(siblingTrigger, `export const generation = 'fourth'`)
     expect(await siblingAfterEarlyWrite).toBeUndefined()
     await watchersQuiet([clientWatcher, siblingWatcher])
+    expect(clientStartedAfterEarlyWrite(), 'the sibling-only edit started the client').toBe(0)
     expect(calls.client).toBe(callsAfterEarlyWrite)
     const cssAfterEarlyWrite = readOutputFiles(siblingOutDir, '.css')
     expect(cssAfterEarlyWrite).toContain(widths.old)
@@ -2302,26 +2373,27 @@ const runMixedOutputEpochWatchRebuild = async (
   let failureMode: FailureMode = 'none'
   let firstOutputWritten = Promise.resolve()
   let markFirstOutputWritten = () => {}
-  let secondOutputWritten = Promise.resolve()
-  let markSecondOutputWritten = () => {}
   let rejectedSecondJs = ''
+  // What an output rejected before writing held, which says which cycle it was.
+  let rejectedEarlyJs = ''
   const armFirstOutput = () => {
     firstOutputWritten = new Promise<void>((resolve) => {
       markFirstOutputWritten = resolve
     })
   }
-  const armSecondOutput = () => {
-    secondOutputWritten = new Promise<void>((resolve) => {
-      markSecondOutputWritten = resolve
-    })
-  }
   const outputPlugin = (output: 1 | 2): VitePlugin => ({
     name: `bamboocss:test-multi-output-${label}-${output}`,
     async generateBundle(_, bundle) {
+      const code = () =>
+        Object.values(bundle)
+          .map((entry) => (entry.type === 'chunk' ? entry.code : ''))
+          .join('\n')
       if (failureMode === 'before-write') {
+        rejectedEarlyJs = code()
         throw new Error(`test rejected every output before write (${label})`)
       }
       if (failureMode === 'first-before-second-writes' && output === 1) {
+        rejectedEarlyJs = code()
         throw new Error(`test rejected first output before second wrote (${label})`)
       }
       if (output !== 2) return
@@ -2335,7 +2407,6 @@ const runMixedOutputEpochWatchRebuild = async (
     },
     writeBundle() {
       if (output === 1) markFirstOutputWritten()
-      else markSecondOutputWritten()
     },
   })
 
@@ -2377,6 +2448,9 @@ const runMixedOutputEpochWatchRebuild = async (
     `./src/__multi-output-client-${label}.tsx`,
     `./src/__multi-output-sibling-${label}.tsx`,
   ])
+  // Before the watchers start, so a late event for one of these writes cannot start a rebuild
+  // read as an edit's.
+  await settled()
 
   const builder = (await create({
     root: cwd,
@@ -2424,9 +2498,11 @@ const runMixedOutputEpochWatchRebuild = async (
       'rebuilding the sibling from its trigger',
     )
     const callsBefore = calls.client
+    const clientStarted = cyclesStartedBy(clientWatcher!)
     writeWatchTrigger(siblingTrigger, `export const generation = '${++siblingGeneration}'`)
     expect(await built).toBeUndefined()
     await watchersQuiet([clientWatcher!, siblingWatcher!])
+    expect(clientStarted(), `${label}: sibling-only edit started the client`).toBe(0)
     expect(calls.client, `${label}: sibling-only edit rebuilt the client graph`).toBe(callsBefore)
     return readOutputFiles(siblingOutDir, '.css')
   }
@@ -2445,10 +2521,11 @@ const runMixedOutputEpochWatchRebuild = async (
     expect(initialSecondJs).not.toContain(`w_[${widths.candidate}]`)
 
     // A generation rejected before either output writes is atomic: only the old epoch remains.
+    rejectedEarlyJs = ''
     failureMode = 'before-write'
     const rejectedBeforeWrite = watchCycleUntil(
       clientWatcher,
-      () => true,
+      () => rejectedEarlyJs.includes(`w_[${widths.candidate}]`),
       'rejecting every output before write',
       `test rejected every output before write (${label})`,
     )
@@ -2465,7 +2542,6 @@ const runMixedOutputEpochWatchRebuild = async (
 
     // Output one reaches disk, then output two rejects. Both generations now name classes in
     // live JavaScript and a sibling stylesheet must conservatively back both.
-    armFirstOutput()
     failureMode = 'after-first-write'
     const mixedBuild = watchCycleUntil(
       clientWatcher,
@@ -2474,6 +2550,8 @@ const runMixedOutputEpochWatchRebuild = async (
       `test rejected second configured output (${label})`,
     )
     await new Promise((settle) => setTimeout(settle, 800))
+    // Armed as the edit is written, so no late cycle before it can have written the first output.
+    armFirstOutput()
     writeWatchTrigger(clientTrigger, 'mixed')
     expect((await mixedBuild)?.message).toContain(`test rejected second configured output (${label})`)
     expect(rejectedSecondJs).toContain(`w_[${widths.candidate}]`)
@@ -2489,7 +2567,6 @@ const runMixedOutputEpochWatchRebuild = async (
 
     // A second partial failure replaces the already-written slot. The first candidate no
     // longer exists in either client output and must not accumulate as an immortal epoch.
-    armFirstOutput()
     failureMode = 'after-first-write'
     const replacementMixedBuild = watchCycleUntil(
       clientWatcher,
@@ -2498,6 +2575,7 @@ const runMixedOutputEpochWatchRebuild = async (
       `test rejected second configured output (${label})`,
     )
     await new Promise((settle) => setTimeout(settle, 800))
+    armFirstOutput()
     writeWatchTrigger(clientTrigger, 'replacement-mixed')
     expect((await replacementMixedBuild)?.message).toContain(`test rejected second configured output (${label})`)
     expect(readOutputFiles(firstOutDir, '.js')).toContain(`w_[${widths.replacement}]`)
@@ -2514,11 +2592,11 @@ const runMixedOutputEpochWatchRebuild = async (
     // runs each configured output as its own build task, so a stale "slot zero succeeded" bit
     // from the preceding generation must not combine with this slot-one success. The disk now
     // genuinely contains two candidate epochs and the sibling must retain exactly those two.
+    rejectedEarlyJs = ''
     failureMode = 'first-before-second-writes'
-    armSecondOutput()
     const alternatingBuild = watchCycleUntil(
       clientWatcher,
-      () => true,
+      () => rejectedEarlyJs.includes(`w_[${widths.candidate}]`),
       'rejecting the first output before the second wrote',
       `test rejected first output before second wrote (${label})`,
     )
@@ -2526,8 +2604,12 @@ const runMixedOutputEpochWatchRebuild = async (
     writeWatchTrigger(clientTrigger, 'alternating')
     expect((await alternatingBuild)?.message).toContain(`test rejected first output before second wrote (${label})`)
     // Both hosts report the aggregate error before the still-running second output finishes.
-    // Wait for its filesystem boundary so the assertions compare stable live slots to disk.
-    await secondOutputWritten
+    // Wait for it to reach disk, as this edit wrote it, so the assertions compare stable live slots
+    // to disk: a late cycle's write may have come first.
+    await until(
+      () => readOutputFiles(secondOutDir, '.js').includes(`w_[${widths.candidate}]`),
+      'the second output written with the candidate',
+    )
     expect(readOutputFiles(firstOutDir, '.js')).toContain(`w_[${widths.replacement}]`)
     expect(readOutputFiles(secondOutDir, '.js')).toContain(`w_[${widths.candidate}]`)
     const alternatingCss = await rebuildSibling()
@@ -2539,7 +2621,6 @@ const runMixedOutputEpochWatchRebuild = async (
 
     // A later successful generation replaces both configured outputs, collapsing the live set
     // back to one epoch and reproducing a clean no-cache stylesheet exactly.
-    armSecondOutput()
     const acceptedBuild = watchCycleUntil(
       clientWatcher,
       () => readOutputFiles(firstOutDir, '.js').includes(`w_[${widths.replacement}]`),
@@ -2548,7 +2629,10 @@ const runMixedOutputEpochWatchRebuild = async (
     await new Promise((settle) => setTimeout(settle, 800))
     writeWatchTrigger(clientTrigger, 'accepted')
     expect(await acceptedBuild).toBeUndefined()
-    await secondOutputWritten
+    await until(
+      () => readOutputFiles(secondOutDir, '.js').includes(`w_[${widths.replacement}]`),
+      'the second output written with the replacement',
+    )
     expect(readOutputFiles(firstOutDir, '.js')).toContain(`w_[${widths.replacement}]`)
     expect(readOutputFiles(secondOutDir, '.js')).toContain(`w_[${widths.replacement}]`)
     const convergedCss = await rebuildSibling()
@@ -2630,7 +2714,6 @@ const runMixedOutputEpochWatchRebuild = async (
   } finally {
     failureMode = 'none'
     markFirstOutputWritten()
-    markSecondOutputWritten()
     await Promise.all([clientWatcher?.close(), siblingWatcher?.close()])
     rmSync(clientEntry, { force: true })
     rmSync(siblingEntry, { force: true })
