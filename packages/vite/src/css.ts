@@ -7,6 +7,7 @@ import { bare } from './class-name'
 import type { Plugin, ViteDevServer } from 'vite'
 import { createCompilationHost, type CompilationBuilder, type CompilationHost } from './compilation-host'
 import type { CssSourceMap } from './css-output-module'
+import { extractedFileKey } from './fs-path'
 import { createRetryableLazy, loadConfigModule, loadCssOutputModule } from './lazy-modules'
 import { remainingEnvironments, type StaticCompilationSession } from './static-session'
 
@@ -598,7 +599,7 @@ export const bamboocssCss = (options: BambooCssPluginOptions): Plugin => {
       if (activeBuilder.context) {
         session.utilityLayer = activeBuilder.context.config.layers?.utilities ?? 'utilities'
         session.extractedFiles.clear()
-        for (const file of extractedSourceFiles()) session.extractedFiles.add(file)
+        for (const file of extractedSourceFiles()) session.extractedFiles.add(extractedFileKey(file))
         // Again, now that extraction has globbed: for the links a pattern's wildcard went through.
         if (server) watchOutsideRoot(server, activeBuilder)
       }
@@ -977,7 +978,7 @@ export const bamboocssCss = (options: BambooCssPluginOptions): Plugin => {
         const activeBuilder = builder
         const ctx = activeBuilder?.context
         if (!ctx) return
-        const absoluteFile = ctx.runtime.path.abs(ctx.config.cwd, file)
+        const absoluteFile = extractedFileKey(ctx.runtime.path.abs(ctx.config.cwd, file))
         const wasExtracted = session.extractedFiles.has(absoluteFile)
         const changesConfigMembership = event !== 'update' && activeBuilder.isPotentialConfigDependency(absoluteFile)
         // An unknown update/delete cannot have contributed to the current sheet. An addition is

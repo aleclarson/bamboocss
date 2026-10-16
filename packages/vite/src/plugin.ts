@@ -8,6 +8,7 @@ import { truncateList } from '@bamboocss/shared'
 import { markStaticCompilerActive } from '@bamboocss/node/static-compiler'
 import type { Plugin } from 'vite'
 import { asError, bamboocssCss, bamboocssCssEarly, VIRTUAL_CSS_ID } from './css'
+import { extractedFileKey, normalizeFsPath } from './fs-path'
 import { bare } from './class-name'
 import { createCompilationHost, type CompilationGeneration } from './compilation-host'
 import type { FoldRefusal } from '@bamboocss/native-extractor'
@@ -289,21 +290,7 @@ export const isGeneratedOutput = (filePath: string, ctx: { config: { cwd: string
 /** 1-indexed line of a source offset, for an error a user can navigate to. */
 const lineAt = (code: string, offset: number) => code.slice(0, offset).split('\n').length
 
-/**
- * One spelling for a path used as a map key against paths from somewhere else.
- *
- * The fold reports dependencies as ts-morph sees them and Vite reports a changed file as its
- * watcher saw it. On Windows those differ by separator, and can differ by the case of the
- * drive letter alone — chokidar reports what the OS handed it, `path.resolve` preserves
- * whatever the cwd had. Either would make every lookup below miss and restore the exact
- * staleness they exist to fix, silently, since a miss is indistinguishable from a module that
- * folded nothing. Only the drive letter is case-folded: the rest of the path is compared as
- * written, because elsewhere the filesystem may well be case-sensitive.
- */
-export const normalizeFsPath = (file: string) =>
-  resolve(file)
-    .replaceAll('\\', '/')
-    .replace(/^[a-z]:\//, (drive) => drive.toUpperCase())
+export { normalizeFsPath } from './fs-path'
 
 /**
  * Why the compiler refused a call, as a sentence: what the code does, and where it is.
@@ -868,7 +855,11 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
   ) => {
     const { dependenciesByModule, dependentsByDependency, filesByModule } = state
     const normalizedFile = normalizeFsPath(file)
-    const next = new Set(dependencies.map(normalizeFsPath).filter((dependency) => dependency !== normalizedFile))
+    const next = new Set(
+      dependencies
+        .map((dependency) => normalizeFsPath(dependency))
+        .filter((dependency) => dependency !== normalizedFile),
+    )
     const previous = dependenciesByModule.get(moduleId)
     filesByModule.set(moduleId, file)
 
@@ -2418,7 +2409,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
           }
 
           const outsideExtraction = [...staticSession.transformedFiles].filter(
-            (file) => !staticSession.extractedFiles.has(file),
+            (file) => !staticSession.extractedFiles.has(extractedFileKey(file)),
           )
           if (outsideExtraction.length) {
             throw new Error(
