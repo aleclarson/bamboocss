@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAll, expect, test } from 'vitest'
+import { afterAll, expect, test, vi } from 'vitest'
 import { Builder } from '../src/builder'
 
 const root = realpathSync(mkdtempSync(join(tmpdir(), 'bamboo-builder-linked-')))
@@ -71,6 +71,43 @@ test('knows a source two links reach by each of them', async () => {
     spelled('src/shared/card.tsx'),
     spelled('vendor/shared/card.tsx'),
   ])
+})
+
+/**
+ * And reads it once: under the first of the paths, which wrote its atoms first and so ranks them in
+ * the stylesheet as both did. Read under each, it was extracted twice for the same styles.
+ */
+test('extracts a source two links reach once', async () => {
+  const app = join(root, 'two-links-once')
+  const ui = join(root, 'packages/once')
+  mkdirSync(join(app, 'src'), { recursive: true })
+  mkdirSync(join(app, 'vendor'), { recursive: true })
+  mkdirSync(join(ui, 'src'), { recursive: true })
+  writeFileSync(
+    join(app, 'bamboo.config.ts'),
+    `export default { include: ['src/**/*.tsx', 'vendor/**/*.tsx'], outdir: 'styled-system', preflight: false }\n`,
+  )
+  writeFileSync(
+    join(ui, 'src/card.tsx'),
+    `import { css } from '../../../two-links-once/styled-system/css'\nexport const card = css({ color: 'red.300' })\n`,
+  )
+  const kind = process.platform === 'win32' ? 'junction' : 'dir'
+  symlinkSync(join(ui, 'src'), join(app, 'src/shared'), kind)
+  symlinkSync(join(ui, 'src'), join(app, 'vendor/shared'), kind)
+
+  const builder = new Builder()
+  await builder.setup({ cwd: app })
+  const parsed = vi.spyOn(builder.getContextOrThrow(), 'parseFile')
+  builder.extract()
+  const spelled = (path: string) => join(app, path).replaceAll('\\', '/')
+
+  expect(builder.getSourceFiles(), 'the inventory has it by both').toEqual(
+    expect.arrayContaining([spelled('src/shared/card.tsx'), spelled('vendor/shared/card.tsx')]),
+  )
+  expect(parsed.mock.calls.map(([file]) => String(file).replaceAll('\\', '/'))).toEqual([
+    spelled('src/shared/card.tsx'),
+  ])
+  expect(builder.toCss().match(/color: var\(--colors-red-300\)/g)).toHaveLength(1)
 })
 
 // A link to a file, which no folder of the glob's names. Windows grants one only to an administrator.

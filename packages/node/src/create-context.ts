@@ -28,6 +28,7 @@ import { ParserResult, type UnresolvedStyle } from './parser-result'
 import { SourceProject } from './source-project'
 import { nodeRuntime } from './node-runtime'
 import { loadNativeExtractor } from './native-extractor'
+import { firstSpellingOfEachFile } from './real-sources'
 import { OutputEngine } from './output-engine'
 
 /** A thrown value's message, for a `catch` binding that is typed `unknown`. */
@@ -862,13 +863,16 @@ export class BambooContext extends Generator {
   }
 
   /**
-   * The files this pass has to read, out of everything `include` matched.
+   * The files this pass has to read, out of everything `include` matched: each real file once, and
+   * of those the ones that can reach an entrypoint.
    *
-   * See `selectExtractable`. Kept behind a method so the reasons live in one place and a caller
+   * See `firstSpellingOfEachFile`, given `linked` — what the glob reported reaching through a link —
+   * and `selectExtractable`. Kept behind a method so the reasons live in one place and a caller
    * that wants the whole inventory — the watcher, the token scan — is unaffected: this narrows
    * what is *parsed*, not what the project holds.
    */
-  extractableFiles = (files: readonly string[]): string[] => {
+  extractableFiles = (files: readonly string[], linked: readonly string[] = []): string[] => {
+    files = firstSpellingOfEachFile(files, linked)
     this.nativePreparedSources.clear()
     const { baseUrl, paths } = this.project.resolutionOptions
     const measure = logger.time.debug('Selected extractable files')
@@ -914,7 +918,8 @@ export class BambooContext extends Generator {
   parseFiles = (styleEncoder?: StyleEncoder) => {
     const encoder = styleEncoder || this.parserOptions.encoder
 
-    const files = this.extractableFiles(this.getFiles())
+    const linked: string[] = []
+    const files = this.extractableFiles(this.getFiles(linked), linked)
     this.prepareNativeExtraction(files)
     const filesWithCss = [] as string[]
     const results = [] as ParserResult[]
