@@ -1668,6 +1668,9 @@ const runPartialEnvironmentWatchRebuild = async (
   writeFileSync(envClientEntry, `import 'virtual:bamboo.css'\nexport { className } from './__env-shared'\n`)
   writeFileSync(envSsrEntry, `export { className } from './__env-shared'\n`)
   writeIsolatedBambooConfig(configPath, ['./src/__env-shared.tsx', './src/__env-client.tsx', './src/__env-ssr.tsx'])
+  // Before the watchers start, so a late event for one of these writes cannot start a rebuild
+  // the counts below would read as the edit's.
+  await settled()
 
   const builder = (await create({
     root: cwd,
@@ -1712,14 +1715,24 @@ const runPartialEnvironmentWatchRebuild = async (
     const ssrJs = readOutputFiles(ssrOutDir, '.js')
     expect(ssrJs).toContain(`w_[${widths.cachedSsr}]`)
 
+    // Each wait ends on the cycle that built its edit, and each count is read against the one
+    // before it: a watcher can see one write twice, and the second rebuild of the environment
+    // edited is no part of what this asserts, which is that the other one did not build at all
+    // (`ssr: 3`, 1 suite run under load).
     rmSync(clientOutDir, { force: true, recursive: true })
-    const rebuiltClient = nextEnvironmentWatchBuild(clientWatcher)
+    const beforeClientEdit = { ...calls }
+    const rebuiltClient = watchCycleUntil(
+      clientWatcher,
+      () => readOutputFiles(clientOutDir, '.css').includes(widths.freshClient),
+      'rebuilding the client from its trigger',
+    )
     await new Promise((settle) => setTimeout(settle, 800))
     writeFileSync(clientTrigger, 'second\n')
     expect(await rebuiltClient).toBeUndefined()
     await new Promise((settle) => setTimeout(settle, 300))
 
-    expect(calls, 'the client-only edit did not start or transform SSR').toEqual({ client: 2, ssr: 1 })
+    expect(calls.ssr, 'the client-only edit did not start or transform SSR').toBe(beforeClientEdit.ssr)
+    expect(calls.client).toBeGreaterThan(beforeClientEdit.client)
     const rebuiltCss = readOutputFiles(clientOutDir, '.css')
     expect(rebuiltCss).toContain(widths.cachedSsr)
     expect(rebuiltCss).toContain(widths.freshClient)
@@ -1728,13 +1741,19 @@ const runPartialEnvironmentWatchRebuild = async (
 
     // The inverse partial rebuild must retain the client sheet's loss history. That sheet
     // pruned the third rule, and SSR emits no replacement asset, so requiring it fails closed.
-    const rebuiltSsr = nextEnvironmentWatchBuild(ssrWatcher)
+    const beforeSsrEdit = { ...calls }
+    const rebuiltSsr = watchCycleUntil(
+      ssrWatcher,
+      () => readOutputFiles(ssrOutDir, '.js').includes(`w_[${widths.freshSsr}]`),
+      'rebuilding SSR from its trigger',
+    )
     await new Promise((settle) => setTimeout(settle, 800))
     writeFileSync(ssrTrigger, 'second\n')
     const ssrError = await rebuiltSsr
     await new Promise((settle) => setTimeout(settle, 300))
 
-    expect(calls, 'the SSR-only edit did not start or transform the client').toEqual({ client: 2, ssr: 2 })
+    expect(calls.client, 'the SSR-only edit did not start or transform the client').toBe(beforeSsrEdit.client)
+    expect(calls.ssr).toBeGreaterThan(beforeSsrEdit.ssr)
     expect(ssrError?.message).toContain('already pruned out of a stylesheet')
     expect(ssrError?.message).toContain(esc(`w_[${widths.freshSsr}]`))
   } finally {
