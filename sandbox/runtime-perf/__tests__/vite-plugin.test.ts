@@ -1847,10 +1847,13 @@ const runPartialEnvironmentWatchRebuild = async (
 
     // The inverse partial rebuild must retain the client sheet's loss history. That sheet
     // pruned the third rule, and SSR emits no replacement asset, so requiring it fails closed.
+    // Failing as it should, naming the class its edit compiled, which writes nothing: a late cycle
+    // of the source before the edit compiles none the client sheet pruned, and does not fail.
     const rebuiltSsr = watchCycleUntil(
       ssrWatcher,
-      () => readOutputFiles(ssrOutDir, '.js').includes(`w_[${widths.freshSsr}]`),
+      () => true,
       'rebuilding SSR from its trigger',
+      esc(`w_[${widths.freshSsr}]`),
     )
     await new Promise((settle) => setTimeout(settle, 800))
     const beforeSsrEdit = { ...calls }
@@ -1865,6 +1868,9 @@ const runPartialEnvironmentWatchRebuild = async (
     expect(calls.ssr).toBeLessThanOrEqual(beforeSsrEdit.ssr + 2)
     expect(ssrError?.message).toContain('already pruned out of a stylesheet')
     expect(ssrError?.message).toContain(esc(`w_[${widths.freshSsr}]`))
+    // The client's rebuild restored its class, which the sheet before it had pruned: not lost. On
+    // Vite 8 it was named too, Rolldown handing each watch generation the same output options.
+    expect(ssrError?.message).not.toContain(esc(`w_[${widths.freshClient}]`))
   } finally {
     await Promise.all([clientWatcher?.close(), ssrWatcher?.close()])
     rmSync(clientTrigger, { force: true })

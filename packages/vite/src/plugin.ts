@@ -714,7 +714,13 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
   const outputIdentityByBundle = new WeakMap<object, OutputIdentity>()
   const outputIdentityByOptions = new WeakMap<object, OutputIdentity>()
   const outputStageByBundle = new WeakMap<object, OutputStage>()
-  const outputStageByOptions = new WeakMap<object, OutputStage>()
+  /**
+   * The same stages by the output's options, for a pass that is handed another bundle object.
+   * Rolldown hands a watching build one options object generation after generation, so each entry
+   * says the epoch it was recorded in: one an earlier generation recorded is not this one's, and its
+   * pruned classes — some of which this generation restored — are no part of its loss history.
+   */
+  const outputStageByOptions = new WeakMap<object, { stage: OutputStage; epoch: number }>()
   const environmentOf = (context: unknown) => (context as EnvironmentContext).environment
   const environmentName = (context: unknown) => environmentOf(context)?.name ?? 'default'
   const newEnvironmentState = (): EnvironmentTransformState => ({
@@ -1431,7 +1437,9 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
         // RSC plugin empties assets in its scan builds — is not the after-the-fact rewrite the
         // finalizer's comparison exists to catch. A sheet that is gone by then digests to
         // nothing, and the late pass's own check answers for whether it had to be there.
-        const previous = outputStageByBundle.get(bundle) ?? outputStageByOptions.get(outputOptions)
+        const byOptions = outputStageByOptions.get(outputOptions)
+        const previous =
+          outputStageByBundle.get(bundle) ?? (byOptions?.epoch === generation.epoch.id ? byOptions.stage : undefined)
         const stage: OutputStage = replacesGeneratedStylesheet
           ? {
               cssDigest: bambooCssDigest(bundle),
@@ -1441,7 +1449,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
             ? { cssDigest: bambooCssDigest(bundle), prunedClasses: new Set(previous.prunedClasses ?? []) }
             : {}
         outputStageByBundle.set(bundle, stage)
-        outputStageByOptions.set(outputOptions, stage)
+        outputStageByOptions.set(outputOptions, { stage, epoch: generation.epoch.id })
         staticSession.prunedClasses = committedPrunedClasses
         rebuildStaticTransformContributions()
       },
@@ -1995,9 +2003,11 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
             outputIdentityByBundle.set(bundle, identity)
             if (outputOptions && typeof outputOptions === 'object') outputIdentityByOptions.set(outputOptions, identity)
             const generation = preparedGenerations.get(environment)
+            const byOptions =
+              outputOptions && typeof outputOptions === 'object' ? outputStageByOptions.get(outputOptions) : undefined
             const stage =
               outputStageByBundle.get(bundle) ??
-              (outputOptions && typeof outputOptions === 'object' ? outputStageByOptions.get(outputOptions) : undefined)
+              (byOptions && byOptions.epoch === generation?.epoch.id ? byOptions.stage : undefined)
             if (stage?.cssDigest && bambooCssDigest(bundle) !== stage.cssDigest) {
               throw new Error(
                 `bamboocss: an output plugin changed or removed the generated stylesheet after Bamboo finalized ` +
