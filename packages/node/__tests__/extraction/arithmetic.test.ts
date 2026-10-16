@@ -209,6 +209,17 @@ describe('`+` in a style value', () => {
     expect(Object.keys(data[data.length - 1])).toEqual(['paddingTop', 'marginTop'])
   })
 
+  // An array known element by element is spread as its elements. Every parameter after a spread
+  // was `undefined`, which made `Object.assign` onto it give nothing, and no rule was written.
+  test('a call spreading a known array is given its elements', () => {
+    const { css } = extract(
+      "const pick = (a, b) => b\nconst args = [1, { padding: '2' }]\ncss(Object.assign(pick(...args), { color: 'red.300' }))",
+    )
+
+    expect(css).toContain('--colors-red-300')
+    expect(css).toContain('--spacing-2')
+  })
+
   test('a string JavaScript reads as `NaN` is not read as a number', () => {
     // U+0085 is whitespace to Rust's `trim` and not to JavaScript, so `'\u00855' * 2` is `NaN`.
     expect(extract("css({ zIndex: '\\u00855' * 2 })").css).not.toContain('z-index')

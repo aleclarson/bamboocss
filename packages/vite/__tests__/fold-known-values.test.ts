@@ -138,6 +138,8 @@ describe('one property of an object, whatever its siblings are', () => {
   test.each([
     ['beside a prototype the build cannot evaluate', 'const o = { zIndex: 1, __proto__: base() }'],
     ['beside a `null` prototype', 'const o = { zIndex: 1, __proto__: null }'],
+    // An enum's members are its members, whichever the build cannot evaluate.
+    ['of an enum beside a member the build cannot evaluate', 'enum o { zIndex = 1, B = f() }'],
   ])('%s', (_, definition) => {
     const body = `${definition}\nexport const A = css({ zIndex: o.zIndex })`
 
@@ -403,6 +405,20 @@ describe('which keys an object has', () => {
     ['a key held before a spread the build cannot read', "'a' in o", 'const o = { a: 1, ...x() }', 'z_2'],
     ['a key not held, with a `null` prototype', "'dark' in o", 'const o = { __proto__: null, zIndex: 1 }', 'z_1'],
     ['a key not held, with a number for a prototype', "'dark' in o", 'const o = { __proto__: 5, zIndex: 1 }', 'z_1'],
+    // A spread writes over what the object holds and removes none of it, a guess's included.
+    [
+      'a key held before a spread of a value that may be another',
+      "'y' in { y: 0, ...o.a }",
+      'const o = { a: { y: 1 }, ...x() }',
+      'z_2',
+    ],
+    [
+      'such a key, through `Object.assign`',
+      "'y' in Object.assign({ y: 0 }, o.a)",
+      'const o = { a: { y: 1 }, ...x() }',
+      'z_2',
+    ],
+    ['a member of an enum not wholly known', "'A' in { ...E }", 'enum E { A = 1, B = f() }', 'z_2'],
   ])('%s', (_, test, definition, className) => {
     expect(foldOf(value(test, definition))).toMatchObject({ classes: [className], skipped: [] })
   })
@@ -424,8 +440,20 @@ describe('which keys an object has', () => {
     ],
     // It throws there.
     ['a key of `Object.assign` onto `null`', "'a' in Object.assign(null, { a: 1 })", ''],
+    // A numeric member names its value too, which the build does not hold.
+    ['a key an enum gives a numeric member', "'1' in E", 'enum E { A = 1, B = f() }'],
   ])('not %s', (_, test, definition) => {
     expect(foldOf(value(test, definition))).toMatchObject({ classes: [], skipped: ['dynamic'] })
+  })
+
+  // A helper's choice decides on any answer; `o.a` may be what a branch wrote, which may hold `x`
+  // or not, so there is none to decide on.
+  test('not a choice on a key of a value a branch may have replaced', () => {
+    const body =
+      `const c = Math.random() > 0.5\nconst o = { a: { y: 1 }, ...(c ? { a: { x: 1 } } : {}) }\n` +
+      `const g = () => ('x' in o.a ? 1 : 2)\nexport const A = css({ zIndex: g() })`
+
+    expect(foldOf(withImport(body))).toMatchObject({ classes: [], skipped: ['dynamic'] })
   })
 })
 
@@ -600,6 +628,11 @@ describe('what is still not known', () => {
     [
       'a property of a value code ran before',
       'const s = { zIndex: 1, b: f() }\nconst g = () => (track(), s).zIndex\nexport const A = css({ zIndex: g() })',
+    ],
+    // How many a spread of an unknown length passes is not known, so neither is a parameter after it.
+    [
+      'a parameter after a spread of unknown length',
+      "const second = (a, b) => b ?? 'red.300'\nexport const A = (props) => css({ color: second(...props.list) })",
     ],
     [
       'a rest pattern’s object taken from one',

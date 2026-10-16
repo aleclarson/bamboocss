@@ -33,6 +33,10 @@ use crate::{NativeEntrypoint, NativePathMapping, NativeProjectOptions, NativeTok
 /// Real helpers nest a handful. See `FileEvaluator::enter_call`.
 const MAX_CALL_DEPTH: u32 = 64;
 
+/// How many arguments a spread of a length the build does not know stands for: more than a helper
+/// takes, so no parameter after it is bound as `undefined`, which a missing argument is.
+const SPREAD_ARGUMENTS: usize = 16;
+
 /// How many helper calls one outermost call may make. Depth does not bound a recursion that
 /// branches: a helper calling itself twice per level makes `2^depth` calls. Real helpers make a
 /// few dozen.
@@ -286,7 +290,7 @@ pub(crate) struct EvalResult {
     /// says every key the object has, so whatever lowers `complete` for a reason other than a
     /// property's value opens it: a spread it could not read, a prototype, code run for its effect
     /// alone — the left of a comma — that it could not follow. Code whose value is used, an unknown
-    /// call among a helper's declarations, is taken not to write to what it was not given.
+    /// call among a helper's declarations, is taken to write to nothing, what it was given included.
     ///
     /// An incomplete object with no record at all is a guess as a whole: read where a spread may
     /// have written over it, it may not be this object, nor hold any key it holds.
@@ -2180,6 +2184,10 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         }
         let mut object = serde_json::Map::with_capacity(declaration.body.members.len());
         let mut complete = true;
+        // What is known of its members, kept once one is not. Open, as a numeric member gives the
+        // object a key for its value too, which is not held here: only a member written is known.
+        let mut known = Partial::default();
+        known.open();
         let mut next: Option<f64> = Some(0.0);
         for member in &declaration.body.members {
             let name = match &member.id {
@@ -2191,6 +2199,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                         Some(value) => value.to_string(),
                         None => {
                             complete = false;
+                            known.open();
                             continue;
                         }
                     }
@@ -2200,6 +2209,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 Some(initializer) => {
                     let value = self.evaluate_enum_initializer(initializer, &object);
                     complete &= value.complete;
+                    known.write(&name, value.complete && value.value.is_some(), None);
                     value.value
                 }
                 None => next
@@ -2212,9 +2222,15 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 .map(|number| number + 1.0);
             match value {
                 Some(value) => {
+                    if member.initializer.is_none() {
+                        known.write(&name, true, None);
+                    }
                     object.insert(name, value);
                 }
-                None => complete = false,
+                None => {
+                    complete = false;
+                    known.write(&name, false, None);
+                }
             }
         }
         EvalResult {
@@ -2222,7 +2238,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             conditions: Vec::new(),
             complete,
             refusal: None,
-            partial: None,
+            partial: (!complete).then(|| Arc::new(known)),
             nullish: false,
         }
     }
@@ -2504,16 +2520,37 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
     }
 
     fn evaluate_call(&mut self, call: &'a CallExpression<'a>) -> EvalResult {
-        let arguments = call
-            .arguments
-            .iter()
-            .map(|argument| match argument {
-                Argument::SpreadElement(_) => EvalResult::unknown(),
-                _ => argument
-                    .as_expression()
-                    .map_or_else(EvalResult::unknown, |argument| self.evaluate(argument)),
-            })
-            .collect::<Vec<_>>();
+        let mut arguments = Vec::with_capacity(call.arguments.len());
+        for argument in &call.arguments {
+            let Argument::SpreadElement(spread) = argument else {
+                arguments.push(
+                    argument
+                        .as_expression()
+                        .map_or_else(EvalResult::unknown, |argument| self.evaluate(argument)),
+                );
+                continue;
+            };
+            // An array known element by element is its elements, as the call spreads them. Of any
+            // other, how many it spreads is not known, so neither is what a parameter from here on
+            // is given: it used to be `undefined`, a parameter given nothing.
+            let value = self.evaluate(&spread.argument);
+            let exact = value.complete
+                && value.conditions.is_empty()
+                && value.partial.is_none()
+                && !value.nullish;
+            match value.value {
+                Some(serde_json::Value::Array(items)) if exact => {
+                    arguments.extend(items.into_iter().map(EvalResult::known));
+                }
+                _ => {
+                    arguments.extend((0..SPREAD_ARGUMENTS).map(|_| EvalResult {
+                        refusal: value.refusal.clone(),
+                        ..EvalResult::unknown()
+                    }));
+                    break;
+                }
+            }
+        }
 
         // `x.join()` on an `x` the evaluator refused is unknown for that reason — unless a path
         // below calls it anyway, as it does a method on an object literal.
@@ -3591,6 +3628,23 @@ pub(crate) fn spread_value(
         return;
     };
     let source = value.partial.as_deref();
+    // A guess as a whole (`EvalResult::partial`): what it holds it may not, so a key it writes is
+    // not known to be there, unless the object held it already, which a spread does not remove.
+    let guessed: Vec<String> = if source.is_none() && !value.complete {
+        values
+            .keys()
+            .filter(|key| {
+                !output.contains_key(*key)
+                    && !fragments.keys.contains(*key)
+                    && partial
+                        .as_ref()
+                        .is_none_or(|known| !known.undefined.contains(*key))
+            })
+            .cloned()
+            .collect()
+    } else {
+        Vec::new()
+    };
     // What it writes: its keys, those under the values it could not decide between, those it
     // could not evaluate and those it wrote as `undefined`.
     let undecided: Vec<String> = condition_keys(&value.conditions).cloned().collect();
@@ -3626,13 +3680,6 @@ pub(crate) fn spread_value(
             known.write(key, false, child);
         }
     }
-    // A guess as a whole (`EvalResult::partial`): what it holds it may not, so no key it writes
-    // is known to be there, any more than what is under it.
-    let guessed: Vec<String> = if source.is_none() && !value.complete {
-        values.keys().cloned().collect()
-    } else {
-        Vec::new()
-    };
     output.extend(values);
     // A source not wholly known whose record does not say which keys it did not know — or says
     // a spread of its own may have written any — may have written over anything.

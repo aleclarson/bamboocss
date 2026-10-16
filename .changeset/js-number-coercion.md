@@ -34,10 +34,16 @@ Read values in style expressions as JavaScript does, where the build used Rust's
 - `'a' in` an object decides a choice wherever `a` is surely there: held with a value the build could evaluate, or
   written with one of several values after any spread the build could not read, as in `{ ...props, a: c ? 1 : 2 }`.
   Where `a` may not be there it is unknown: a branch of a spread the build could not choose may hold it or not, and an
-  object read where such a spread may have written over it may be another object.
+  object read where a spread it could not read may have written over it may be another object.
 - A value after a comma whose left side the build cannot evaluate, `(track(), styles)`, may have been changed by it, so
   nothing is read from the value either. `'z' in { ...(track(), s) }` was answered from `s` as declared, and a property
   read from such a value, or a rest pattern's object taken from it, compiled.
+- `Object.assign` onto `null` or `undefined` throws, and is no longer read as an object: a rule was written for what the
+  call never returns.
+- A call is given the elements of an array it spreads, where the build knows them, and a parameter after a spread of an
+  unknown length is no longer read as `undefined`: a default stood in for it, and a choice on it was made.
+- An enum with a member the build cannot evaluate is still known by its other members: `E.A` beside `B = compute()`
+  compiles, and so does `'A' in` it.
 - `join` writes a `null` element as nothing, as it does a hole: `[1, null, 2].join('-')` is `1--2`, not `1-null-2`.
 - A property the prototype has is no longer read as `undefined`: `o.toString` and `[].map` are not known, and neither is
   `'toString' in o`. A string read by index gives its character, unless a space comes at or before it, which may have
