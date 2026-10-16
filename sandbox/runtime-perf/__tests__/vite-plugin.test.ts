@@ -1882,6 +1882,146 @@ const runPartialEnvironmentWatchRebuild = async (
 }
 
 /**
+ * Build the client first, as a framework does, then rebuild it alone, then SSR alone.
+ *
+ * The client's sheet is pruned against the client and finalized once SSR has written, with SSR's
+ * class restored. Rolldown hands each watch generation of an output the same options, and the loss
+ * history kept under them carried that first pruning on into the client's rebuild: the SSR rebuild
+ * after it, compiling the class it always had, failed naming it as pruned, though the sheet holds
+ * its rule.
+ */
+const runClientFirstWatchRebuild = async (
+  create: (config: Record<string, unknown>) => Promise<unknown>,
+  label: string,
+  widths: { ssr: string; client: string; edited: string },
+) => {
+  const clientTrigger = join(cwd, `src/__client-first-client-${label}.txt`)
+  const ssrTrigger = join(cwd, `src/__client-first-ssr-${label}.txt`)
+  const configPath = join(cwd, `__client-first-${label}.bamboo.config.ts`)
+  const clientOutDir = join(cwd, `__client-first-client-${label}-out`)
+  const ssrOutDir = join(cwd, `__client-first-ssr-${label}-out`)
+  const calls = { client: 0, ssr: 0 }
+
+  const environmentSource: VitePlugin = {
+    name: `bamboocss:test-client-first-source-${label}`,
+    enforce: 'pre',
+    sharedDuringBuild: true,
+    transform(_code, id) {
+      if (id.split('?')[0] !== envSharedModule) return
+
+      const environment = this.environment.name as keyof typeof calls
+      calls[environment]++
+      const trigger = environment === 'client' ? clientTrigger : ssrTrigger
+      this.addWatchFile(trigger)
+
+      // SSR compiles its one class whatever its trigger says, and the client the one its edit names.
+      const edited = readFileSync(trigger, 'utf8').trim() !== 'first'
+      const width = environment === 'ssr' ? widths.ssr : edited ? widths.edited : widths.client
+      return {
+        code:
+          `import { css } from '../styled-system/css'\n` + `export const className = css({ width: '[${width}]' })\n`,
+        map: null,
+      }
+    },
+  }
+
+  writeFileSync(
+    envSharedModule,
+    `import { css } from '../styled-system/css'\n` +
+      `export const ssr = css({ width: '[${widths.ssr}]' })\n` +
+      `export const client = css({ width: '[${widths.client}]' })\n` +
+      `export const edited = css({ width: '[${widths.edited}]' })\n`,
+  )
+  writeWatchTrigger(clientTrigger, 'first')
+  writeWatchTrigger(ssrTrigger, 'first')
+  writeFileSync(envClientEntry, `import 'virtual:bamboo.css'\nexport { className } from './__env-shared'\n`)
+  writeFileSync(envSsrEntry, `export { className } from './__env-shared'\n`)
+  writeIsolatedBambooConfig(configPath, ['./src/__env-shared.tsx', './src/__env-client.tsx', './src/__env-ssr.tsx'])
+  // Before the watchers start, so a late event for one of these writes cannot start a rebuild.
+  await settled()
+
+  const builder = (await create({
+    root: cwd,
+    logLevel: 'silent',
+    css: { postcss: { plugins: [] } },
+    plugins: [environmentSource, bamboocss({ cwd, configPath, reportSummary: false })],
+    build: {
+      watch: {},
+      minify: false,
+      emptyOutDir: false,
+      rollupOptions: { external: [/^react/] },
+    },
+    builder: {},
+    environments: {
+      client: {
+        build: {
+          outDir: clientOutDir,
+          lib: { entry: envClientEntry, formats: ['es'], fileName: `client-first-client-${label}` },
+        },
+      },
+      ssr: {
+        build: {
+          ssr: true,
+          outDir: ssrOutDir,
+          lib: { entry: envSsrEntry, formats: ['es'], fileName: `client-first-ssr-${label}` },
+        },
+      },
+    },
+  })) as TestEnvironmentBuilder
+
+  let clientWatcher: TestBuildWatcher | undefined
+  let ssrWatcher: TestBuildWatcher | undefined
+  try {
+    clientWatcher = (await builder.build(builder.environments.client)) as TestBuildWatcher
+    expect(await nextEnvironmentWatchBuild(clientWatcher)).toBeUndefined()
+    ssrWatcher = (await builder.build(builder.environments.ssr)) as TestBuildWatcher
+    expect(await nextEnvironmentWatchBuild(ssrWatcher)).toBeUndefined()
+    await watchersQuiet([clientWatcher, ssrWatcher])
+
+    expect(calls).toEqual({ client: 1, ssr: 1 })
+    const firstCss = readOutputFiles(clientOutDir, '.css')
+    expect(firstCss).toContain(`.${esc(`w_[${widths.ssr}]`)}`)
+    expect(firstCss).toContain(`.${esc(`w_[${widths.client}]`)}`)
+    expect(firstCss).not.toContain(widths.edited)
+
+    // The client alone, now compiling the class its first sheet pruned.
+    const rebuiltClient = watchCycleUntil(
+      clientWatcher,
+      () => readOutputFiles(clientOutDir, '.css').includes(widths.edited),
+      'rebuilding the client from its trigger',
+    )
+    await new Promise((settle) => setTimeout(settle, 800))
+    writeWatchTrigger(clientTrigger, 'second')
+    expect(await rebuiltClient).toBeUndefined()
+    await watchersQuiet([clientWatcher, ssrWatcher])
+
+    const rebuiltCss = readOutputFiles(clientOutDir, '.css')
+    expect(rebuiltCss).toContain(`.${esc(`w_[${widths.ssr}]`)}`)
+    expect(rebuiltCss).toContain(`.${esc(`w_[${widths.edited}]`)}`)
+
+    // SSR alone, compiling the class it always had, which the client's sheet holds. Counted from
+    // the edit, so a late cycle before it does not end the wait.
+    let beforeSsrEdit = Number.POSITIVE_INFINITY
+    const rebuiltSsr = watchCycleUntil(ssrWatcher, () => calls.ssr > beforeSsrEdit, 'rebuilding SSR from its trigger')
+    await new Promise((settle) => setTimeout(settle, 800))
+    beforeSsrEdit = calls.ssr
+    writeWatchTrigger(ssrTrigger, 'second')
+    expect(await rebuiltSsr).toBeUndefined()
+    await watchersQuiet([clientWatcher, ssrWatcher])
+
+    expect(readOutputFiles(ssrOutDir, '.js')).toContain(`w_[${widths.ssr}]`)
+    expect(readOutputFiles(clientOutDir, '.css')).toContain(`.${esc(`w_[${widths.ssr}]`)}`)
+  } finally {
+    await Promise.all([clientWatcher?.close(), ssrWatcher?.close()])
+    rmSync(clientTrigger, { force: true })
+    rmSync(ssrTrigger, { force: true })
+    rmSync(configPath, { force: true })
+    rmSync(clientOutDir, { force: true, recursive: true })
+    rmSync(ssrOutDir, { force: true, recursive: true })
+  }
+}
+
+/**
  * Reject one environment after Bamboo generated its candidate bundle, then rebuild only its
  * sibling.
  *
@@ -3655,6 +3795,22 @@ export default defineConfig({
       (config) => createBuilder(config as Parameters<typeof createBuilder>[0]),
       'vite8',
       { cachedSsr: '48.811px', freshClient: '48.822px', freshSsr: '48.833px' },
+    )
+  }, 180_000)
+
+  test('Vite 7 keeps no first pruning past a client-first rebuild', async () => {
+    await runClientFirstWatchRebuild(
+      (config) => createVite7Builder(config as Parameters<typeof createVite7Builder>[0]),
+      'vite7',
+      { ssr: '93.101px', client: '93.202px', edited: '93.303px' },
+    )
+  }, 180_000)
+
+  test('Vite 8 keeps no first pruning past a client-first rebuild', async () => {
+    await runClientFirstWatchRebuild(
+      (config) => createBuilder(config as Parameters<typeof createBuilder>[0]),
+      'vite8',
+      { ssr: '94.101px', client: '94.202px', edited: '94.303px' },
     )
   }, 180_000)
 
