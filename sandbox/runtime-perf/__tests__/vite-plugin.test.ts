@@ -2598,6 +2598,10 @@ const runRemovedLiveRuleWatchRebuild = async (
     `./src/__removed-live-rule-sibling-${label}.tsx`,
     `./src/__removed-live-rule-client-${label}.tsx`,
   ])
+  // Before the watchers start. The writes above can still be reported to them, and a rebuild one
+  // sets off, under way when the next cycle is awaited, ended that cycle without the rejection
+  // this arms: the build it awaited was not the one the edit below makes. 2 runs of the suite in 6.
+  await settled()
 
   const createConfig = (watch: boolean) => ({
     root: cwd,
