@@ -90,6 +90,11 @@ export interface BuilderSetupOptions {
   configPath?: string
   cwd?: string
   dev?: boolean
+  /**
+   * A build that rebuilds on change — `vite build --watch` — and so takes the config fast path a
+   * dev server takes. Unlike `dev`, it leaves the context as a build's.
+   */
+  watch?: boolean
   /** Record each atom's first call site during extraction, for `getAtomOrigins`. */
   atomOrigins?: boolean
   /** A watcher-owned change journal. Without one, Builder performs its standalone filesystem scan. */
@@ -444,11 +449,14 @@ export class Builder {
      * of them moving — including appearing or disappearing, which `getFileMeta` reports as a
      * changed mtime — takes the full reload below, as does a file the last snapshot never saw.
      *
-     * Dev-only because the reload is also the recovery for edits this guard cannot see — a
-     * preset external to the config bundle — and a one-shot build keeps paying the reload
-     * rather than trading that recovery for a latency only watch mode feels.
+     * Dev and watch only, because the reload is also the recovery for edits this guard cannot
+     * see — a preset external to the config bundle — and a one-shot build keeps paying the
+     * reload rather than trading that recovery for a latency only watch mode feels. A watching
+     * build takes it as a dev server does for a second reason: an ES module config is imported
+     * anew on every reload, and Node keeps every version it imported, so a reload per rebuild
+     * held one more copy of the config per rebuild for as long as the build watched.
      */
-    if (options.dev && this.configGraphUnchanged(configPath, options.sourceChanges)) {
+    if ((options.dev || options.watch) && this.configGraphUnchanged(configPath, options.sourceChanges)) {
       this.affecteds = { artifacts: new Set(), hasConfigChanged: false, diffs: [] }
       this.explicitDepsMeta = this.checkFilesChanged(this.context.explicitDeps)
       this.refreshSourceState(ctx, previousTsconfigFiles, options.sourceChanges)

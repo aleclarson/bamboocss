@@ -77,6 +77,34 @@ test('a config read again keeps what the integration added to it', async () => {
   expect(ctx.config.dev).toBe(true)
 })
 
+/**
+ * A watching build reads its config again only once a file it was read from changed, as a dev
+ * server does. It read it on every rebuild, and an ES module config is imported anew each time,
+ * into a module Node keeps for as long as the build watches.
+ */
+test('a watching build reads its config again only once it changed', async () => {
+  const cwd = project()
+  const builder = new Builder()
+  await builder.setup({ cwd, watch: true })
+  // The first rebuild reads it again, and takes the snapshot the next ones are checked against.
+  await builder.setup({ cwd, watch: true })
+  const ctx = builder.getContextOrThrow()
+  const reloads = vi.spyOn(ctx.diff, 'reloadConfigAndRefreshContext')
+
+  await builder.setup({ cwd, watch: true })
+  expect(reloads).not.toHaveBeenCalled()
+
+  // A one-shot build pays for it: it is also the recovery for an edit no snapshot sees.
+  await builder.setup({ cwd })
+  expect(reloads).toHaveBeenCalledTimes(1)
+
+  edit(cwd, '2px')
+  await builder.setup({ cwd, watch: true })
+  expect(builder.getContextOrThrow().tokens.getByName('sizes.probe')?.value).toBe('2px')
+  // Still a build's context: `hash: 'auto'` reads `dev`, which a watching build is not.
+  expect(builder.getContextOrThrow().config.dev).toBeFalsy()
+})
+
 // A plugin's `config:change` is handed the config as it reads after the edit. The Builder called
 // the hook of the context from before it, with the config the edit replaced.
 test('a config read again is handed to the plugins it now has', async () => {

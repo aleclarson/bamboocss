@@ -119,6 +119,21 @@ describe('the compilation host', () => {
     ])
   })
 
+  // It reloads the config only once it changed, as a dev server does, and is not one: `dev`
+  // reaches `hash: 'auto'`.
+  test.each([
+    ['build', { dev: false, watch: true }],
+    ['serve', { dev: true, watch: false }],
+  ] as const)('carries a watching %s into the Builder', async (command, expected) => {
+    const { host, stub } = hostOf()
+
+    host.setCommand(command)
+    host.setWatch(true)
+    await host.ensureGeneration()
+
+    expect(stub.setups).toEqual([expect.objectContaining(expected)])
+  })
+
   test('coalesces dev events into one stable journal and flags membership changes', async () => {
     const { host, stub } = hostOf()
     host.setCommand('serve')

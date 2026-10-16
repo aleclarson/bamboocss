@@ -8,6 +8,7 @@ import { esc } from '@bamboocss/shared'
 import { describe, expect, onTestFinished, test, vi } from 'vitest'
 import { asError, bamboocssCss, bamboocssCssEarly, VIRTUAL_CSS_ID } from '../src/css'
 import { optimizeStaticCssAssets } from '../src/css-output-module'
+import { createCompilationHost } from '../src/compilation-host'
 import { createLazyCssOutputModule } from '../src/lazy-modules'
 import { createStaticCompilationSession } from '../src/static-session'
 
@@ -914,6 +915,24 @@ describe('a watch rebuild prunes again', () => {
     // The same output options, as a watcher hands them to the next build.
     await renderStart.call(context, outputOptions as never, {} as never)
     expect(await build(), 'the rebuild prunes again').not.toContain('345.6789px')
+  })
+})
+
+// A watching build reads its config again only once it changed, as a dev server does; the host
+// is told so from the resolved config.
+describe('a watching build', () => {
+  test.each([
+    ['a build watching', { command: 'build', build: { watch: {}, sourcemap: false } }, true],
+    ['a build not watching', { command: 'build', build: { watch: null, sourcemap: false } }, false],
+    ['a dev server', { command: 'serve', build: { watch: {}, sourcemap: false } }, false],
+  ])('is told to the host for %s', async (_, config, watching) => {
+    const host = createCompilationHost({ loadBuilder: () => Promise.reject(new Error('not loaded')) })
+    const setWatch = vi.spyOn(host, 'setWatch')
+    const plugin = bamboocssCss({ cwd, session: createStaticCompilationSession(), host })
+
+    await hookOf(plugin.configResolved)?.call({} as never, config as never)
+
+    expect(setWatch).toHaveBeenCalledWith(watching)
   })
 })
 

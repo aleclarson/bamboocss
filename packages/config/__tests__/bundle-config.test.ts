@@ -3,12 +3,21 @@
 // environment cannot resolve outside the project: it reads modules as a browser would. A config
 // is loaded in Node, so this is the environment to load one in.
 
-import { mkdirSync, mkdtempSync, readdirSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import {
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import path, { dirname, join, sep } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, test } from 'vitest'
-import { bundle } from '../src/bundle-config'
+import { bundle, bundleConfig } from '../src/bundle-config'
 import { resolveSolutionAliases } from '../src/tsconfig-utils'
 
 describe('bundle config', () => {
@@ -546,6 +555,120 @@ describe('load config', () => {
     expect(config).toEqual({ include: ['./src/**/*.ts'] })
   })
 
+  // A function or `null` was spread into `{}` or `{ default: null }`, which passed for a config
+  // with nothing in it.
+  test.each([
+    ['a function', { 'bamboo.config.cjs': `module.exports = () => ({ preflight: true })` }],
+    ['`null`', { 'package.json': JSON.stringify({ type: 'module' }), 'bamboo.config.ts': `export default null` }],
+  ])('a config exporting %s is refused', async (_, files) => {
+    const root = project(files)
+    const file = join(root, Object.keys(files).find((name) => name.startsWith('bamboo.config'))!)
+
+    await expect(bundleConfig({ cwd: root, file })).rejects.toThrow('Config must export or return an object')
+  })
+
+  // A CommonJS file inlined into an ES module bundle has the banner's `require`, which resolved from
+  // the temporary bundle: a relative `require.resolve` found nothing. It resolves from the config,
+  // as the CommonJS bundle, compiled as the config, always has.
+  test.each(['module', 'commonjs'])('resolves `require` from the config under `"type": "%s"`', async (type) => {
+    const root = project({
+      'package.json': JSON.stringify({ type }),
+      'node_modules/.keep': '',
+      'tokens.json': '{}',
+      'lib/where.cjs': `exports.tokens = require.resolve('./tokens.json')`,
+      'bamboo.config.ts': `import where from './lib/where.cjs'\nexport default { ...where }`,
+    })
+
+    const { config } = await bundle<any>(join(root, 'bamboo.config.ts'), root)
+
+    expect(config).toEqual({ tokens: join(root, 'tokens.json') })
+  })
+
+  /**
+   * A stack through the bundle names the bundle at the bundle's lines: a temporary file deleted by
+   * the time anyone reads the error, or the config at lines it does not have. Where the error came
+   * from is read back through the bundle's source map.
+   */
+  describe('says where in the source a config threw', () => {
+    const files = {
+      'theme/tokens.ts': [
+        `export const tokens = {}`,
+        ``,
+        `export function boom(): never {`,
+        `  throw new Error('boom')`,
+        `}`,
+      ],
+      'bamboo.config.ts': [`import { boom } from './theme/tokens'`, ``, `boom()`, `export default {}`],
+    }
+    const lines = (source: Record<string, string[]>) =>
+      Object.fromEntries(Object.entries(source).map(([name, lines]) => [name, lines.join('\n')]))
+
+    test.each(['module', 'commonjs'])('under `"type": "%s"`', async (type) => {
+      const root = project({ 'package.json': JSON.stringify({ type }), ...lines(files) })
+
+      const error = await bundle(join(root, 'bamboo.config.ts'), root).catch((error) => error)
+
+      expect(error.message).toContain(`boom\n    at ${join(root, 'theme/tokens.ts')}:4:9`)
+    })
+
+    // The variables a file is given go into a line of its own — its first, or its directive's —
+    // and a column read there is told back as the file has it.
+    test.each([
+      ['on its first line', [`const where = __dirname; throw new Error(where)`, `export default {}`], 1],
+      [
+        'after a directive',
+        [`'use strict'`, `const where = __filename`, `throw new Error(where)`, `export default {}`],
+        3,
+      ],
+    ])('in a file given its own variables, %s', async (_, source, line) => {
+      const root = project({ 'bamboo.config.ts': source.join('\n') })
+
+      const error = await bundle(join(root, 'bamboo.config.ts'), root).catch((error) => error)
+
+      const column = source[line - 1].indexOf('new Error') + 1
+      expect(error.message).toContain(`\n    at ${join(root, 'bamboo.config.ts')}:${line}:${column}`)
+    })
+
+    // Named for the file it bundles, so a stack through a preset's does not read as the config's.
+    test('in a preset loaded by its package', async () => {
+      const root = project({
+        'node_modules/esm-preset/package.json': JSON.stringify({
+          name: 'esm-preset',
+          type: 'module',
+          main: 'preset.js',
+        }),
+        'node_modules/esm-preset/preset.js': `throw new Error('preset')`,
+      })
+
+      const error = await bundle('esm-preset', root).catch((error) => error)
+
+      expect(error.message).toContain(`\n    at ${join(root, 'node_modules/esm-preset/preset.js')}:1:7`)
+      expect(error.cause.stack).toContain('preset.js.timestamp-')
+    })
+  })
+
+  test('removes the bundles a stopped load left in `.bamboo` once they are old', async () => {
+    const left = (name: string) => join(root, 'node_modules/.bamboo', name)
+    const root = project({
+      'package.json': JSON.stringify({ type: 'module' }),
+      'node_modules/.bamboo/bamboo.config.ts.timestamp-1-0a.mjs': '',
+      'node_modules/.bamboo/bamboo.config.ts.timestamp-2-0b.mjs': '',
+      'node_modules/.bamboo/kept.mjs': '',
+      'bamboo.config.ts': `export default {}`,
+    })
+    const old = Date.now() / 1000 - 2 * 3600
+    utimesSync(left('bamboo.config.ts.timestamp-1-0a.mjs'), old, old)
+    utimesSync(left('kept.mjs'), old, old)
+
+    await bundle(join(root, 'bamboo.config.ts'), root)
+
+    // Kept: one a load in another process may still be importing, and anything not a bundle.
+    expect(readdirSync(join(root, 'node_modules/.bamboo')).sort()).toEqual([
+      'bamboo.config.ts.timestamp-2-0b.mjs',
+      'kept.mjs',
+    ])
+  })
+
   test('a string continued on the next line is not taken for a directive', async () => {
     const root = project({
       'list.js': `'a,b'\n  .split(',')\n  .forEach((name) => (exports[name] = __dirname.length > 0))`,
@@ -581,7 +704,7 @@ describe('load config', () => {
       'bamboo.config.ts': `import { value } from 'ui'\nexport default { value }`,
     })
     mkdirSync(join(root, 'node_modules'), { recursive: true })
-    symlinkSync(join(root, 'packages/ui'), join(root, 'node_modules/ui'), 'dir')
+    symlinkSync(join(root, 'packages/ui'), join(root, 'node_modules/ui'), 'junction')
 
     const { config } = await bundle<any>(join(root, 'bamboo.config.ts'), root)
 
@@ -881,7 +1004,7 @@ describe('load config', () => {
       const root = solution({ include: ['src'], compilerOptions: { paths: { '@/*': ['./src/*'] } } })
       const link = join(realpathSync(mkdtempSync(join(tmpdir(), 'bamboo-config-link-'))), 'project')
       projects.push(dirname(link))
-      symlinkSync(root, link, 'dir')
+      symlinkSync(root, link, 'junction')
 
       const aliases = await resolveSolutionAliases(join(link, 'bamboo.config.ts'), link)
 

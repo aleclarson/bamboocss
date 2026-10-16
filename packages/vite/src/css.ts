@@ -735,6 +735,7 @@ export const bamboocssCss = (options: BambooCssPluginOptions): Plugin => {
     async configResolved(config) {
       command = config.command
       host.setCommand(config.command)
+      host.setWatch(config.command === 'build' && config.build.watch != null)
       devSourcemap = config.command === 'serve' && Boolean(config.css?.devSourcemap)
       host.setDevSourcemap(devSourcemap)
       session.sourcemap = config.build.sourcemap

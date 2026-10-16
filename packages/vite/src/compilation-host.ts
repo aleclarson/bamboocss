@@ -65,6 +65,8 @@ export interface CompilationSourceChangeOptions {
 export interface CompilationHost {
   /** Set once per run from `configResolved`; only a dev server knows it is one. */
   setCommand(command: 'build' | 'serve'): void
+  /** Whether a build rebuilds on change: it then reloads the config only once it changed. */
+  setWatch(enabled: boolean): void
   /** Whether a dev server will emit a source map for the stylesheet, which needs atom origins. */
   setDevSourcemap(enabled: boolean): void
   /** Whether `include` covers this path and `exclude` does not. `true` before a Builder exists. */
@@ -110,6 +112,7 @@ export const createCompilationHost = (options: CompilationHostOptions = {}): Com
   const loadBuilder = options.loadBuilder ?? createLazyBuilder()
 
   let command: 'build' | 'serve' = 'build'
+  let watch = false
   let devSourcemap = false
   let builder: Builder | undefined
   let generation: CompilationGeneration | undefined
@@ -197,6 +200,7 @@ export const createCompilationHost = (options: CompilationHostOptions = {}): Com
         configPath,
         cwd,
         dev: command === 'serve',
+        watch: command === 'build' && watch,
         atomOrigins: command === 'serve' && devSourcemap,
         ...(command === 'serve' ? { sourceChanges } : {}),
       })
@@ -231,6 +235,10 @@ export const createCompilationHost = (options: CompilationHostOptions = {}): Com
   return {
     setCommand(next) {
       command = next
+    },
+
+    setWatch(enabled) {
+      watch = enabled
     },
 
     setDevSourcemap(enabled) {

@@ -2063,6 +2063,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
       // that is the one input a later setter could not correct: the context would already be
       // built, and the class names in the bundle already named from it.
       host.setCommand(config.command)
+      host.setWatch(config.command === 'build' && config.build.watch != null)
       defaultEmitAssets = config.build?.emitAssets ?? (!config.build?.ssr || config.build?.ssrEmitAssets === true)
 
       // A sheet written whole for a run that never completes would otherwise ship unpruned in
