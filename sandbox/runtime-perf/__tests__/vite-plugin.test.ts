@@ -1594,22 +1594,27 @@ const nextEnvironmentWatchCycle = (watcher: TestBuildWatcher) =>
   })
 
 /**
- * The error of the first watch cycle to start once `started()` holds, or `undefined` when it ends
- * clean. A cycle already under way, or one a late event for an earlier write starts, ends unread:
- * waiting on whichever cycle ended next read such a rebuild as the one an edit made.
+ * The error of the first watch cycle that fails, or `undefined` once one ends clean having done
+ * what `done` checks for — what an edit makes the outputs hold.
+ *
+ * A cycle that did neither, which a late event for an earlier write or the shared plugin can start,
+ * ends unread: waiting on whichever cycle ended next read such a rebuild as the one an edit made,
+ * and failed a full suite run so. What a cycle wrote says which one it was where when it started
+ * does not, as a build that began before an edit can read it. A cycle that never comes fails
+ * naming `what`, rather than holding the test to its timeout.
  */
-const watchCycleAfter = (watcher: TestBuildWatcher, started: () => boolean) =>
-  new Promise<Error | undefined>((resolve) => {
-    let counted = false
+const watchCycleUntil = (watcher: TestBuildWatcher, done: () => boolean, what: string) =>
+  new Promise<Error | undefined>((resolve, reject) => {
     let error: Error | undefined
+    const timer = setTimeout(() => {
+      watcher.off('event', onEvent)
+      reject(new Error(`No watch cycle ${what} within 60s`))
+    }, 60_000)
     const onEvent = (event: TestWatchEvent) => {
-      if (event.code === 'START') {
-        counted = started()
-        error = undefined
-      }
-      if (!counted) return
       if (event.code === 'ERROR') error = event.error
       if (event.code !== 'END') return
+      if (error === undefined && !done()) return
+      clearTimeout(timer)
       watcher.off('event', onEvent)
       resolve(error)
     }
@@ -2553,12 +2558,15 @@ const runRemovedLiveRuleWatchRebuild = async (
     )
 
   let rejectOneOutput = false
-  // Each wait below is for the cycle its write starts. A client rebuild under way when the
-  // rejection was armed — the shared plugin can start one once the sibling has built — ended the
-  // wait clean before the edit was built (1 suite run in 1 after 084aaba0f, under load); and run
-  // through the hooks below, one would reject an output of the source as it was.
-  let edit: 'none' | 'mixed' | 'accepted' | 'sibling' = 'none'
-  let rejectingCycle = false
+  // Only a build of the edit is the mixed one. A rebuild of the source as it was, which a late
+  // watch event or the shared plugin can start while the rejection is armed, leaves the state
+  // below alone: run through it, one rejected an output of the old source, and its written output
+  // released the sibling before the edit's had reached disk.
+  const buildsReplacement = (bundle: Record<string, unknown>) =>
+    Object.values(bundle).some((chunk) => {
+      const { code } = chunk as { code?: unknown }
+      return typeof code === 'string' && code.includes(`w_[${widths.replacement}]`)
+    })
   let rejectedOutput: 1 | 2 | undefined
   let firstOutputWritten = Promise.resolve()
   let markFirstOutputWritten = () => {}
@@ -2578,8 +2586,8 @@ const runRemovedLiveRuleWatchRebuild = async (
 
   const outputPlugin = (output: 1 | 2): VitePlugin => ({
     name: `bamboocss:test-removed-live-rule-output-${label}-${output}`,
-    async generateBundle() {
-      if (!rejectOneOutput || !rejectingCycle) return
+    async generateBundle(_options, bundle) {
+      if (!rejectOneOutput || !buildsReplacement(bundle)) return
       // Rolldown runs configured outputs as separate tasks and does not promise their order.
       // Let whichever task starts first reach disk, then reject the other one. Waiting for a
       // designated output deadlocks when the scheduler happens to start the waiter first.
@@ -2592,8 +2600,8 @@ const runRemovedLiveRuleWatchRebuild = async (
       releaseSibling()
       throw new Error(`test rejected removed-rule output ${output} (${label})`)
     },
-    writeBundle() {
-      if (output !== rejectedOutput) markFirstOutputWritten()
+    writeBundle(_options, bundle) {
+      if (rejectOneOutput && output !== rejectedOutput && buildsReplacement(bundle)) markFirstOutputWritten()
     },
   })
   const siblingBarrier: VitePlugin = {
@@ -2670,9 +2678,6 @@ const runRemovedLiveRuleWatchRebuild = async (
   try {
     clientWatcher = (await builder.build(builder.environments.client)) as TestBuildWatcher
     expect(await nextEnvironmentWatchCycle(clientWatcher)).toBeUndefined()
-    clientWatcher.on('event', (event) => {
-      if (event.code === 'START') rejectingCycle = edit === 'mixed'
-    })
     siblingWatcher = (await builder.build(builder.environments.sibling)) as TestBuildWatcher
     expect(await nextEnvironmentWatchCycle(siblingWatcher)).toBeUndefined()
 
@@ -2690,10 +2695,19 @@ const runRemovedLiveRuleWatchRebuild = async (
     armFirstOutput()
     holdSibling()
     rejectOneOutput = true
-    const mixedClientBuild = watchCycleAfter(clientWatcher, () => edit === 'mixed')
-    const rejectedSiblingBuild = watchCycleAfter(siblingWatcher, () => edit === 'mixed')
+    const replacementJs = (directory: string) => readOutputFiles(directory, '.js').includes(`w_[${widths.replacement}]`)
+    // Either fails the run below: a mixed edit both outputs took, or a sheet replaced under it.
+    const mixedClientBuild = watchCycleUntil(
+      clientWatcher,
+      () => replacementJs(firstOutDir) && replacementJs(secondOutDir),
+      'building the replacement width',
+    )
+    const rejectedSiblingBuild = watchCycleUntil(
+      siblingWatcher,
+      () => readOutputFiles(siblingOutDir, '.css').includes(widths.replacement),
+      'refusing the sibling stylesheet',
+    )
     await new Promise((settle) => setTimeout(settle, 800))
-    edit = 'mixed'
     writeFileSync(clientEntry, clientSource(widths.replacement))
 
     expect((await mixedClientBuild)?.message).toContain(`test rejected removed-rule output`)
@@ -2715,9 +2729,13 @@ const runRemovedLiveRuleWatchRebuild = async (
     // physical extraction is safe to publish.
     rejectOneOutput = false
     releaseSibling()
-    const acceptedClientBuild = watchCycleAfter(clientWatcher, () => edit === 'accepted')
+    const secondGeneration = (directory: string) => readOutputFiles(directory, '.js').includes('"second"')
+    const acceptedClientBuild = watchCycleUntil(
+      clientWatcher,
+      () => secondGeneration(firstOutDir) && secondGeneration(secondOutDir),
+      'publishing the client trigger edit',
+    )
     await new Promise((settle) => setTimeout(settle, 800))
-    edit = 'accepted'
     writeFileSync(clientTrigger, `export const generation = 'second'\n`)
     expect(await acceptedClientBuild).toBeUndefined()
     expect(readOutputFiles(firstOutDir, '.js')).toContain(`w_[${widths.replacement}]`)
@@ -2725,9 +2743,12 @@ const runRemovedLiveRuleWatchRebuild = async (
     expect(readOutputFiles(firstOutDir, '.js')).not.toContain(`w_[${widths.old}]`)
     expect(readOutputFiles(secondOutDir, '.js')).not.toContain(`w_[${widths.old}]`)
 
-    const acceptedSiblingBuild = watchCycleAfter(siblingWatcher, () => edit === 'sibling')
+    const acceptedSiblingBuild = watchCycleUntil(
+      siblingWatcher,
+      () => secondGeneration(siblingOutDir),
+      'publishing the sibling trigger edit',
+    )
     await new Promise((settle) => setTimeout(settle, 800))
-    edit = 'sibling'
     writeFileSync(siblingTrigger, `export const generation = 'second'\n`)
     expect(await acceptedSiblingBuild).toBeUndefined()
     convergedCss = readOutputFiles(siblingOutDir, '.css')
