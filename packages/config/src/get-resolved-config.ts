@@ -13,6 +13,14 @@ const hookUtils = {
   traverse,
 }
 
+/** Why a preset is refused: named by its package, or for a function, by the function's name. */
+function notAPreset(preset: unknown, value: unknown) {
+  if (typeof preset === 'string') return `Preset \`${preset}\` must export an object.`
+  const called =
+    typeof value === 'function' && value.name ? `, not the function \`${value.name}\` — was it called?` : '.'
+  return `A preset must be an object${called}`
+}
+
 /**
  * Recursively merge all presets into a single config (depth-first using stack)
  */
@@ -26,14 +34,16 @@ export async function getResolvedConfig(config: ExtendableConfig, cwd: string, h
 
     const subPresets = current.presets ?? []
     for (const subPreset of subPresets) {
+      // `presets: [dark && darkPreset]`: an entry left out, as it always was.
+      const entry: unknown = subPreset
+      if (entry === false || entry === null || entry === undefined) continue
       let presetConfig: ExtendableConfig
       let presetName: string
 
       if (typeof subPreset === 'string') {
+        // Settled already: a promise a module exports is the module's (`bundle`).
         const presetModule = await bundle(subPreset, cwd)
-        // A promise of one, as one written in `presets` may be: it was merged as an object holding
-        // nothing.
-        presetConfig = await presetModule.config
+        presetConfig = presetModule.config
         presetName = subPreset
         externalPresets.push({
           dependencies: [...presetModule.dependencies],
@@ -47,8 +57,7 @@ export async function getResolvedConfig(config: ExtendableConfig, cwd: string, h
       // As a config is (`bundleConfig`): a function or `null` was merged as a preset with nothing
       // in it, or failed on a property of `null`, naming no preset.
       if (typeof presetConfig !== 'object' || presetConfig === null) {
-        const preset = typeof subPreset === 'string' ? `Preset \`${subPreset}\` must export` : 'A preset must be'
-        throw new BambooError('CONFIG_ERROR', `💥 ${preset} an object.`)
+        throw new BambooError('CONFIG_ERROR', `💥 ${notAPreset(subPreset, presetConfig)}`)
       }
 
       // Call preset:resolved hook if available
@@ -60,6 +69,12 @@ export async function getResolvedConfig(config: ExtendableConfig, cwd: string, h
         })
 
         if (resolvedPreset !== undefined) {
+          if (typeof resolvedPreset !== 'object' || resolvedPreset === null) {
+            throw new BambooError(
+              'CONFIG_ERROR',
+              `💥 The \`preset:resolved\` hook must return an object, or nothing, for preset \`${presetName}\`.`,
+            )
+          }
           presetConfig = resolvedPreset as ExtendableConfig
         }
       }

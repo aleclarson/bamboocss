@@ -60,13 +60,19 @@ export async function bundle<T extends Config = Config>(filepath: string, cwd: s
   const esm = isEsmFile(file)
   const { code, dependencies } = await bundleFile(file, cwd, esm, options)
 
-  let mod: any
+  let config: T
   // Where the bundle ran from, as the stack names it: a temporary file, or the file itself.
   const loaded = { path: file }
   try {
-    mod = esm ? await importBundled(file, code, loaded) : requireBundled(file, code)
+    const mod = esm ? await importBundled(file, code, loaded) : requireBundled(file, code)
+    // A promise is settled here, so what it rejects with is reported as the module's error, and
+    // what it holds is read as the module is: `module.exports = import('./config.mjs')` is a
+    // promise of a module, and a promise as the default export, `export default import('./real')`,
+    // may be one too.
+    const exported = exportOf(await mod)
+    config = typeof exported?.then === 'function' ? exportOf(await exported) : exported
   } catch (error) {
-    const reason = error instanceof Error ? error.message : describe(error)
+    const reason = reasonOf(error)
     // Where it was raised is said if it can be, and never in place of what was raised.
     const where = await locate(
       error,
@@ -83,19 +89,21 @@ export async function bundle<T extends Config = Config>(filepath: string, cwd: s
     throw new BambooError('CONFIG_ERROR', `💥 Failed to load ${file}: ${reason}${at}`, { cause: error })
   }
 
-  // A module with no default export is its exports, as `module.exports` is in a CommonJS one —
-  // copied, since an ES module namespace cannot be written to and the config is. A default export
-  // is the config whatever it is, `undefined` included, and only an object is copied: a function,
-  // `null` or `undefined` used to pass for one with nothing in it. What is not an object is
-  // refused by `bundleConfig` for a config and `getResolvedConfig` for a preset. A promise is
-  // left for them to wait for: spread, it was an object holding nothing.
-  const structured = typeof mod === 'object' && mod !== null && typeof mod.then !== 'function'
-  const config = (structured ? ('default' in mod ? mod.default : { ...mod }) : mod) as T
-
   return {
     config,
     dependencies,
   }
+}
+
+/**
+ * What a module holds: its default export when it has one, whatever it is, `undefined` included,
+ * and otherwise its exports, as `module.exports` is in a CommonJS one — copied, since an ES module
+ * namespace cannot be written to and the config is. Only an object is copied: a function, `null`
+ * or `undefined` used to pass for one with nothing in it. What is not an object is refused by
+ * `bundleConfig` for a config and `getResolvedConfig` for a preset.
+ */
+function exportOf(mod: any) {
+  return typeof mod === 'object' && mod !== null ? ('default' in mod ? mod.default : { ...mod }) : mod
 }
 
 /** Whether Node would load `file` as an ES module. */
@@ -378,10 +386,11 @@ async function locate(
   if (!(error instanceof Error) || typeof error.stack !== 'string') return []
   // As V8 writes a frame: an ES module by its URL, a CommonJS one by its path, either of which may
   // hold a space, then a line and a column, and a closing parenthesis if the frame named a function.
-  // The message comes first, and may name the bundle itself, or hold a stack of its own.
+  // The message comes first, and may name the bundle itself, or hold a stack of its own. Every
+  // formatter writes it as it is, after whatever name a class or a tool gives the error.
   const names = [pathToFileURL(bundled).href, bundled]
-  const header = describe(error)
-  const frames = error.stack.startsWith(header) ? error.stack.slice(header.length) : error.stack
+  const message = error.message ? error.stack.indexOf(error.message) : -1
+  const frames = message >= 0 ? error.stack.slice(message + error.message.length) : error.stack
   const positions: Array<[number, number]> = []
   for (const frame of frames.split('\n')) {
     const text = frame.trim()
@@ -412,6 +421,16 @@ async function locate(
   return found
 }
 
+/** An error's message, or what any other thrown value says of itself, whatever reading it throws. */
+function reasonOf(error: unknown): string {
+  try {
+    if (error instanceof Error) return String(error.message)
+  } catch {
+    // A proxy whose traps throw, a revoked one, a message read through a getter that throws.
+  }
+  return describe(error)
+}
+
 /** What a thrown value says of itself — one with no `toString`, `Object.create(null)`, included. */
 function describe(value: unknown): string {
   try {
@@ -435,8 +454,6 @@ export async function bundleConfig(options: ConfigFileOptions): Promise<BundleCo
   logger.debug('config:path', filePath)
 
   const result = await bundle(filePath, cwd, { projectReferences: true })
-  // A promise of one, as a preset may be (`getResolvedConfig`).
-  result.config = await result.config
 
   if (typeof result.config !== 'object' || result.config === null) {
     throw new BambooError('CONFIG_ERROR', `💥 Config must export or return an object.`)

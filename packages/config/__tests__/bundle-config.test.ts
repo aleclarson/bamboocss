@@ -582,6 +582,57 @@ describe('load config', () => {
     expect(config).toMatchObject({ preflight: true, outdir: 'styled-system' })
   })
 
+  // A promise of a module is read as the module: its default export, not `{ default }`.
+  test.each([
+    [
+      '`module.exports = import(…)`',
+      {
+        'real.mjs': 'export default { preflight: true }',
+        'bamboo.config.cjs': `module.exports = import('./real.mjs')`,
+      },
+    ],
+    [
+      'a default export of `import(…)`',
+      { 'real.ts': 'export default { preflight: true }', 'bamboo.config.ts': `export default import('./real')` },
+    ],
+  ])('a config exporting a promise of a module, as %s, is that module', async (_, files) => {
+    const root = project(files)
+    const file = join(root, Object.keys(files).find((name) => name.startsWith('bamboo.config'))!)
+
+    const { config } = await bundleConfig({ cwd: root, file })
+
+    expect(config).toMatchObject({ preflight: true })
+    expect(config).not.toHaveProperty('default')
+  })
+
+  // `presets: [dark && darkPreset]`: what it always was, an entry left out.
+  test('a preset entry left out is skipped', async () => {
+    const colors = { x: { value: 'red' } }
+    const entries = [false, null, undefined, { theme: { tokens: { colors } } }] as never[]
+
+    const config = await getResolvedConfig({ presets: entries }, tmpdir())
+
+    expect(config.theme?.tokens?.colors).toMatchObject(colors)
+  })
+
+  test('a function written in `presets` is refused, named, as one not called', async () => {
+    function brandPreset() {
+      return {}
+    }
+
+    await expect(getResolvedConfig({ presets: [brandPreset as never] }, tmpdir())).rejects.toThrow(
+      'A preset must be an object, not the function `brandPreset` — was it called?',
+    )
+  })
+
+  test('what a `preset:resolved` hook returns is refused unless it is an object, or nothing', async () => {
+    const hooks = { 'preset:resolved': () => null as never }
+
+    await expect(getResolvedConfig({ presets: [{ name: 'p' }] }, tmpdir(), hooks)).rejects.toThrow(
+      'The `preset:resolved` hook must return an object, or nothing, for preset `p`',
+    )
+  })
+
   test('a preset named by its package exporting a promise of one is waited for', async () => {
     const root = project({
       'node_modules/promised-preset/package.json': JSON.stringify({ name: 'promised-preset', main: 'index.js' }),
@@ -734,6 +785,49 @@ describe('load config', () => {
       const error = await bundle(file, root).catch((error) => error)
 
       expect(error.message).toBe(`💥 Failed to load ${file}: ${error.cause.message}\n    at ${file}:3:7`)
+    })
+
+    // Settled where a synchronous error would be: it is the config's, located as one is.
+    test('of a promise it exports that rejects', async () => {
+      const source = [
+        `async function load(): Promise<object> {`,
+        `  throw new Error('token service unavailable')`,
+        `}`,
+        `export default load()`,
+      ]
+      const root = project({ 'bamboo.config.ts': source.join('\n') })
+      const file = join(root, 'bamboo.config.ts')
+
+      const error = await bundle(file, root).catch((error) => error)
+
+      expect(error.message).toBe(`💥 Failed to load ${file}: token service unavailable\n    at ${file}:2:9`)
+    })
+
+    // V8 writes its own header, whatever `toString` a class gives the error, and the message as it is.
+    test('not from a stack held in the message of an error that names itself otherwise', async () => {
+      const source = [
+        `class Wrapped extends Error { toString() { return '[wrapped] ' + this.message } }`,
+        `const held = new Error('inner').stack`,
+        `throw new Wrapped('wrapped: ' + held)`,
+        `export default {}`,
+      ]
+      const root = project({ 'bamboo.config.ts': source.join('\n') })
+      const file = join(root, 'bamboo.config.ts')
+
+      const error = await bundle(file, root).catch((error) => error)
+
+      expect(error.message).toBe(`💥 Failed to load ${file}: ${error.cause.message}\n    at ${file}:3:7`)
+    })
+
+    test('for an error whose reading throws', async () => {
+      const root = project({
+        'bamboo.config.ts': `throw new Proxy(new Error('real'), { get() { throw new Error('trap') } })`,
+      })
+      const file = join(root, 'bamboo.config.ts')
+
+      const error = await bundle(file, root).catch((error) => error)
+
+      expect(error.message).toBe(`💥 Failed to load ${file}: object`)
     })
 
     // Bundled again for its map, the config is no longer what ran: a map of other code would
