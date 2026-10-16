@@ -27,29 +27,15 @@ describe('important and space handling', () => {
       // Any whitespace: the build writes each run of it as one space, so the browser reads a mark.
       ['red !\u00a0important', true],
       ['red !\u3000important', true],
-      // A comment is whitespace to CSS, after the mark or inside it; an unclosed one is not.
-      ['red !important /* c */', true],
-      ['red !/**/important', true],
-      ['red ! /* a */ /* b */ important', true],
+      // A comment is not read: telling its `/*` from a string's or a url's is the tokenizer's job,
+      // and each reading of them short of it lost marks or made them. What follows `/*` is the
+      // value's, a mark included.
+      ['red !important /* c */', false],
+      ['red !/**/important', false],
       ['red /* c */', false],
-      // `/*/` opens a comment and closes nothing, so it runs to the end and leaves `red !`: the
-      // short mark, which takes the unclosed comment with it as it is stripped.
-      ['red !/*/important', true],
-      // A comment does not nest, and a `/*` in a string opens none: the `!` here is the comment's.
       ['red /* wow! /* x */', false],
-      ['red !important /* a /* b */', true],
       ['"!/*" */', false],
-      // A value holding a `url()`, a string or an escape keeps its comments as written: telling a
-      // `/*` there from a comment's is the tokenizer's job, and guessing lost marks or made them.
-      ['url(/*) !important /* x */', false],
-      ["url('/*') !important /* x */", false],
-      ['#url(x/*) !important /* y */', false],
-      ['red !important /* c */ url(x)', false],
-      // What a comment holds hides nothing: an apostrophe in its prose is no string.
-      ["red !important /* don't */", true],
-      // A comment never closed runs to the end of the value, the mark it holds with it.
-      ['red /* x !important', false],
-      ['red !important /* see url( */', true],
+      ['red /* x !important', true],
       // NUL goes as `sanitize` removes it, at either end of what the mark leaves.
       ['\u0000[a!]', true],
       ['fallback(\u0000[a!], b)', true],
@@ -111,8 +97,6 @@ describe('important and space handling', () => {
       ['fallback("a" !important, "b!")', '!important'],
       ['fallback([a!], b)', '!'],
       ['[a!] /* x */', undefined],
-      // Without what follows it: the comment is not the mark.
-      ['red !important /* c */', '!important'],
       ['"!"', undefined],
       ['red', undefined],
     ])('%j -> %j', (value, expected) => {
@@ -169,29 +153,16 @@ describe('important and space handling', () => {
       expect(withoutImportant('[a] 1fr [b!]')).toBe('[a] 1fr [b!]')
     })
 
-    test('strips a mark with a comment after it or inside it, and the comment with it', () => {
-      expect(withoutImportant('red !important /* c */')).toBe('red')
-      expect(withoutImportant('red !/**/important')).toBe('red')
-      // No mark: the comment is the value's.
-      expect(withoutImportant('red /* c */')).toBe('red /* c */')
-      expect(withoutImportant('red /* wow! /* x */')).toBe('red /* wow! /* x */')
-      // An unclosed comment goes with the mark before it, and holds none itself.
-      expect(withoutImportant('red !/*/important')).toBe('red')
-      expect(withoutImportant('red /* x !important')).toBe('red /* x !important')
+    test('leaves a comment where it is, and strips a mark written before it', () => {
+      expect(withoutImportant('red !important /* c */')).toBe('red !important /* c */')
+      expect(withoutImportant('red /* c */ !important')).toBe('red /* c */')
       expect(withoutImportant('[a!] /* x */')).toBe('[a!] /* x */')
     })
 
     test('strips a long run of marks', () => {
       // Read from the end, so this is one pass rather than a rescan per mark.
       expect(withoutImportant(`red${' !'.repeat(50_000)}`)).toBe('red')
-      // The comments are found once for the value, not again for each mark, and only where
-      // trivia ends in one.
-      expect(withoutImportant(`red${' !/**/'.repeat(50_000)}`)).toBe('red')
       expect(withoutImportant(`red${' !important'.repeat(50_000)}`)).toBe('red')
-      // Each call looks for a value's comments once: looked for again on each pass, these took
-      // seconds.
-      expect(isImportant(`red !important${' /**/'.repeat(50_000)}`)).toBe(true)
-      expect(importantMark(`red !important${' /**/'.repeat(50_000)}`)).toBe('!important')
     })
 
     test('strips a mark ending a fallback candidate', () => {

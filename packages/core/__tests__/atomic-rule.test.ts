@@ -79,13 +79,10 @@ describe('atomic / with basic style object', () => {
     `)
   })
 
-  test('a mark with whitespace of any kind inside it, and a comment after it', () => {
-    // The build writes each run of whitespace as one space, so the browser reads a mark either way,
-    // and a comment is whitespace to it. Read as no mark, the class was named for an ordinary rule.
-    const expected = css({ color: 'red !important' })
-
-    expect(css({ color: 'red !\u00a0important' })).toBe(expected)
-    expect(css({ color: 'red !important /* c */' })).toBe(expected)
+  test('a mark with whitespace of any kind inside it', () => {
+    // The build writes each run of whitespace as one space, so the browser reads a mark either way.
+    // Read as no mark, the class was named for an ordinary rule.
+    expect(css({ color: 'red !\u00a0important' })).toBe(css({ color: 'red !important' }))
   })
 
   test('a trailing mark after a value holding a `!` marks only the declaration', () => {

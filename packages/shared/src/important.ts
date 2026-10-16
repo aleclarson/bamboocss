@@ -3,13 +3,9 @@ import { FALLBACK_SEPARATOR, parseFallbackValue } from './fallback-value'
 
 const IMPORTANT = 'important'
 const BANG = 0x21
-const STAR = 0x2a
-const SLASH = 0x2f
 const BACKSLASH = 0x5c
 const OPEN_BRACKET = 0x5b
 const whitespaceRegex = /\s/
-/** What can hide a `/*` from the tokenizer: a string, an escape, an unquoted `url()`. */
-const commentHidingRegex = /["'\\]|url\(/gi
 
 /**
  * Where the important mark ending `value` — read up to `end` — starts, or -1.
@@ -22,93 +18,30 @@ const commentHidingRegex = /["'\\]|url\(/gi
  * Whitespace is any run of it, not only CSS's: the build writes each run as one space, so
  * `red !\u00a0important` reaches the browser as `red ! important`, a mark. Read as CSS's alone,
  * the class was named for an ordinary declaration and the rule for an important one. NUL beside
- * the mark is whitespace here too, as `sanitize` removes it, and a comment is whitespace to CSS,
- * before the keyword or after it, where `commentsIn` can find it. An escaped `\!` is no mark: it
- * is part of the identifier before it.
+ * the mark is whitespace here too, as `sanitize` removes it. An escaped `\!` is no mark: it is
+ * part of the identifier before it.
+ *
+ * A comment is not read, before the keyword or after it, though CSS reads one as whitespace:
+ * telling a comment's `/*` from a string's or a url's is its tokenizer's job, and each reading of
+ * them short of it lost marks, made them out of a comment's `!`, or took seconds on a value
+ * holding many. Write the mark last.
  *
  * Read from the end, so finding one costs the whitespace around the keyword and its nine
- * characters, and stripping a run of them is linear however long the value is: the comments are
- * looked for only when trivia ends in a comment's close, and once for a run that is stripped.
+ * characters, and stripping a run of them is linear however long the value is.
  */
-function markAt(value: string, end = value.length, comments = new CommentSearch(value)): number {
-  end = beforeTrivia(value, end, comments)
+function markAt(value: string, end = value.length): number {
+  end = beforeTrivia(value, end)
   if (end > 0 && value.charCodeAt(end - 1) === BANG) return isEscaped(value, end - 1) ? -1 : end - 1
   const keyword = end - IMPORTANT.length
   if (keyword <= 0 || !isKeyword(value, keyword)) return -1
-  const bang = beforeTrivia(value, keyword, comments)
+  const bang = beforeTrivia(value, keyword)
   return bang > 0 && value.charCodeAt(bang - 1) === BANG && !isEscaped(value, bang - 1) ? bang - 1 : -1
 }
 
-/** Where the whitespace and comments that end `value` before `end` begin. */
-function beforeTrivia(value: string, end: number, search: CommentSearch): number {
-  for (;;) {
-    while (end > 0 && isTrivia(value.charCodeAt(end - 1))) end--
-    const comments = search.comments()
-    if (comments === undefined) return end
-    // Past where a comment opens that never closes: to CSS, everything after it is the comment's.
-    if (comments.unclosed !== -1 && end > comments.unclosed) {
-      end = comments.unclosed
-      continue
-    }
-    if (end < 4 || value.charCodeAt(end - 1) !== SLASH || value.charCodeAt(end - 2) !== STAR) return end
-    const open = comments.ends.get(end)
-    if (open === undefined) return end
-    end = open
-  }
-}
-
-/** The comments in a value: where each closed one ends, to where it opens, and one never closed. */
-interface Comments {
-  ends: Map<number, number>
-  unclosed: number
-}
-
-/**
- * One value's comments, looked for the first time they are wanted and kept for every call after:
- * a run of marks stripped, the calls for one leaf. Looked for again on each pass, as one search
- * per call once was, a value ending in many comments took seconds.
- */
-class CommentSearch {
-  private found: Comments | null | undefined
-
-  constructor(private readonly value: string) {}
-
-  comments(): Comments | undefined {
-    if (this.found === undefined) {
-      this.found = (this.value.includes('/*') && commentsIn(this.value)) || null
-    }
-    return this.found ?? undefined
-  }
-}
-
-/**
- * The comments in `value` — read only where nothing outside them can hide a `/*` from CSS's
- * tokenizer.
- *
- * Where nothing does, every `/*` opens a comment, and as they do not nest, one runs from the first
- * `/*` to the first close after it: a comment holding a second `/*` and a `!` is one comment,
- * whose `!` is no mark, and one never closed runs to the end of the value. A string, an escape or
- * an unquoted `url()` outside a comment can hold a `/*` that opens none, and telling which is the
- * tokenizer's job: a value holding one has its comments left as written, as every value had
- * before comments were read at all. Reading them anyway, a scan that took a url's `/*` for a
- * comment's lost a mark, and one that took a comment's `!` for a mark stripped it and left the
- * comment unclosed, swallowing the rules after it. What a comment holds hides nothing: an
- * apostrophe in its prose is no string.
- */
-function commentsIn(value: string): Comments | undefined {
-  const ends = new Map<number, number>()
-  for (let index = 0; ; ) {
-    const open = value.indexOf('/*', index)
-    commentHidingRegex.lastIndex = index
-    const hiding = commentHidingRegex.exec(value)
-    if (hiding && (open === -1 || hiding.index < open)) return undefined
-    if (open === -1) return { ends, unclosed: -1 }
-    // Its opening `*` is not its closing one: `/*/` is no comment.
-    const close = value.indexOf('*/', open + 2)
-    if (close === -1) return { ends, unclosed: open }
-    ends.set(close + 2, open)
-    index = close + 2
-  }
+/** Where the whitespace that ends `value` before `end` begins. */
+function beforeTrivia(value: string, end: number): number {
+  while (end > 0 && isTrivia(value.charCodeAt(end - 1))) end--
+  return end
 }
 
 /** What the build writes as one space, or as nothing: whitespace, and NUL. */
@@ -159,9 +92,8 @@ function isKeyword(value: string, from: number): boolean {
 
 /** `value` without the marks that end it — every one, so `red !important !important` is `red`. */
 function stripMarks(value: string): string {
-  const comments = new CommentSearch(value)
   let end = value.length
-  for (let at = markAt(value, end, comments); at !== -1; at = markAt(value, end, comments)) end = at
+  for (let at = markAt(value, end); at !== -1; at = markAt(value, end)) end = at
   return trimTrivia(end === value.length ? value : value.slice(0, end))
 }
 
@@ -261,8 +193,7 @@ export function importantMark(value: string): string | undefined {
 function markOf(value: string): string | undefined {
   const inside = markAt(value) === -1 ? markedHatch(value) : value
   if (inside === undefined) return undefined
-  const comments = new CommentSearch(inside)
-  return inside.slice(markAt(inside, inside.length, comments), beforeTrivia(inside, inside.length, comments))
+  return inside.slice(markAt(inside), beforeTrivia(inside, inside.length))
 }
 
 // `string | T` is stated rather than inferred: `T` is a literal type at most call sites, and
