@@ -1,6 +1,6 @@
 import { BambooError, omit, pick, traverse } from '@bamboocss/shared'
 import type { Config, BambooHooks, Preset } from '@bamboocss/types'
-import { bundle } from './bundle-config'
+import { bundle, exportOf, isModule } from './bundle-config'
 import { mergeConfigs } from './merge-config'
 import { rememberExternalPreset, type ExternalPresetProvenance } from './resolution-provenance'
 
@@ -34,9 +34,9 @@ export async function getResolvedConfig(config: ExtendableConfig, cwd: string, h
 
     const subPresets = current.presets ?? []
     for (const subPreset of subPresets) {
-      // `presets: [dark && darkPreset]`: an entry left out, as it always was.
-      const entry: unknown = subPreset
-      if (entry === false || entry === null || entry === undefined) continue
+      // `false`, as `dark && darkPreset` gives, is left out, as it always was. `null` and
+      // `undefined` are not: a misspelled import is one, and is refused below.
+      if ((subPreset as unknown) === false) continue
       let presetConfig: ExtendableConfig
       let presetName: string
 
@@ -51,7 +51,9 @@ export async function getResolvedConfig(config: ExtendableConfig, cwd: string, h
           specifier: subPreset,
         })
       } else {
+        // A module, `import('./preset')`, as one a package exports is read (`bundle`).
         presetConfig = await subPreset
+        if (isModule(presetConfig)) presetConfig = exportOf(presetConfig)
         presetName = (presetConfig as any)?.name || 'unknown-preset'
       }
       // As a config is (`bundleConfig`): a function or `null` was merged as a preset with nothing
@@ -68,6 +70,8 @@ export async function getResolvedConfig(config: ExtendableConfig, cwd: string, h
           utils: hookUtils,
         })
 
+        // `false` leaves the preset out, as it always did.
+        if ((resolvedPreset as unknown) === false) continue
         if (resolvedPreset !== undefined) {
           if (typeof resolvedPreset !== 'object' || resolvedPreset === null) {
             throw new BambooError(

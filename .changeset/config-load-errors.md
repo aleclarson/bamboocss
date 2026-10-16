@@ -22,10 +22,10 @@ modules.
 - `import.meta.url`, `import.meta.dirname` and `import.meta.filename` work in every config, as do `__dirname` and
   `__filename`, and each file a config imports sees its own. In a CommonJS bundle `import.meta` used to be empty, so
   `fileURLToPath(import.meta.url)` threw.
-- A config, or a preset, that is something other than an object — a function, `null`, or a default export that is
-  `undefined` — is reported as not being one, a preset named by its package by its name, and so is what a
-  `preset:resolved` hook returns, unless it is nothing. `presets: [dark && darkPreset]` leaves the entry out, as it did.
-- A config, or a preset named by its package, that exports a promise is waited for, as a preset written in `presets` is,
-  and what it rejects with is reported as the module's error. A promise of a module —
-  `module.exports = import('./config.mjs')` — is read as the module is. A preset was merged as an object holding
-  nothing.
+- A config, or a preset, that is something other than an object — a function, `null`, `undefined`, or a default export
+  that is `undefined` — is reported as not being one, a preset named by its package by its name. A function preset was
+  merged as one holding nothing, and `null` failed with a `TypeError` naming no preset. So is what a `preset:resolved`
+  hook returns, unless it is nothing, or `false`, which leaves the preset out as it did; an entry that is `false` in
+  `presets` is left out too, as it was.
+- What a promise a config or a preset exports rejects with is reported as the module's error, with its location. A
+  module written in `presets`, `import('./preset')`, is read as the module, as one a config exports is.

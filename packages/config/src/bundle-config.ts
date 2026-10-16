@@ -65,12 +65,10 @@ export async function bundle<T extends Config = Config>(filepath: string, cwd: s
   const loaded = { path: file }
   try {
     const mod = esm ? await importBundled(file, code, loaded) : requireBundled(file, code)
-    // A promise is settled here, so what it rejects with is reported as the module's error, and
-    // what it holds is read as the module is: `module.exports = import('./config.mjs')` is a
-    // promise of a module, and a promise as the default export, `export default import('./real')`,
-    // may be one too.
-    const exported = exportOf(await mod)
-    config = typeof exported?.then === 'function' ? exportOf(await exported) : exported
+    // A promise is settled here, so what it rejects with is reported as the module's error. What it
+    // holds is read as it would be held without one: a module as a module — `module.exports =
+    // import('./config.mjs')`, `export default import('./real')` — and anything else as it is.
+    config = await settle(exportOf(await mod))
   } catch (error) {
     const reason = reasonOf(error)
     // Where it was raised is said if it can be, and never in place of what was raised.
@@ -102,8 +100,34 @@ export async function bundle<T extends Config = Config>(filepath: string, cwd: s
  * or `undefined` used to pass for one with nothing in it. What is not an object is refused by
  * `bundleConfig` for a config and `getResolvedConfig` for a preset.
  */
-function exportOf(mod: any) {
-  return typeof mod === 'object' && mod !== null ? ('default' in mod ? mod.default : { ...mod }) : mod
+export function exportOf(mod: any) {
+  if (typeof mod !== 'object' || mod === null) return mod
+  if ('default' in mod) return mod.default
+  // A namespace is copied, as it cannot be written to — a module runner's, as vitest's, says it is
+  // one where it can — and anything else is kept as it is, with what it inherits, which `assign`
+  // reads.
+  const namespace = !Object.isExtensible(mod) || Object.prototype.toString.call(mod) === '[object Module]'
+  return namespace ? { ...mod } : mod
+}
+
+/**
+ * Whether a value is a module, not a value one exports: a namespace, or the object esbuild holds a
+ * bundled module's exports in, each a getter.
+ */
+export function isModule(value: unknown) {
+  if (typeof value !== 'object' || value === null) return false
+  if (Object.prototype.toString.call(value) === '[object Module]') return true
+  return typeof Object.getOwnPropertyDescriptor(value, 'default')?.get === 'function'
+}
+
+/** A promise settled, as often as it resolves to another, a module it resolves to read as a module. */
+async function settle(value: any) {
+  for (let depth = 0; typeof value?.then === 'function'; depth++) {
+    if (depth === 16) throw new Error('A promise that resolves to a promise, sixteen times over')
+    value = await value
+    if (isModule(value)) value = exportOf(value)
+  }
+  return value
 }
 
 /** Whether Node would load `file` as an ES module. */
@@ -386,11 +410,12 @@ async function locate(
   if (!(error instanceof Error) || typeof error.stack !== 'string') return []
   // As V8 writes a frame: an ES module by its URL, a CommonJS one by its path, either of which may
   // hold a space, then a line and a column, and a closing parenthesis if the frame named a function.
-  // The message comes first, and may name the bundle itself, or hold a stack of its own. Every
-  // formatter writes it as it is, after whatever name a class or a tool gives the error.
+  // The message comes first, and may name the bundle itself, or hold a stack of its own. V8 writes
+  // it after the error's name, as `Error.prototype.toString` does whatever a class makes of that;
+  // a header written otherwise — a name or message changed since — has the message on its first
+  // line, where a frame cannot be.
   const names = [pathToFileURL(bundled).href, bundled]
-  const message = error.message ? error.stack.indexOf(error.message) : -1
-  const frames = message >= 0 ? error.stack.slice(message + error.message.length) : error.stack
+  const frames = framesOf(error, error.stack)
   const positions: Array<[number, number]> = []
   for (const frame of frames.split('\n')) {
     const text = frame.trim()
@@ -419,6 +444,21 @@ async function locate(
     if (!installed) break
   }
   return found
+}
+
+/** What of `stack` follows the message it opens with — see `locate`. */
+function framesOf(error: Error, stack: string) {
+  let header = ''
+  try {
+    header = Error.prototype.toString.call(error)
+  } catch {
+    // A proxy whose traps throw.
+  }
+  if (header && stack.startsWith(header)) return stack.slice(header.length)
+  const message = error.message ? stack.indexOf(error.message) : -1
+  const firstLine = stack.indexOf('\n')
+  if (message >= 0 && (firstLine === -1 || message <= firstLine)) return stack.slice(message + error.message.length)
+  return stack
 }
 
 /** An error's message, or what any other thrown value says of itself, whatever reading it throws. */

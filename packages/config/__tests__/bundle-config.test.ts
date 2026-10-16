@@ -605,14 +605,37 @@ describe('load config', () => {
     expect(config).not.toHaveProperty('default')
   })
 
-  // `presets: [dark && darkPreset]`: what it always was, an entry left out.
-  test('a preset entry left out is skipped', async () => {
+  // `false`, as `dark && darkPreset` gives, is what it always was: an entry left out.
+  test('a preset entry that is `false` is skipped', async () => {
     const colors = { x: { value: 'red' } }
-    const entries = [false, null, undefined, { theme: { tokens: { colors } } }] as never[]
 
-    const config = await getResolvedConfig({ presets: entries }, tmpdir())
+    const config = await getResolvedConfig(
+      { presets: [false as never, { name: 'p', theme: { tokens: { colors } } }] },
+      tmpdir(),
+    )
 
     expect(config.theme?.tokens?.colors).toMatchObject(colors)
+  })
+
+  // A misspelled import is `undefined`: refused, where it failed with a `TypeError` naming nothing.
+  test.each([
+    ['`null`', null],
+    ['`undefined`', undefined],
+  ])('a preset entry that is %s is refused', async (_, entry) => {
+    await expect(getResolvedConfig({ presets: [entry as never] }, tmpdir())).rejects.toThrow(
+      'A preset must be an object.',
+    )
+  })
+
+  test('a module written in `presets` is read as the module', async () => {
+    const root = project({ 'preset.mjs': `export default { theme: { tokens: { colors: { x: { value: 'red' } } } } }` })
+
+    const config = await getResolvedConfig(
+      { presets: [import(pathToFileURL(join(root, 'preset.mjs')).href) as never] },
+      root,
+    )
+
+    expect(config.theme?.tokens?.colors).toMatchObject({ x: { value: 'red' } })
   })
 
   test('a function written in `presets` is refused, named, as one not called', async () => {
@@ -625,12 +648,52 @@ describe('load config', () => {
     )
   })
 
+  test('a `preset:resolved` hook returning `false` leaves the preset out, as it did', async () => {
+    const preset = { name: 'p', theme: { tokens: { colors: { x: { value: 'red' } } } } }
+
+    const config = await getResolvedConfig({ presets: [preset] }, tmpdir(), { 'preset:resolved': () => false as never })
+
+    expect(config.theme?.tokens?.colors).toBeUndefined()
+  })
+
   test('what a `preset:resolved` hook returns is refused unless it is an object, or nothing', async () => {
     const hooks = { 'preset:resolved': () => null as never }
 
     await expect(getResolvedConfig({ presets: [{ name: 'p' }] }, tmpdir(), hooks)).rejects.toThrow(
       'The `preset:resolved` hook must return an object, or nothing, for preset `p`',
     )
+  })
+
+  // As often as a promise resolves to another; and what it holds, read as it would be held without
+  // one: an object as it is, with what it inherits, and a `default` key its own.
+  test.each([
+    [
+      'a module whose default export is itself a promise',
+      {
+        'real.ts': 'export default (async () => ({ preflight: true }))()',
+        'bamboo.config.ts': `export default import('./real')`,
+      },
+      { preflight: true },
+    ],
+    [
+      'an object inheriting its keys',
+      {
+        'bamboo.config.cjs': `module.exports = Promise.resolve(Object.assign(Object.create({ preflight: true }), { name: 'x' }))`,
+      },
+      { preflight: true, name: 'x' },
+    ],
+    [
+      'an object with a `default` of its own',
+      { 'bamboo.config.ts': `export default Promise.resolve({ default: { preflight: false }, preflight: true })` },
+      { preflight: true, default: { preflight: false } },
+    ],
+  ])('a config exporting a promise of %s', async (_, files, expected) => {
+    const root = project(files)
+    const file = join(root, Object.keys(files).find((name) => name.startsWith('bamboo.config'))!)
+
+    const { config } = await bundleConfig({ cwd: root, file })
+
+    for (const [key, value] of Object.entries(expected)) expect((config as any)[key]).toEqual(value)
   })
 
   test('a preset named by its package exporting a promise of one is waited for', async () => {
@@ -817,6 +880,28 @@ describe('load config', () => {
       const error = await bundle(file, root).catch((error) => error)
 
       expect(error.message).toBe(`💥 Failed to load ${file}: ${error.cause.message}\n    at ${file}:3:7`)
+    })
+
+    // A name, or a message, changed after the error was made: V8 writes the header when the stack
+    // is first read, and it is found where it is.
+    test.each([
+      [
+        'a name holding a stack',
+        ["const held = new Error('inner').stack", 'const e = new Error(held)', 'e.name = held', 'throw e'],
+        '2:11',
+      ],
+      [
+        'a message changed after the stack was read',
+        ["const e = new Error('boom')", 'void e.stack', "e.message = 'bamboo.config'", 'throw e'],
+        '1:11',
+      ],
+    ])('past %s', async (_, source, position) => {
+      const root = project({ 'bamboo.config.ts': [...source, 'export default {}'].join('\n') })
+      const file = join(root, 'bamboo.config.ts')
+
+      const error = await bundle(file, root).catch((error) => error)
+
+      expect(error.message.endsWith(`\n    at ${file}:${position}`)).toBe(true)
     })
 
     test('for an error whose reading throws', async () => {
