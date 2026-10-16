@@ -245,6 +245,40 @@ const styles = css({ color: 'a\\!' })`,
         },
       ],
     },
+
+    // A CR in a template is written back as an escape: raw, it would read back as LF.
+    {
+      code: 'import { css } from \'./bamboo/css\';\nconst styles = css({ content: `"a\\rb" !important` })',
+      errors: [
+        {
+          messageId: 'important',
+          suggestions: [
+            {
+              messageId: 'remove',
+              output: 'import { css } from \'./bamboo/css\';\nconst styles = css({ content: `"a\\rb"` })',
+            },
+          ],
+        },
+      ],
+    },
+
+    // Half a surrogate pair cannot be written to the file, so it stays an escape.
+    {
+      code: String.raw`import { css } from './bamboo/css';
+const styles = css({ content: '\uD800 !' })`,
+      errors: [
+        {
+          messageId: 'important',
+          suggestions: [
+            {
+              messageId: 'remove',
+              output: String.raw`import { css } from './bamboo/css';
+const styles = css({ content: '\ud800' })`,
+            },
+          ],
+        },
+      ],
+    },
   ],
   valid: [
     // Cooked, `foo\\!` is `foo\!`, an escaped `!`; read raw, it was a mark after an escaped backslash.

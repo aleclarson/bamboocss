@@ -14,17 +14,28 @@ const keywordOf = (value: string) => (importantMark(value) ?? '!').replaceAll(/\
 // The fix writes the value back as source, so it is escaped the way its literal reads: a string
 // literal for its quote, a template for its backtick and `${`. Written as the value reads, `"\"hi\"
 // !"` became `""hi""`, and `'a\\\\! !'` came back with an escape fewer and a mark again.
-const inString = (quote: string) => (value: string) =>
-  value.replaceAll(/[\\\n\r\u2028\u2029'"]/g, (character) => {
-    if (character === '\\') return '\\\\'
-    if (character === '\n') return '\\n'
-    if (character === '\r') return '\\r'
-    if (character === '\u2028') return '\\u2028'
-    if (character === '\u2029') return '\\u2029'
-    return character === quote ? `\\${character}` : character
-  })
+// Half a surrogate pair cannot be written to a UTF-8 file, so it goes as an escape, as does a line
+// separator, which would read back as written but not as obviously.
+const codeUnit = (character: string) => `\\u${character.charCodeAt(0).toString(16).padStart(4, '0')}`
 
-const inTemplate = (value: string) => value.replaceAll(/\\|`|\$\{/g, (match) => `\\${match}`)
+const inString = (quote: string) => (value: string) =>
+  value.replaceAll(
+    /[\\\n\r\u2028\u2029'"]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g,
+    (character) => {
+      if (character === '\\') return '\\\\'
+      if (character === '\n') return '\\n'
+      if (character === '\r') return '\\r'
+      if (character === "'" || character === '"') return character === quote ? `\\${character}` : character
+      return codeUnit(character)
+    },
+  )
+
+// A raw CR in a template reads back as LF, so it is written as an escape too.
+const inTemplate = (value: string) =>
+  value.replaceAll(/\\|`|\$\{|\r|[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, (match) => {
+    if (match === '\r') return '\\r'
+    return match.length === 1 && match >= '\uD800' && match <= '\uDFFF' ? codeUnit(match) : `\\${match}`
+  })
 
 // A JSX attribute's string has no escapes, and an entity in it is read as its character, so the
 // value is written back only where its text is the value.

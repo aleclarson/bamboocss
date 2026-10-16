@@ -1,12 +1,14 @@
+import { getArbitraryValue } from './arbitrary-value'
 import { FALLBACK_SEPARATOR, parseFallbackValue } from './fallback-value'
 
 const IMPORTANT = 'important'
 const BANG = 0x21
+const QUOTE = 0x22
+const APOSTROPHE = 0x27
 const STAR = 0x2a
 const SLASH = 0x2f
 const BACKSLASH = 0x5c
 const OPEN_BRACKET = 0x5b
-const CLOSE_BRACKET = 0x5d
 const whitespaceRegex = /\s/
 
 /**
@@ -19,9 +21,9 @@ const whitespaceRegex = /\s/
  *
  * Whitespace is any run of it, not only CSS's: the build writes each run as one space, so
  * `red !\u00a0important` reaches the browser as `red ! important`, a mark. Read as CSS's alone,
- * the class was named for an ordinary declaration and the rule for an important one. A comment
- * is whitespace to CSS, before the keyword or after it. An escaped `\!` is no mark: it is part
- * of the identifier before it.
+ * the class was named for an ordinary declaration and the rule for an important one. NUL is
+ * whitespace here too, as `sanitize` removes it, and a comment is whitespace to CSS, before the
+ * keyword or after it. An escaped `\!` is no mark: it is part of the identifier before it.
  *
  * Read from the end, so finding one costs the whitespace around the keyword and its nine
  * characters, and stripping a run of them is linear however long the value is.
@@ -38,13 +40,50 @@ function markAt(value: string, end = value.length): number {
 /** Where the whitespace and comments that end `value` before `end` begin. */
 function beforeTrivia(value: string, end: number): number {
   for (;;) {
-    while (end > 0 && isWhitespace(value.charCodeAt(end - 1))) end--
-    // `/* … */`, whose opening `*` cannot be its closing one: `/*/` is no comment.
+    while (end > 0 && isTrivia(value.charCodeAt(end - 1))) end--
     if (end < 4 || value.charCodeAt(end - 1) !== SLASH || value.charCodeAt(end - 2) !== STAR) return end
-    const open = value.lastIndexOf('/*', end - 4)
+    const open = commentEndingAt(value, end)
     if (open === -1) return end
     end = open
   }
+}
+
+/**
+ * Where the comment ending at `end` opens, or -1.
+ *
+ * CSS's comments do not nest, and a `/*` in a string opens none, so it is found from the start of
+ * the value. A comment holding a second `/*` and a `!` before it is one comment, whose `!` is no
+ * mark; looking back for the nearest `/*` cut it in two, stripped the `!` as a mark and left the
+ * comment unclosed, swallowing the rules after it.
+ */
+function commentEndingAt(value: string, end: number): number {
+  let index = 0
+  while (index < end) {
+    const code = value.charCodeAt(index)
+    if (code === BACKSLASH) {
+      index += 2
+    } else if (code === QUOTE || code === APOSTROPHE) {
+      index++
+      while (index < value.length && value.charCodeAt(index) !== code) {
+        index += value.charCodeAt(index) === BACKSLASH ? 2 : 1
+      }
+      index++
+    } else if (code === SLASH && value.charCodeAt(index + 1) === STAR) {
+      // Its opening `*` is not its closing one: `/*/` is no comment.
+      const close = value.indexOf('*/', index + 2)
+      if (close === -1) return -1
+      if (close + 2 === end) return index
+      index = close + 2
+    } else {
+      index++
+    }
+  }
+  return -1
+}
+
+/** What the build writes as one space, or as nothing: whitespace, and NUL. */
+function isTrivia(code: number): boolean {
+  return code === 0 || isWhitespace(code)
 }
 
 /** Whether the character at `at` follows an odd run of backslashes, which escapes it. */
@@ -87,43 +126,32 @@ function stripMarks(value: string): string {
 }
 
 /**
- * Whether `value` is an arbitrary value, `[absolute!]`, whose brackets hold the mark.
+ * What an arbitrary value, `[absolute!]`, holds where the mark is inside its brackets — or
+ * `undefined`.
  *
- * The escape hatch keeps its contents as written, so the mark sits inside it. Its brackets are
- * the whole value: `[a] 1fr [b!]` is two line names and a track, and its `!` is no mark. Expects
- * a trimmed value, which `stripMarks` returns.
+ * The escape hatch keeps its contents as written, so the mark sits inside it. Its brackets are the
+ * whole value, as `getArbitraryValue` reads one, up to the whitespace and comments ending it:
+ * `[a] 1fr [b!]` is two line names and a track, and its `!` is no mark. Expects a trimmed value,
+ * which `stripMarks` returns.
  */
-function isMarkedArbitrary(value: string): boolean {
-  const close = value.length - 1
-  return (
-    close > 0 &&
-    value.charCodeAt(0) === OPEN_BRACKET &&
-    value.charCodeAt(close) === CLOSE_BRACKET &&
-    closingBracket(value) === close &&
-    markAt(value, close) !== -1
-  )
-}
-
-/** Where the bracket opening `value` closes, or -1. */
-function closingBracket(value: string): number {
-  let depth = 0
-  for (let index = 0; index < value.length; index++) {
-    const code = value.charCodeAt(index)
-    if (code === OPEN_BRACKET) depth++
-    else if (code === CLOSE_BRACKET && --depth === 0) return index
-  }
-  return -1
+function markedHatch(value: string): string | undefined {
+  if (value.charCodeAt(0) !== OPEN_BRACKET) return undefined
+  const end = beforeTrivia(value, value.length)
+  const whole = end === value.length ? value : value.slice(0, end)
+  const inside = getArbitraryValue(whole)
+  return inside !== whole && markAt(inside) !== -1 ? inside : undefined
 }
 
 /** Whether a mark ends `value`, or an escape hatch that is the whole of it holds one. */
 function isMarked(value: string): boolean {
-  return markAt(value) !== -1 || isMarkedArbitrary(value.trim())
+  return markAt(value) !== -1 || markedHatch(value.trim()) !== undefined
 }
 
 /** `value` without the marks that end it, nor the one inside an escape hatch that is all of it. */
 function unmarked(value: string): string {
   const stripped = stripMarks(value)
-  return isMarkedArbitrary(stripped) ? `[${stripMarks(stripped.slice(1, -1))}]` : stripped
+  const inside = markedHatch(stripped)
+  return inside === undefined ? stripped : `[${stripMarks(inside)}]`
 }
 
 /**
@@ -192,11 +220,9 @@ export function importantMark(value: string): string | undefined {
 
 /** The mark ending a trimmed `value`, or the one inside an escape hatch that is all of it. */
 function markOf(value: string): string | undefined {
-  const at = markAt(value)
-  if (at !== -1) return value.slice(at, beforeTrivia(value, value.length))
-  if (!isMarkedArbitrary(value)) return undefined
-  const close = value.length - 1
-  return value.slice(markAt(value, close), beforeTrivia(value, close)).trim()
+  const inside = markAt(value) === -1 ? markedHatch(value) : value
+  if (inside === undefined) return undefined
+  return inside.slice(markAt(inside), beforeTrivia(inside, inside.length))
 }
 
 // `string | T` is stated rather than inferred: `T` is a literal type at most call sites, and
@@ -208,7 +234,8 @@ export function withoutImportant<T extends string | number | boolean>(value: T):
   const stripped = stripMarks(value)
   // The common case, `red !important`: nothing left that a bracket or a candidate could hold.
   if (!stripped.includes('!')) return stripped
-  if (isMarkedArbitrary(stripped)) return `[${stripMarks(stripped.slice(1, -1))}]`
+  const inside = markedHatch(stripped)
+  if (inside !== undefined) return `[${stripMarks(inside)}]`
   const candidates = markedFallback(stripped)
   return candidates ? `fallback(${candidates.map(unmarked).join(', ')})` : stripped
 }

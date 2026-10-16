@@ -33,6 +33,13 @@ describe('important and space handling', () => {
       ['red ! /* a */ /* b */ important', true],
       ['red /* c */', false],
       ['red !/*/important', false],
+      // A comment does not nest, and a `/*` in a string opens none: the `!` here is the comment's.
+      ['red /* wow! /* x */', false],
+      ['red !important /* a /* b */', true],
+      ['"!/*" */', false],
+      // NUL is removed with the whitespace by `sanitize`, so it is read as whitespace here.
+      ['red !\u0000important', true],
+      ['red !important\u0000', true],
       // A `!` ending a string, a bracket or an escape is the value's, and ` important` a word after it.
       ['"a!" important', false],
       ['[a!] important', false],
@@ -49,6 +56,9 @@ describe('important and space handling', () => {
       // Brackets that are not the whole value are no escape hatch: line names around a track.
       ['[a] [b!]', false],
       ['[a] 1fr [b!]', false],
+      // Up to the whitespace and comments ending it.
+      ['[a!] /* x */', true],
+      ['fallback([a!] /* c */, b)', true],
       // A mark ending a fallback candidate marks the declaration, as one after the call does.
       ['fallback(red !important, blue)', true],
       ['fallback(red, blue)!', true],
@@ -84,6 +94,7 @@ describe('important and space handling', () => {
       // The candidate that carries it, not a `!` in a later one.
       ['fallback("a" !important, "b!")', '!important'],
       ['fallback([a!], b)', '!'],
+      ['[a!] /* x */', '!'],
       // Without what follows it: the comment is not the mark.
       ['red !important /* c */', '!important'],
       ['"!"', undefined],
@@ -101,6 +112,8 @@ describe('important and space handling', () => {
     'red\t!\u3000important',
     'red  !  important',
     'red ! important',
+    'red !\u0000important',
+    'red !important\u0000',
   ])('reads %j as sanitizing it reads it', (value) => {
     expect(isImportant(value)).toBe(isImportant(sanitize(value)))
     expect(withoutImportant(value)).toBe(withoutImportant(sanitize(value)))
@@ -141,6 +154,8 @@ describe('important and space handling', () => {
       expect(withoutImportant('red !/**/important')).toBe('red')
       // No mark: the comment is the value's.
       expect(withoutImportant('red /* c */')).toBe('red /* c */')
+      expect(withoutImportant('red /* wow! /* x */')).toBe('red /* wow! /* x */')
+      expect(withoutImportant('[a!] /* x */')).toBe('[a]')
     })
 
     test('strips a long run of marks', () => {
