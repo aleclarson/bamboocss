@@ -34,8 +34,9 @@ export async function getResolvedConfig(config: ExtendableConfig, cwd: string, h
 
     const subPresets = current.presets ?? []
     for (const subPreset of subPresets) {
-      // `false`, as `dark && darkPreset` gives, is left out, as it always was. `null` and
-      // `undefined` are not: a misspelled import is one, and is refused below.
+      // `false`, as `dark && darkPreset` gives, is left out, and handed to no hook: a hook reads a
+      // preset, which is an object. `null` and `undefined` are not: a misspelled import is one,
+      // and is refused below.
       if ((subPreset as unknown) === false) continue
       let presetConfig: ExtendableConfig
       let presetName: string
@@ -55,8 +56,8 @@ export async function getResolvedConfig(config: ExtendableConfig, cwd: string, h
         if ((presetConfig as unknown) === false) continue
       } else {
         // A module, `import('./preset')`, as one a package exports is read (`bundle`), and what a
-        // promise of `false` gives left out, as `false` written there is. Not copied: nothing
-        // writes to a preset, and a hook may know one by what it is.
+        // promise of `false` gives left out, as `false` written there is. Not copied: the loader
+        // writes no key of a preset's own, and a hook may know one by what it is.
         presetConfig = await settle(subPreset)
         if ((presetConfig as unknown) === false) continue
         presetName = (presetConfig as any)?.name || 'unknown-preset'

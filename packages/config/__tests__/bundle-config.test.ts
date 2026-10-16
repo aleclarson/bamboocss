@@ -455,6 +455,7 @@ describe('load config', () => {
   afterEach(() => {
     for (const root of projects.splice(0)) rmSync(root, { recursive: true, force: true })
     delete (globalThis as any).__bambooConfigRuns
+    delete (globalThis as any).__bambooConfigObject
   })
 
   test('reports the error the config throws, having run it once', async () => {
@@ -558,6 +559,23 @@ describe('load config', () => {
     expect(config).toEqual({ include: ['./src/**/*.ts'] })
   })
 
+  // Not copied unless it has to be, so its defaults are written into it, as they always were.
+  test('a config the loader can write into is written into', async () => {
+    const root = project({
+      'bamboo.config.ts': [
+        `const config: any = { presets: [] }`,
+        `Object.defineProperty(config, 'name', { value: 'app', enumerable: true })`,
+        `;(globalThis as any).__bambooConfigObject = config`,
+        `export default config`,
+      ].join('\n'),
+    })
+
+    const { config } = await bundleConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })
+
+    expect(config).toBe((globalThis as any).__bambooConfigObject)
+    expect((globalThis as any).__bambooConfigObject.outdir).toBe('styled-system')
+  })
+
   // A function or `null` was spread into `{}` or `{ default: null }`, which passed for a config
   // with nothing in it.
   test.each([
@@ -644,6 +662,25 @@ describe('load config', () => {
         },
       ],
       [
+        'inheriting a key it writes, read-only',
+        {
+          'bamboo.config.ts': `export default { __proto__: Object.freeze({ presets: [], preflight: true }), include: [] }`,
+        },
+      ],
+      [
+        'a getter for `outdir`',
+        {
+          'bamboo.config.ts': `export default new (class { presets = []; preflight = true; get outdir() { return undefined } })()`,
+        },
+      ],
+      // Read only when read: nothing reads this one.
+      [
+        'a frozen class instance with a getter that throws',
+        {
+          'bamboo.config.ts': `export default Object.freeze(new (class { presets = []; preflight = true; get legacy(): never { throw new Error('legacy getter read') } })())`,
+        },
+      ],
+      [
         'plugins defined as not enumerable',
         {
           'bamboo.config.ts': [
@@ -671,6 +708,29 @@ describe('load config', () => {
 
       expect(config.preflight).toBe(true)
       expect(config).not.toHaveProperty('default')
+    })
+
+    test('a getter for `presets` is read, and written over', async () => {
+      const root = project({
+        'bamboo.config.ts': `export default new (class { preflight = true; get presets() { return [] } })()`,
+      })
+
+      const { config } = await loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })
+
+      // Not the default presets, which `presets` not read would have given.
+      expect(config.presets).toEqual([])
+      expect(config.preflight).toBe(true)
+    })
+
+    test('a key a copied config does not enumerate is not merged in', async () => {
+      const root = project({
+        'bamboo.config.ts': `export default Object.freeze(Object.defineProperty({ presets: [], preflight: true }, 'custom', { value: 1 }))`,
+      })
+
+      const { config } = await loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })
+
+      expect(config.preflight).toBe(true)
+      expect(config).not.toHaveProperty('custom')
     })
 
     test('a preset written as a module whose default export is a promise', async () => {
@@ -753,35 +813,61 @@ describe('load config', () => {
     const root = project({ 'dark.mjs': `const isDark = false\nexport default isDark && { name: 'dark' }` })
     const colors = { x: { value: 'red' } }
 
+    const named: string[] = []
+
     const config = await getResolvedConfig(
       { presets: [entry(root) as never, { name: 'p', theme: { tokens: { colors } } }] },
       root,
+      { 'preset:resolved': ({ name }) => void named.push(name) },
     )
 
     expect(config.theme?.tokens?.colors).toMatchObject(colors)
     expect(config.presets?.map((preset: any) => preset.name)).toEqual(['p'])
+    // A hook reads a preset, which is an object.
+    expect(named).toEqual(['p'])
   })
 
-  test("a `preset:resolved` hook is handed an earlier plugin's `false`, and may return a preset to keep", async () => {
+  test("no later plugin's `preset:resolved` hook is handed a preset one left out", async () => {
     const seen: unknown[] = []
-    const colors = { y: { value: 'blue' } }
     const hooks = mergeHooks([
-      { name: 'drop', hooks: { 'preset:resolved': () => false } },
+      { name: 'drop', hooks: { 'preset:resolved': ({ name }) => (name === 'p' ? false : undefined) } },
       {
-        name: 'keep',
+        name: 'read',
         hooks: {
-          'preset:resolved': ({ preset }) => {
-            seen.push(preset)
-            return { name: 'kept', theme: { tokens: { colors } } } as never
+          'preset:resolved': ({ name }) => {
+            seen.push(name)
           },
         },
       },
     ])
+    const colors = { x: { value: 'red' } }
 
-    const config = await getResolvedConfig({ presets: [{ name: 'p' }] }, tmpdir(), hooks)
+    const config = await getResolvedConfig(
+      { presets: [{ name: 'p', theme: { tokens: { colors } } }, { name: 'q' }] },
+      tmpdir(),
+      hooks,
+    )
 
-    expect(seen).toEqual([false])
-    expect(config.theme?.tokens?.colors).toMatchObject(colors)
+    expect(seen).toEqual(['q'])
+    expect(config.theme?.tokens?.colors).toBeUndefined()
+  })
+
+  // Nothing writes a preset's own keys, so it is not copied, whatever it holds.
+  test('a preset named by its path is the object it exports', async () => {
+    const root = project({
+      'branded.cjs': [
+        `const preset = { name: 'branded', theme: { tokens: { colors: { x: { value: 'red' } } } } }`,
+        `Object.defineProperty(preset, Symbol.for('bamboo-test-brand'), { value: true })`,
+        `module.exports = preset`,
+      ].join('\n'),
+    })
+    const seen: unknown[] = []
+
+    await getResolvedConfig({ presets: ['./branded.cjs'] }, root, {
+      'preset:resolved': ({ preset }) => void seen.push((preset as any)[Symbol.for('bamboo-test-brand')]),
+    })
+
+    expect(seen).toEqual([true])
   })
 
   test('a function written in `presets` is refused, named, as one not called', async () => {
@@ -857,6 +943,18 @@ describe('load config', () => {
 
     for (const [key, value] of Object.entries(expected)) expect((config as any)[key]).toEqual(value)
     if (!('default' in expected)) expect(config).not.toHaveProperty('default')
+  })
+
+  // A CommonJS module's `default` is what it exports, as it always was.
+  test('a CommonJS config holding a `default` key is read as that key', async () => {
+    const root = project({
+      'bamboo.config.cjs': `module.exports = { default: { preflight: false }, preflight: true }`,
+    })
+
+    const { config } = await bundleConfig({ cwd: root, file: join(root, 'bamboo.config.cjs') })
+
+    expect(config.preflight).toBe(false)
+    expect(config).not.toHaveProperty('default')
   })
 
   test('a preset named by its package exporting a promise of one is waited for', async () => {

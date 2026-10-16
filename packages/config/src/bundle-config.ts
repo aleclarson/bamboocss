@@ -64,11 +64,15 @@ export async function bundle<T extends Config = Config>(filepath: string, cwd: s
   // Where the bundle ran from, as the stack names it: a temporary file, or the file itself.
   const loaded = { path: file }
   try {
-    const mod = esm ? await importBundled(file, code, loaded) : requireBundled(file, code)
+    const mod = await (esm ? importBundled(file, code, loaded) : requireBundled(file, code))
     // A promise is settled here, so what it rejects with is reported as the module's error. What it
     // holds is read as it would be held without one: a module as a module — `module.exports =
     // import('./config.mjs')`, `export default import('./real')` — and anything else as it is.
-    config = writableOf(await settle(exportOf(await mod)))
+    const exported = await settle(exportOf(mod))
+    // A module with no default export is its exports, copied, as they always were: a namespace
+    // cannot be written to. Anything else is itself, a CommonJS module's `module.exports` included.
+    config = isModule(exported) ? { ...exported } : exported
+    if (options.writable) config = writableOf(config)
   } catch (error) {
     const reason = reasonOf(error)
     // Where it was raised is said if it can be, and never in place of what was raised.
@@ -141,20 +145,34 @@ export async function settle(value: any) {
   }
 }
 
+/** What the loader writes into a config: `outdir` and `validation` where it has none, and `presets`. */
+const WRITTEN_KEYS = ['outdir', 'validation', 'presets']
+
 /**
- * What a module exports, as an object the loader can write its defaults into: itself, unless it
- * cannot be written to — a namespace, a frozen object, esbuild's getters of a module's exports —
- * and then a copy of every key a read by name finds on it, its own and those it inherits, each as
- * enumerable as it was, so that `for…in` reads the keys it did and the merge, reading a key by
- * name, the rest: a class's getters, a key defined as not enumerable. A symbol not enumerable is
- * left out, as a namespace's `Symbol.toStringTag` would have the copy pass for a module.
+ * Whether `object[key] = value` would succeed, as assignment decides it: through a setter, into a
+ * writable property, or by adding one to an object that takes one. A proxy's `set` trap is not seen.
+ */
+function assignable(object: object, key: string) {
+  for (let from: object | null = object; from !== null; from = Object.getPrototypeOf(from)) {
+    const descriptor = Object.getOwnPropertyDescriptor(from, key)
+    if (!descriptor) continue
+    if (descriptor.get || descriptor.set) return descriptor.set !== undefined
+    if (!descriptor.writable) return false
+    return from === object || Object.isExtensible(object)
+  }
+  return Object.isExtensible(object)
+}
+
+/**
+ * The config, as an object the loader can write its defaults into: itself, unless a key it writes
+ * cannot be — the config frozen, the key a getter, or read-only where it is inherited — and then a
+ * copy of every key it has, its own and those it inherits, each as enumerable as it was, so that
+ * `for…in` reads the keys it did and a read by name the rest. A getter is read when the copy's key
+ * is, as it would have been on the config, and a write replaces it.
  */
 function writableOf(value: any) {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return value
-  if (Object.isExtensible(value)) {
-    const own: Record<PropertyKey, PropertyDescriptor> = Object.getOwnPropertyDescriptors(value)
-    if (Reflect.ownKeys(own).every((key) => own[key].writable || own[key].set)) return value
-  }
+  if (WRITTEN_KEYS.every((key) => assignable(value, key))) return value
   const copy = {}
   const seen = new Set<PropertyKey>()
   for (let from = value; from !== null && from !== Object.prototype; from = Object.getPrototypeOf(from)) {
@@ -162,9 +180,20 @@ function writableOf(value: any) {
       // One it holds hides one of the same name it inherits.
       if (seen.has(key)) continue
       seen.add(key)
-      const { enumerable } = Object.getOwnPropertyDescriptor(from, key)!
-      if (typeof key === 'symbol' && !enumerable) continue
-      Object.defineProperty(copy, key, { value: value[key], writable: true, enumerable, configurable: true })
+      const descriptor = Object.getOwnPropertyDescriptor(from, key)!
+      const { enumerable } = descriptor
+      const define = (next: unknown) =>
+        Object.defineProperty(copy, key, { value: next, writable: true, enumerable, configurable: true })
+      if (descriptor.get || descriptor.set) {
+        Object.defineProperty(copy, key, {
+          get: () => Reflect.get(value, key),
+          set: define,
+          enumerable,
+          configurable: true,
+        })
+      } else {
+        define(descriptor.value)
+      }
     }
   }
   return copy
@@ -267,6 +296,12 @@ interface BundleOptions {
    * tsconfig esbuild finds from where it is.
    */
   projectReferences?: boolean
+  /**
+   * Copy what the file exports where the loader cannot write its defaults into it (`writableOf`):
+   * for the config, which it writes into; not for a preset, which it does not, and which a hook may
+   * know by what it is.
+   */
+  writable?: boolean
 }
 
 /**
@@ -533,7 +568,7 @@ export async function bundleConfig(options: ConfigFileOptions): Promise<BundleCo
 
   logger.debug('config:path', filePath)
 
-  const result = await bundle(filePath, cwd, { projectReferences: true })
+  const result = await bundle(filePath, cwd, { projectReferences: true, writable: true })
 
   if (typeof result.config !== 'object' || result.config === null) {
     throw new BambooError('CONFIG_ERROR', `💥 Config must export or return an object.`)
