@@ -1602,23 +1602,71 @@ const nextEnvironmentWatchCycle = (watcher: TestBuildWatcher) =>
  * and failed a full suite run so. What a cycle wrote says which one it was where when it started
  * does not, as a build that began before an edit can read it. A cycle that never comes fails
  * naming `what`, rather than holding the test to its timeout.
+ *
+ * Waiting for an edit a plugin is set to reject, `failing` is what its error says: then only a
+ * cycle failing so, having done what `done` checks for, is the one, and a clean one is not — the
+ * rejection test read a late clean cycle's `undefined` as the error it was waiting for.
  */
-const watchCycleUntil = (watcher: TestBuildWatcher, done: () => boolean, what: string) =>
-  new Promise<Error | undefined>((resolve, reject) => {
+const watchCycleUntil = (watcher: TestBuildWatcher, done: () => boolean, what: string, failing?: string) => {
+  const cycle = new Promise<Error | undefined>((resolve, reject) => {
     let error: Error | undefined
+    let others = 0
+    let otherError: string | undefined
     const timer = setTimeout(() => {
       watcher.off('event', onEvent)
-      reject(new Error(`No watch cycle ${what} within 60s`))
+      const last = otherError ? `, the last failing with ${otherError}` : ' clean'
+      reject(new Error(`No watch cycle ${what} within 60s; ${others} other cycle(s) ended${last}`))
     }, 60_000)
+    // Not to hold the process open after a test that failed before awaiting this.
+    timer.unref?.()
     const onEvent = (event: TestWatchEvent) => {
       if (event.code === 'ERROR') error = event.error
       if (event.code !== 'END') return
-      if (error === undefined && !done()) return
+      const ended = error
+      error = undefined
+      const ours =
+        failing === undefined ? ended !== undefined || done() : ended?.message.includes(failing) === true && done()
+      if (!ours) {
+        others++
+        if (ended) otherError = ended.message
+        return
+      }
       clearTimeout(timer)
       watcher.off('event', onEvent)
-      resolve(error)
+      resolve(ended)
     }
     watcher.on('event', onEvent)
+  })
+  // Awaited after a write: if the write throws, the test fails there, and this rejection, when it
+  // comes, is not reported against whichever test is running then.
+  cycle.catch(() => {})
+  return cycle
+}
+
+/**
+ * Resolves once none of `watchers` has reported anything for `ms`, a cycle under way included, so
+ * a rebuild a doubled file event started has run its course before what it wrote, or how many
+ * times a plugin transformed, is read.
+ */
+const watchersQuiet = (watchers: TestBuildWatcher[], ms = 500) =>
+  new Promise<void>((resolve) => {
+    let running = 0
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const quiet = () => {
+      for (const watcher of watchers) watcher.off('event', onEvent)
+      resolve()
+    }
+    const arm = () => {
+      clearTimeout(timer)
+      if (running === 0) timer = setTimeout(quiet, ms)
+    }
+    const onEvent = (event: TestWatchEvent) => {
+      if (event.code === 'START') running++
+      if (event.code === 'END') running = Math.max(0, running - 1)
+      arm()
+    }
+    for (const watcher of watchers) watcher.on('event', onEvent)
+    arm()
   })
 
 const runPartialEnvironmentWatchRebuild = async (
@@ -1715,24 +1763,26 @@ const runPartialEnvironmentWatchRebuild = async (
     const ssrJs = readOutputFiles(ssrOutDir, '.js')
     expect(ssrJs).toContain(`w_[${widths.cachedSsr}]`)
 
-    // Each wait ends on the cycle that built its edit, and each count is read against the one
-    // before it: a watcher can see one write twice, and the second rebuild of the environment
-    // edited is no part of what this asserts, which is that the other one did not build at all
-    // (`ssr: 3`, 1 suite run under load).
+    // Each wait ends on the cycle that built its edit; the counts are taken just before the edit
+    // and read once both watchers have gone quiet. A watcher can see one write twice, and a second
+    // rebuild of the environment edited is no part of what this asserts — that the other one did
+    // not build at all — though more than that would be a rebuild feeding itself (`ssr: 3`, 1
+    // suite run under load).
     rmSync(clientOutDir, { force: true, recursive: true })
-    const beforeClientEdit = { ...calls }
     const rebuiltClient = watchCycleUntil(
       clientWatcher,
       () => readOutputFiles(clientOutDir, '.css').includes(widths.freshClient),
       'rebuilding the client from its trigger',
     )
     await new Promise((settle) => setTimeout(settle, 800))
+    const beforeClientEdit = { ...calls }
     writeFileSync(clientTrigger, 'second\n')
     expect(await rebuiltClient).toBeUndefined()
-    await new Promise((settle) => setTimeout(settle, 300))
+    await watchersQuiet([clientWatcher, ssrWatcher])
 
     expect(calls.ssr, 'the client-only edit did not start or transform SSR').toBe(beforeClientEdit.ssr)
     expect(calls.client).toBeGreaterThan(beforeClientEdit.client)
+    expect(calls.client).toBeLessThanOrEqual(beforeClientEdit.client + 2)
     const rebuiltCss = readOutputFiles(clientOutDir, '.css')
     expect(rebuiltCss).toContain(widths.cachedSsr)
     expect(rebuiltCss).toContain(widths.freshClient)
@@ -1741,19 +1791,20 @@ const runPartialEnvironmentWatchRebuild = async (
 
     // The inverse partial rebuild must retain the client sheet's loss history. That sheet
     // pruned the third rule, and SSR emits no replacement asset, so requiring it fails closed.
-    const beforeSsrEdit = { ...calls }
     const rebuiltSsr = watchCycleUntil(
       ssrWatcher,
       () => readOutputFiles(ssrOutDir, '.js').includes(`w_[${widths.freshSsr}]`),
       'rebuilding SSR from its trigger',
     )
     await new Promise((settle) => setTimeout(settle, 800))
+    const beforeSsrEdit = { ...calls }
     writeFileSync(ssrTrigger, 'second\n')
     const ssrError = await rebuiltSsr
-    await new Promise((settle) => setTimeout(settle, 300))
+    await watchersQuiet([clientWatcher, ssrWatcher])
 
     expect(calls.client, 'the SSR-only edit did not start or transform the client').toBe(beforeSsrEdit.client)
     expect(calls.ssr).toBeGreaterThan(beforeSsrEdit.ssr)
+    expect(calls.ssr).toBeLessThanOrEqual(beforeSsrEdit.ssr + 2)
     expect(ssrError?.message).toContain('already pruned out of a stylesheet')
     expect(ssrError?.message).toContain(esc(`w_[${widths.freshSsr}]`))
   } finally {
@@ -1973,7 +2024,12 @@ const runRejectedOutputWatchRebuild = async (
     expect(cleanCss).not.toContain(widths.rejected)
 
     rejectClientOutput = true
-    const rejectedBuild = nextEnvironmentWatchCycle(clientWatcher)
+    const rejectedBuild = watchCycleUntil(
+      clientWatcher,
+      () => true,
+      'rejecting the client output',
+      `test rejected client output (${label})`,
+    )
     await new Promise((settle) => setTimeout(settle, 800))
     writeWatchTrigger(clientTrigger, 'second')
     const rejectedError = await rejectedBuild
@@ -1991,12 +2047,19 @@ const runRejectedOutputWatchRebuild = async (
       initialClientCss,
     )
 
+    // A replayed notification may start the client again: it has run its course before the
+    // client's transforms are counted, here and after the sibling's edit.
+    await watchersQuiet([clientWatcher, siblingWatcher], 800)
     const clientCallsAfterFailure = calls.client
     rmSync(siblingOutDir, { force: true, recursive: true })
-    const siblingBuild = nextEnvironmentWatchCycle(siblingWatcher)
-    await new Promise((settle) => setTimeout(settle, 800))
+    const siblingBuild = watchCycleUntil(
+      siblingWatcher,
+      () => readOutputFiles(siblingOutDir, '.css') !== '',
+      'rebuilding the sibling from its trigger',
+    )
     writeWatchTrigger(siblingTrigger, `export const generation = 'second'`)
     expect(await siblingBuild).toBeUndefined()
+    await watchersQuiet([clientWatcher, siblingWatcher])
     expect(calls.client, 'the sibling-only edit unexpectedly rebuilt the rejected client graph').toBe(
       clientCallsAfterFailure,
     )
@@ -2015,7 +2078,12 @@ const runRejectedOutputWatchRebuild = async (
     // rejecting there makes the watch cycle red but cannot roll those bytes back, so Bamboo must
     // publish the written candidate rather than restoring reachability for files no longer live.
     rejectAfterWrite = true
-    const failedAfterWrite = nextEnvironmentWatchCycle(clientWatcher)
+    const failedAfterWrite = watchCycleUntil(
+      clientWatcher,
+      () => readOutputFiles(clientOutDir, '.js').includes(`w_[${widths.written}]`),
+      'failing after writing the client output',
+      `test rejected after writing client output (${label})`,
+    )
     await new Promise((settle) => setTimeout(settle, 800))
     writeWatchTrigger(clientTrigger, 'third')
     const writeError = await failedAfterWrite
@@ -2023,12 +2091,17 @@ const runRejectedOutputWatchRebuild = async (
     expect(writeError?.message).toContain(`test rejected after writing client output (${label})`)
     expect(readOutputFiles(clientOutDir, '.js')).toContain(`w_[${widths.written}]`)
 
+    await watchersQuiet([clientWatcher, siblingWatcher], 800)
     const clientCallsAfterWrite = calls.client
     rmSync(siblingOutDir, { force: true, recursive: true })
-    const siblingAfterWrite = nextEnvironmentWatchCycle(siblingWatcher)
-    await new Promise((settle) => setTimeout(settle, 800))
+    const siblingAfterWrite = watchCycleUntil(
+      siblingWatcher,
+      () => readOutputFiles(siblingOutDir, '.css') !== '',
+      'rebuilding the sibling after the written client output',
+    )
     writeWatchTrigger(siblingTrigger, `export const generation = 'third'`)
     expect(await siblingAfterWrite).toBeUndefined()
+    await watchersQuiet([clientWatcher, siblingWatcher])
     expect(calls.client).toBe(clientCallsAfterWrite)
     const cssAfterWrite = readOutputFiles(siblingOutDir, '.css')
     expect(cssAfterWrite).toContain(widths.written)
@@ -2040,7 +2113,12 @@ const runRejectedOutputWatchRebuild = async (
     // filesystem observer. Files have already been replaced when writeBundle begins, so the
     // rejected cycle must still publish the class those new bytes name.
     rejectBeforeBambooWrite = true
-    const failedBeforeBambooWrite = nextEnvironmentWatchCycle(clientWatcher)
+    const failedBeforeBambooWrite = watchCycleUntil(
+      clientWatcher,
+      () => readOutputFiles(clientOutDir, '.js').includes(`w_[${widths.old}]`),
+      "failing before Bamboo's write observer",
+      `test rejected before Bamboo's write observer (${label})`,
+    )
     await new Promise((settle) => setTimeout(settle, 800))
     writeWatchTrigger(clientTrigger, 'first')
     const earlyWriteError = await failedBeforeBambooWrite
@@ -2048,12 +2126,17 @@ const runRejectedOutputWatchRebuild = async (
     expect(earlyWriteError?.message).toContain(`test rejected before Bamboo's write observer (${label})`)
     expect(readOutputFiles(clientOutDir, '.js')).toContain(`w_[${widths.old}]`)
 
+    await watchersQuiet([clientWatcher, siblingWatcher], 800)
     const callsAfterEarlyWrite = calls.client
     rmSync(siblingOutDir, { force: true, recursive: true })
-    const siblingAfterEarlyWrite = nextEnvironmentWatchCycle(siblingWatcher)
-    await new Promise((settle) => setTimeout(settle, 800))
+    const siblingAfterEarlyWrite = watchCycleUntil(
+      siblingWatcher,
+      () => readOutputFiles(siblingOutDir, '.css') !== '',
+      'rebuilding the sibling after the early-written client output',
+    )
     writeWatchTrigger(siblingTrigger, `export const generation = 'fourth'`)
     expect(await siblingAfterEarlyWrite).toBeUndefined()
+    await watchersQuiet([clientWatcher, siblingWatcher])
     expect(calls.client).toBe(callsAfterEarlyWrite)
     const cssAfterEarlyWrite = readOutputFiles(siblingOutDir, '.css')
     expect(cssAfterEarlyWrite).toContain(widths.old)
@@ -2330,15 +2413,20 @@ const runMixedOutputEpochWatchRebuild = async (
   let siblingWatcher: TestBuildWatcher | undefined
   let siblingGeneration = 1
   const rebuildSibling = async () => {
-    rmSync(siblingOutDir, { force: true, recursive: true })
-    const built = nextEnvironmentWatchCycle(siblingWatcher!)
     // Rolldown reports an aggregate output failure while another configured output task can
-    // still be finishing. Drain that task before measuring whether this sibling-only edit
-    // touched the client graph.
-    await new Promise((settle) => setTimeout(settle, 800))
+    // still be finishing, and a replayed notification may start the client again. Both have run
+    // their course before measuring whether this sibling-only edit touched the client graph.
+    await watchersQuiet([clientWatcher!, siblingWatcher!], 800)
+    rmSync(siblingOutDir, { force: true, recursive: true })
+    const built = watchCycleUntil(
+      siblingWatcher!,
+      () => readOutputFiles(siblingOutDir, '.css') !== '',
+      'rebuilding the sibling from its trigger',
+    )
     const callsBefore = calls.client
     writeWatchTrigger(siblingTrigger, `export const generation = '${++siblingGeneration}'`)
     expect(await built).toBeUndefined()
+    await watchersQuiet([clientWatcher!, siblingWatcher!])
     expect(calls.client, `${label}: sibling-only edit rebuilt the client graph`).toBe(callsBefore)
     return readOutputFiles(siblingOutDir, '.css')
   }
@@ -2358,7 +2446,12 @@ const runMixedOutputEpochWatchRebuild = async (
 
     // A generation rejected before either output writes is atomic: only the old epoch remains.
     failureMode = 'before-write'
-    const rejectedBeforeWrite = nextEnvironmentWatchCycle(clientWatcher)
+    const rejectedBeforeWrite = watchCycleUntil(
+      clientWatcher,
+      () => true,
+      'rejecting every output before write',
+      `test rejected every output before write (${label})`,
+    )
     await new Promise((settle) => setTimeout(settle, 800))
     writeWatchTrigger(clientTrigger, 'before-write')
     expect((await rejectedBeforeWrite)?.message).toContain(`test rejected every output before write (${label})`)
@@ -2374,7 +2467,12 @@ const runMixedOutputEpochWatchRebuild = async (
     // live JavaScript and a sibling stylesheet must conservatively back both.
     armFirstOutput()
     failureMode = 'after-first-write'
-    const mixedBuild = nextEnvironmentWatchCycle(clientWatcher)
+    const mixedBuild = watchCycleUntil(
+      clientWatcher,
+      () => readOutputFiles(firstOutDir, '.js').includes(`w_[${widths.candidate}]`),
+      'rejecting the second output once the first wrote the candidate',
+      `test rejected second configured output (${label})`,
+    )
     await new Promise((settle) => setTimeout(settle, 800))
     writeWatchTrigger(clientTrigger, 'mixed')
     expect((await mixedBuild)?.message).toContain(`test rejected second configured output (${label})`)
@@ -2393,7 +2491,12 @@ const runMixedOutputEpochWatchRebuild = async (
     // longer exists in either client output and must not accumulate as an immortal epoch.
     armFirstOutput()
     failureMode = 'after-first-write'
-    const replacementMixedBuild = nextEnvironmentWatchCycle(clientWatcher)
+    const replacementMixedBuild = watchCycleUntil(
+      clientWatcher,
+      () => readOutputFiles(firstOutDir, '.js').includes(`w_[${widths.replacement}]`),
+      'rejecting the second output once the first wrote the replacement',
+      `test rejected second configured output (${label})`,
+    )
     await new Promise((settle) => setTimeout(settle, 800))
     writeWatchTrigger(clientTrigger, 'replacement-mixed')
     expect((await replacementMixedBuild)?.message).toContain(`test rejected second configured output (${label})`)
@@ -2413,7 +2516,12 @@ const runMixedOutputEpochWatchRebuild = async (
     // genuinely contains two candidate epochs and the sibling must retain exactly those two.
     failureMode = 'first-before-second-writes'
     armSecondOutput()
-    const alternatingBuild = nextEnvironmentWatchCycle(clientWatcher)
+    const alternatingBuild = watchCycleUntil(
+      clientWatcher,
+      () => true,
+      'rejecting the first output before the second wrote',
+      `test rejected first output before second wrote (${label})`,
+    )
     await new Promise((settle) => setTimeout(settle, 800))
     writeWatchTrigger(clientTrigger, 'alternating')
     expect((await alternatingBuild)?.message).toContain(`test rejected first output before second wrote (${label})`)
@@ -2432,7 +2540,11 @@ const runMixedOutputEpochWatchRebuild = async (
     // A later successful generation replaces both configured outputs, collapsing the live set
     // back to one epoch and reproducing a clean no-cache stylesheet exactly.
     armSecondOutput()
-    const acceptedBuild = nextEnvironmentWatchCycle(clientWatcher)
+    const acceptedBuild = watchCycleUntil(
+      clientWatcher,
+      () => readOutputFiles(firstOutDir, '.js').includes(`w_[${widths.replacement}]`),
+      'accepting both outputs',
+    )
     await new Promise((settle) => setTimeout(settle, 800))
     writeWatchTrigger(clientTrigger, 'accepted')
     expect(await acceptedBuild).toBeUndefined()
