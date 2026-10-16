@@ -13,9 +13,9 @@ Read an important mark the way the stylesheet ends up holding it.
   rule while the rule was written as an important one, and the element matched nothing. The class is now named from the
   same value the mark is read from. NUL beside the mark, which the build removes from a value, counts as whitespace too.
 - A comment is whitespace too, after the mark or inside it: `red !important /* c */` is important, as it is to the
-  browser, and was written into an ordinary sublayer. Comments are read as CSS reads them, not nested, where nothing in
-  the value can hide one from its tokenizer: in a value holding a string, an escape or an unquoted `url()`, a comment is
-  left as written, as before.
+  browser, and was written into an ordinary sublayer. Comments are read as CSS reads them, not nested, where nothing
+  outside them can hide one from its tokenizer: in a value holding a string, an escape or a `url(` outside its comments,
+  a comment is left as written, as before.
 - An escape hatch is only brackets that are the whole value: `[a] 1fr [b!]` is two line names around a track, and its
   `!` is no mark. A fallback candidate that is an escape hatch holding the mark, `fallback([a!], b)`, marks the
   declaration, as `[a!]` alone does.

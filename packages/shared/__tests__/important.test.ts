@@ -43,6 +43,12 @@ describe('important and space handling', () => {
       ["url('/*') !important /* x */", false],
       ['#url(x/*) !important /* y */', false],
       ['red !important /* c */ url(x)', false],
+      // What a comment holds hides nothing: an apostrophe in its prose is no string.
+      ["red !important /* don't */", true],
+      ['red !important /* see url( */', true],
+      // NUL goes as `sanitize` removes it, at either end of what the mark leaves.
+      ['\u0000[a!]', true],
+      ['fallback(\u0000[a!], b)', true],
       // NUL is removed with the whitespace by `sanitize`, so it is read as whitespace here.
       ['red !\u0000important', true],
       ['red !important\u0000', true],
@@ -120,6 +126,9 @@ describe('important and space handling', () => {
     'red ! important',
     'red !\u0000important',
     'red !important\u0000',
+    '\u0000[a!]',
+    'red \u0000!',
+    '[a\u0000!]',
   ])('reads %j as sanitizing it reads it', (value) => {
     expect(isImportant(value)).toBe(isImportant(sanitize(value)))
     expect(withoutImportant(value)).toBe(withoutImportant(sanitize(value)))
@@ -167,8 +176,10 @@ describe('important and space handling', () => {
     test('strips a long run of marks', () => {
       // Read from the end, so this is one pass rather than a rescan per mark.
       expect(withoutImportant(`red${' !'.repeat(50_000)}`)).toBe('red')
-      // The comments are found once for the value, not again for each mark.
+      // The comments are found once for the value, not again for each mark, and only where
+      // trivia ends in one.
       expect(withoutImportant(`red${' !/**/'.repeat(50_000)}`)).toBe('red')
+      expect(withoutImportant(`red${' !important'.repeat(50_000)}`)).toBe('red')
     })
 
     test('strips a mark ending a fallback candidate', () => {
