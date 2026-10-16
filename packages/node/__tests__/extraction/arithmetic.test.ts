@@ -28,6 +28,13 @@ describe('`+` in a style value', () => {
       { gridArea: 'a,,b' },
       'grid-area: a,,b',
     ],
+    ['a number from 1e21 up has an exponent', 'css({ width: `${1e21}px` })', { width: '1e+21px' }, 'width: 1e+21px'],
+    ['a bitwise operator wraps to 32 bits', 'css({ zIndex: (2 ** 32) | 1 })', { zIndex: 1 }, 'z-index: 1'],
+    // Two strings compare by code unit, not as numbers.
+    ['two strings compare as strings', "css({ zIndex: '10' < '9' ? 1 : 2 })", { zIndex: 1 }, 'z-index: 1'],
+    ['`length` is in an array', "css({ zIndex: 'length' in [1] ? 1 : 2 })", { zIndex: 1 }, 'z-index: 1'],
+    // JavaScript trims U+FEFF from a string it converts, and not U+0085, below.
+    ['a string trimmed as JavaScript trims it', "css({ zIndex: '\\ufeff5' * 2 })", { zIndex: 10 }, 'z-index: 10'],
   ])('%s', (_, body, data, declaration) => {
     const result = extract(body)
 
@@ -35,10 +42,18 @@ describe('`+` in a style value', () => {
     expect(result.css).toContain(declaration)
   })
 
-  test('`+` on an array hole is not guessed', () => {
+  test.each([
+    ['`+`', `const z = [, 2]\ncss({ zIndex: z[0] + 1 })`],
+    ['`-`', `const z = [, 2]\ncss({ zIndex: z[0] - 1 })`],
+    ['a template literal', 'const z = [, 2]\ncss({ zIndex: `${z[0]}` })'],
+    ['a destructuring default', 'const [z = 1] = [, 2]\ncss({ zIndex: z })'],
+  ])('%s on an array hole is not guessed', (_, body) => {
     // A hole is `undefined`, and `undefined + 1` is `NaN`: nothing a rule should be written for.
-    const result = extract(`const z = [, 2]\ncss({ zIndex: z[0] + 1 })`)
+    expect(extract(body).css).not.toContain('z-index')
+  })
 
-    expect(result.css).not.toContain('z-index')
+  test('a string JavaScript reads as `NaN` is not read as a number', () => {
+    // U+0085 is whitespace to Rust's `trim` and not to JavaScript, so `'\u00855' * 2` is `NaN`.
+    expect(extract("css({ zIndex: '\\u00855' * 2 })").css).not.toContain('z-index')
   })
 })

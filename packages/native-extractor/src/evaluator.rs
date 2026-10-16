@@ -2049,7 +2049,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                     EvalResult::known(serde_json::Value::Number(n))
                 }),
             UnaryOperator::BitwiseNot => number_value(&value)
-                .map(|number| EvalResult::known(!(number as i32)))
+                .map(|number| EvalResult::known(!to_int32(number)))
                 .unwrap_or_else(EvalResult::unknown),
             UnaryOperator::Typeof => EvalResult::known(match value {
                 serde_json::Value::Null => "object",
@@ -2105,23 +2105,33 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             BinaryOperator::LessEqualThan => compare_binary(&left, &right, |a, b| a <= b),
             BinaryOperator::GreaterThan => compare_binary(&left, &right, |a, b| a > b),
             BinaryOperator::GreaterEqualThan => compare_binary(&left, &right, |a, b| a >= b),
-            BinaryOperator::BitwiseOR => integer_binary(&left, &right, |a, b| a | b),
-            BinaryOperator::BitwiseXOR => integer_binary(&left, &right, |a, b| a ^ b),
-            BinaryOperator::BitwiseAnd => integer_binary(&left, &right, |a, b| a & b),
-            BinaryOperator::ShiftLeft => integer_binary(&left, &right, |a, b| a << b),
-            BinaryOperator::ShiftRight | BinaryOperator::ShiftRightZeroFill => {
-                integer_binary(&left, &right, |a, b| a >> b)
+            BinaryOperator::BitwiseOR => integer_binary(&left, &right, |a, b| (a | b).into()),
+            BinaryOperator::BitwiseXOR => integer_binary(&left, &right, |a, b| (a ^ b).into()),
+            BinaryOperator::BitwiseAnd => integer_binary(&left, &right, |a, b| (a & b).into()),
+            BinaryOperator::ShiftLeft => {
+                integer_binary(&left, &right, |a, b| a.wrapping_shl(shift_count(b)).into())
+            }
+            BinaryOperator::ShiftRight => {
+                integer_binary(&left, &right, |a, b| a.wrapping_shr(shift_count(b)).into())
+            }
+            // Unsigned: `-1 >>> 0` is 4294967295.
+            BinaryOperator::ShiftRightZeroFill => {
+                integer_binary(&left, &right, |a, b| ((a as u32) >> shift_count(b)).into())
             }
             BinaryOperator::In => match right {
                 serde_json::Value::Object(ref object) => {
                     Some(object.contains_key(&to_js_string(&left)).into())
                 }
-                serde_json::Value::Array(ref array) => Some(
-                    to_js_string(&left)
-                        .parse::<usize>()
-                        .is_ok_and(|index| index < array.len())
-                        .into(),
-                ),
+                // A hole is no property at all, so `0 in [, 2]` is false; it is held as `null`,
+                // like a `null` element, which is one.
+                serde_json::Value::Array(ref array) => {
+                    let key = to_js_string(&left);
+                    match array_index(&key).map(|index| array.get(index)) {
+                        Some(Some(serde_json::Value::Null)) => None,
+                        Some(element) => Some(element.is_some().into()),
+                        None => Some((key == "length").into()),
+                    }
+                }
                 _ => None,
             },
             BinaryOperator::Instanceof => None,
@@ -3064,6 +3074,15 @@ fn is_nullish(result: &EvalResult) -> bool {
     }
 }
 
+/// The array index a property name is, as JavaScript reads one: the canonical decimal form of an
+/// integer, so `'1'` is an index and `'01'` and `'+1'` are property names no array has.
+fn array_index(property: &str) -> Option<usize> {
+    let canonical = !property.is_empty()
+        && property.bytes().all(|byte| byte.is_ascii_digit())
+        && (property == "0" || !property.starts_with('0'));
+    canonical.then(|| property.parse().ok()).flatten()
+}
+
 fn member_value(mut result: EvalResult, property: &str) -> EvalResult {
     let object_was_known = result.value.is_some();
     let partial = result.partial.take();
@@ -3094,10 +3113,19 @@ fn member_value(mut result: EvalResult, property: &str) -> EvalResult {
             if property == "length" {
                 Some(array.len().into())
             } else {
-                property
-                    .parse::<usize>()
-                    .ok()
-                    .and_then(|index| array.get(index).cloned())
+                match array_index(property).and_then(|index| array.get(index)) {
+                    // A hole and an `undefined` element are held as `null`, like a `null` one,
+                    // and the three are not the same value: `undefined` writes `undefined`,
+                    // converts to `NaN` and takes a destructuring default, where `null` writes
+                    // `null`, converts to 0 and does not. So `[, 2][0] - 1` compiled to
+                    // `z_-1`. Which one an element is cannot be told here, so it is not
+                    // guessed.
+                    Some(serde_json::Value::Null) => {
+                        result.complete = false;
+                        None
+                    }
+                    element => element.cloned(),
+                }
             }
         }
         Some(serde_json::Value::String(value)) if property == "length" => {
@@ -3271,14 +3299,7 @@ fn to_js_string(value: &serde_json::Value) -> String {
     match value {
         serde_json::Value::Null => "null".to_string(),
         serde_json::Value::Bool(value) => value.to_string(),
-        serde_json::Value::Number(value) => {
-            let number = value.as_f64().unwrap_or(f64::NAN);
-            if number.fract() == 0.0 && number.is_finite() {
-                format!("{number:.0}")
-            } else {
-                value.to_string()
-            }
-        }
+        serde_json::Value::Number(value) => js_number_string(value.as_f64().unwrap_or(f64::NAN)),
         serde_json::Value::String(value) => value.clone(),
         // `Array.prototype.join`, which writes a `null` or `undefined` element — and a hole,
         // which the array evaluator stores as `null` — as nothing.
@@ -3297,14 +3318,89 @@ fn to_js_string(value: &serde_json::Value) -> String {
     }
 }
 
+/// A number as JavaScript's `String(number)` writes it: the shortest digits that read back as the
+/// same number, plainly from 1e-6 up to 1e21 and with an exponent outside that, and `-0` as `0`.
+///
+/// Rust's own formatting agrees on the digits but not on where the exponent starts, so `1e21`
+/// came out as twenty-two digits and `0.000001` as `1e-6`.
+fn js_number_string(number: f64) -> String {
+    if number.is_nan() {
+        return "NaN".to_string();
+    }
+    if number == 0.0 {
+        return "0".to_string();
+    }
+    if number.is_infinite() {
+        return if number > 0.0 {
+            "Infinity"
+        } else {
+            "-Infinity"
+        }
+        .to_string();
+    }
+    // An integer below 2^53 is its own shortest form. Past it the shortest digits are fewer
+    // than the exact ones, and JavaScript pads them with zeros: `2 ** 60` is
+    // `1152921504606847000`.
+    if number.fract() == 0.0 && number.abs() < 9_007_199_254_740_992.0 {
+        return (number as i64).to_string();
+    }
+    if number < 0.0 {
+        return format!("-{}", js_number_string(-number));
+    }
+    // The shortest digits that round-trip, as `d.ddde±x`.
+    let scientific = format!("{number:e}");
+    let (mantissa, exponent) = scientific.split_once('e').unwrap_or((&scientific, "0"));
+    let digits = mantissa.replace('.', "");
+    let count = digits.len() as i32;
+    // The power of ten the first digit sits after: `n` in ECMAScript's Number::toString.
+    let point = exponent.parse::<i32>().unwrap_or(0) + 1;
+    if count <= point && point <= 21 {
+        digits + &"0".repeat((point - count) as usize)
+    } else if 0 < point && point <= 21 {
+        format!(
+            "{}.{}",
+            &digits[..point as usize],
+            &digits[point as usize..]
+        )
+    } else if -6 < point && point <= 0 {
+        format!("0.{}{digits}", "0".repeat(point.unsigned_abs() as usize))
+    } else {
+        let sign = if point > 0 { '+' } else { '-' };
+        let exponent = (point - 1).unsigned_abs();
+        match digits.split_at(1) {
+            (first, "") => format!("{first}e{sign}{exponent}"),
+            (first, rest) => format!("{first}.{rest}e{sign}{exponent}"),
+        }
+    }
+}
+
+/// The number an operand converts to, where the build can say for sure.
+///
+/// A string converts as JavaScript's `Number` reads it, where the two parsers agree: trimmed of
+/// JavaScript's whitespace — Rust's `trim` also strips U+0085, which JavaScript keeps — and only
+/// to a finite number, as Rust also reads `inf` and `infinity`. What only JavaScript reads, an
+/// empty string or `0x10`, is left unknown.
 fn number_value(value: &serde_json::Value) -> Option<f64> {
     match value {
         serde_json::Value::Null => Some(0.0),
         serde_json::Value::Bool(value) => Some(if *value { 1.0 } else { 0.0 }),
         serde_json::Value::Number(value) => value.as_f64(),
-        serde_json::Value::String(value) => value.trim().parse().ok(),
+        serde_json::Value::String(value) => value
+            .trim_matches(is_javascript_whitespace)
+            .parse::<f64>()
+            .ok()
+            .filter(|number| number.is_finite()),
         _ => None,
     }
+}
+
+/// `ToInt32`: the number truncated and wrapped into 32 bits, as a bitwise operator takes it.
+/// Rust's `as i32` saturates instead, so `2 ** 32 | 0` was `2147483647` rather than `0`.
+fn to_int32(number: f64) -> i32 {
+    if !number.is_finite() {
+        return 0;
+    }
+    number.trunc().rem_euclid(4_294_967_296.0) as u32 as i32
 }
 
 /// `+` as JavaScript evaluates it: concatenation once either side is a string — or an array or
@@ -3315,13 +3411,9 @@ fn number_value(value: &serde_json::Value) -> Option<f64> {
 /// its rule agreed with each other, which is why nothing caught it; both disagreed with the
 /// source.
 ///
-/// A `null` operand is left unknown. The array evaluator stores a hole and an `undefined`
-/// element as `null` too, and the two add differently — `null + 1` is `1`, `undefined + 1` is
-/// `NaN` — so a guess would compile a value the runtime may never produce.
+/// A `null` here is JavaScript's `null`: an array element held as one, which may be a hole or
+/// `undefined`, is not read as a value (`member_value`).
 fn add_values(left: &serde_json::Value, right: &serde_json::Value) -> Option<serde_json::Value> {
-    if left.is_null() || right.is_null() {
-        return None;
-    }
     let converts_to_string = |value: &serde_json::Value| {
         matches!(
             value,
@@ -3351,15 +3443,29 @@ fn numeric_binary(
 fn integer_binary(
     left: &serde_json::Value,
     right: &serde_json::Value,
-    operation: impl FnOnce(i32, i32) -> i32,
+    operation: impl FnOnce(i32, i32) -> serde_json::Value,
 ) -> Option<serde_json::Value> {
-    Some(operation(number_value(left)? as i32, number_value(right)? as i32).into())
+    Some(operation(
+        to_int32(number_value(left)?),
+        to_int32(number_value(right)?),
+    ))
 }
+
+/// A shift takes its count modulo 32, as JavaScript does; Rust panics past 31 in a debug build.
+fn shift_count(count: i32) -> u32 {
+    count as u32 & 31
+}
+/// A relational comparison: two strings by their UTF-16 code units, as JavaScript compares them,
+/// and anything else as numbers. `'10' < '9'` is true.
 fn compare_binary(
     left: &serde_json::Value,
     right: &serde_json::Value,
     operation: impl FnOnce(f64, f64) -> bool,
 ) -> Option<serde_json::Value> {
+    if let (serde_json::Value::String(left), serde_json::Value::String(right)) = (left, right) {
+        let order = left.encode_utf16().cmp(right.encode_utf16()) as i8;
+        return Some(operation(f64::from(order), 0.0).into());
+    }
     Some(operation(number_value(left)?, number_value(right)?).into())
 }
 

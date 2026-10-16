@@ -157,6 +157,58 @@ describe('arithmetic', () => {
       'z_101',
       'z-index: 101;',
     ],
+    // Written as `String(number)` writes it, which uses an exponent from 1e21 and below 1e-6.
+    ['a sum from 1e21 up', 'export const A = css({ width: `${5e20 + 5e20}px` })', 'w_1e+21px', 'width: 1e+21px;'],
+    ['a negative number from 1e21', 'export const A = css({ width: `${-1e21}px` })', 'w_-1e+21px', 'width: -1e+21px;'],
+    [
+      'an exponent with a fraction',
+      'export const A = css({ width: `${1.2345e25}px` })',
+      'w_1.2345e+25px',
+      'width: 1.2345e+25px;',
+    ],
+    [
+      'a fraction down to 1e-6',
+      'export const A = css({ width: `${0.000001}px` })',
+      'w_0.000001px',
+      'width: 0.000001px;',
+    ],
+    ['a fraction below 1e-6', 'export const A = css({ width: `${1.5e-7}px` })', 'w_1.5e-7px', 'width: 1.5e-7px;'],
+    // Past 2^53 the shortest digits are fewer than the exact ones, and the rest are zeros.
+    [
+      'an integer past 2^53',
+      'export const A = css({ width: `${2 ** 60}px` })',
+      'w_1152921504606847000px',
+      'width: 1152921504606847000px;',
+    ],
+    [
+      'a sum with no short form',
+      'export const A = css({ width: `${0.1 + 0.2}px` })',
+      'w_0.30000000000000004px',
+      'width: 0.30000000000000004px;',
+    ],
+    ['negative zero', 'export const A = css({ width: `${-0 + -0}px` })', 'w_0px', 'width: 0px;'],
+    [
+      '`null` in a template literal',
+      'export const A = css({ gridArea: `${null}x` })',
+      'grid-area_nullx',
+      'grid-area: nullx;',
+    ],
+    ['`null` plus a number', 'export const A = css({ zIndex: null + 1 })', 'z_1', 'z-index: 1;'],
+    // Bitwise operators wrap to 32 bits and take a shift count modulo 32.
+    ['a bitwise or past 32 bits', 'export const A = css({ zIndex: (2 ** 32) | 0 })', 'z_0', 'z-index: 0;'],
+    ['a negative fraction to 32 bits', 'export const A = css({ zIndex: -1.5 | 0 })', 'z_-1', 'z-index: -1;'],
+    [
+      'a fraction past 2^31',
+      'export const A = css({ zIndex: 2147483648.5 | 0 })',
+      'z_-2147483648',
+      'z-index: -2147483648;',
+    ],
+    ['an unsigned shift', 'export const A = css({ zIndex: -1 >>> 0 })', 'z_4294967295', 'z-index: 4294967295;'],
+    ['a shift by 32', 'export const A = css({ zIndex: 1 << 32 })', 'z_1', 'z-index: 1;'],
+    ['a negative shift count', 'export const A = css({ zIndex: 1 << -1 })', 'z_-2147483648', 'z-index: -2147483648;'],
+    // An array index is the canonical form of an integer: `'01'` and `'+1'` are names no array has.
+    ['an index written `01`', "const z = [1, 2]\nexport const A = css({ zIndex: z['01'] ?? 5 })", 'z_5', 'z-index: 5;'],
+    ['an index written `+1`', "const z = [1, 2]\nexport const A = css({ zIndex: z['+1'] ?? 5 })", 'z_5', 'z-index: 5;'],
   ])('%s', (_, body, className, declaration) => {
     const result = foldOf(withImport(body))
 
@@ -202,6 +254,32 @@ describe('what is still not known', () => {
     ],
     // A hole reads as `undefined`, and `undefined + 1` is `NaN` — not a value to compile.
     ['`+` on an array hole', `const z = [, 2]\nexport const A = css({ zIndex: z[0] + 1 })`],
+    ['`-` on an array hole', `const z = [, 2]\nexport const A = css({ zIndex: z[0] - 1 })`],
+    ['`-` on an `undefined` element', `const z = [undefined, 2]\nexport const A = css({ zIndex: z[0] - 1 })`],
+    ['an array hole in a template literal', 'const z = [, 2]\nexport const A = css({ gridArea: `${z[0]}x` })'],
+    // Held as `null` like a hole, so a `null` element cannot be told from one either.
+    ['a `null` element in a template literal', 'const z = [null, 2]\nexport const A = css({ gridArea: `${z[0]}x` })'],
+    // The audit does not walk an operator's operands; the evaluator refuses these itself.
+    ['`+` on a binding written later', `let base = 10\nbase = 20\nexport const A = css({ zIndex: base + 1 })`],
+    ['`*` on a binding written later', `let base = 10\nbase = 20\nexport const A = css({ zIndex: base * 2 })`],
+    [
+      'a binding written later in a template literal',
+      'let base = 10\nbase = 20\nexport const A = css({ width: `${base}px` })',
+    ],
+    [
+      'a binding written later passed to a helper',
+      `let base = 10\nbase = 20\nconst f = (n) => n\nexport const A = css({ zIndex: f(base) })`,
+    ],
+    [
+      '`+` on a property written later',
+      `const theme = { size: 10 }\ntheme.size = 20\nexport const A = css({ zIndex: theme.size + 1 })`,
+    ],
+    [
+      '`-` on a property written later',
+      `const theme = { size: 10 }\ntheme.size = 20\nexport const A = css({ zIndex: -theme.size })`,
+    ],
+    ['`-` on a parameter default', `export const C = (size = 10) => css({ zIndex: -size })`],
+    ['`+` on a parameter default', `export const C = (size = 10) => css({ zIndex: size + 1 })`],
   ])('%s', (_, body) => {
     expect(foldOf(withImport(body))).toMatchObject({ classes: [], skipped: ['dynamic'] })
   })

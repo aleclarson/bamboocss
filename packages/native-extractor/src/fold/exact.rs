@@ -280,6 +280,12 @@ impl<'a> Exactness<'_, 'a, '_, '_> {
                 .expressions
                 .iter()
                 .all(|expression| self.accounts(expression)),
+            // An operator's operands are not walked. What the walk refuses as unknowable at build
+            // time — a binding or property written after its declaration, a caller's argument —
+            // the evaluator refuses too, and a destructuring default it takes only where the
+            // property is known to be absent, which is the runtime's value as well.
+            // `fold-known-values.test.ts` pins those refusals under `+`, `*`, unary `-`, a
+            // template literal and a helper's argument.
             _ => exact_result(&self.evaluator.evaluate(inner)),
         }
     }
