@@ -388,24 +388,23 @@ test('a hole selecting a recipe variant selects at runtime', () => {
 })
 
 /**
- * `in` decides a helper's choice, which the audit leaves to the evaluator, where the key is surely
- * there or surely not, and nowhere else.
+ * `in`, exact where the key is surely there or surely not, and nowhere else. Plus one makes the
+ * answer a value, which compiles only if the answer is exact: a choice in a helper decides on any
+ * answer at all, exact or not.
  */
 describe('which keys an object has', () => {
-  const choice = (test: string, definition: string) =>
-    withImport(
-      `const c = Math.random() > 0.5\n${definition}\nconst g = () => (${test} ? 1 : 2)\nexport const A = css({ zIndex: g() })`,
-    )
+  const value = (test: string, definition: string) =>
+    withImport(`const c = Math.random() > 0.5\n${definition}\nexport const A = css({ zIndex: (${test}) + 1 })`)
 
   test.each([
-    ['a key written with one of two values', "'a' in o", "const o = { a: c ? 'x' : 'y' }", 'z_1'],
-    ['such a key after a spread the build cannot read', "'a' in o", 'const o = { ...x(), a: c ? 1 : 2 }', 'z_1'],
-    ['such a key in a nested object', "'x' in o.a", 'const o = { a: { x: c ? 1 : 2 } }', 'z_1'],
-    ['a key held before a spread the build cannot read', "'a' in o", 'const o = { a: 1, ...x() }', 'z_1'],
-    ['a key not held, with a `null` prototype', "'dark' in o", 'const o = { __proto__: null, zIndex: 1 }', 'z_2'],
-    ['a key not held, with a number for a prototype', "'dark' in o", 'const o = { __proto__: 5, zIndex: 1 }', 'z_2'],
+    ['a key written with one of two values', "'a' in o", "const o = { a: c ? 'x' : 'y' }", 'z_2'],
+    ['such a key after a spread the build cannot read', "'a' in o", 'const o = { ...x(), a: c ? 1 : 2 }', 'z_2'],
+    ['such a key in a nested object', "'x' in o.a", 'const o = { a: { x: c ? 1 : 2 } }', 'z_2'],
+    ['a key held before a spread the build cannot read', "'a' in o", 'const o = { a: 1, ...x() }', 'z_2'],
+    ['a key not held, with a `null` prototype', "'dark' in o", 'const o = { __proto__: null, zIndex: 1 }', 'z_1'],
+    ['a key not held, with a number for a prototype', "'dark' in o", 'const o = { __proto__: 5, zIndex: 1 }', 'z_1'],
   ])('%s', (_, test, definition, className) => {
-    expect(foldOf(choice(test, definition))).toMatchObject({ classes: [className], skipped: [] })
+    expect(foldOf(value(test, definition))).toMatchObject({ classes: [className], skipped: [] })
   })
 
   test.each([
@@ -414,8 +413,19 @@ describe('which keys an object has', () => {
     // `track()` may have written to `s`, and the build could not follow it.
     ['a key in a spread of a value code ran before', "'z' in { ...(track(), s) }", 'const s = { a: 1, b: f() }'],
     ['a key `Object.assign` takes from one', "'z' in Object.assign({}, (track(), s))", 'const s = { a: 1, b: f() }'],
+    ['a key inside one', "'k' in { ...(track(), s).a }", 'const s = { a: { k: 1 }, b: f() }'],
+    // Read where a spread may have written over it, `o.a` may be another object, or none.
+    ['a key of a value a spread may have replaced', "'y' in { ...o.a }", 'const o = { a: { y: 1 }, ...x() }'],
+    ['a key of one, through `Object.assign`', "'y' in Object.assign({}, o.a)", 'const o = { a: { y: 1 }, ...x() }'],
+    [
+      'a key of a value a branch may have replaced',
+      "'x' in o.a",
+      'const o = { a: { y: 1 }, ...(c ? { a: { x: 1 } } : {}) }',
+    ],
+    // It throws there.
+    ['a key of `Object.assign` onto `null`', "'a' in Object.assign(null, { a: 1 })", ''],
   ])('not %s', (_, test, definition) => {
-    expect(foldOf(choice(test, definition))).toMatchObject({ classes: [], skipped: ['dynamic'] })
+    expect(foldOf(value(test, definition))).toMatchObject({ classes: [], skipped: ['dynamic'] })
   })
 })
 

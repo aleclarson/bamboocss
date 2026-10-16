@@ -284,8 +284,12 @@ pub(crate) struct EvalResult {
     pub refusal: Option<Arc<Refusal>>,
     /// For an incomplete object, which of its properties are still known. One that is not open
     /// says every key the object has, so whatever lowers `complete` for a reason other than a
-    /// property's value — a spread it could not read, a prototype, code run that it could not
-    /// follow — opens it.
+    /// property's value opens it: a spread it could not read, a prototype, code run for its effect
+    /// alone — the left of a comma — that it could not follow. Code whose value is used, an unknown
+    /// call among a helper's declarations, is taken not to write to what it was not given.
+    ///
+    /// An incomplete object with no record at all is a guess as a whole: read where a spread may
+    /// have written over it, it may not be this object, nor hold any key it holds.
     pub partial: Option<Arc<Partial>>,
     /// `null` or `undefined`, without knowing which: an array hole or `undefined` element, held as
     /// `null`. Complete for what the two agree on — `??`, `||`, a test, `?.` — and not to be
@@ -2408,7 +2412,12 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                         let settled = receiver
                             .as_ref()
                             .is_some_and(|known| known.open && known.settled.contains(&key));
-                        let written = settled || receiver.as_ref().is_none_or(|known| !known.open);
+                        // A guess has no record and is not complete: its conditions may be what it
+                        // is instead, a branch's value lifted by a read, not fragments of it.
+                        let written = settled
+                            || receiver
+                                .as_ref()
+                                .map_or(right_complete, |known| !known.open);
                         (written.then_some(true), keyed || settled)
                     }
                     // After a spread or a computed key the build could not read, any may be.
@@ -2628,6 +2637,14 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         if global_callee_path(&call.callee).as_deref()
             == Some(&["Object".to_string(), "assign".to_string()][..])
         {
+            // Onto `null` or `undefined` it throws, and the call gives nothing.
+            if arguments.first().is_none_or(|target| {
+                target.nullish
+                    || target.is_undefined()
+                    || (target.complete && target.value == Some(serde_json::Value::Null))
+            }) {
+                return EvalResult::unknown();
+            }
             let mut output = serde_json::Map::new();
             let mut fragments = Fragments::default();
             let mut complete = true;
@@ -3609,11 +3626,22 @@ pub(crate) fn spread_value(
             known.write(key, false, child);
         }
     }
+    // A guess as a whole (`EvalResult::partial`): what it holds it may not, so no key it writes
+    // is known to be there, any more than what is under it.
+    let guessed: Vec<String> = if source.is_none() && !value.complete {
+        values.keys().cloned().collect()
+    } else {
+        Vec::new()
+    };
     output.extend(values);
     // A source not wholly known whose record does not say which keys it did not know — or says
     // a spread of its own may have written any — may have written over anything.
     if source.map_or(!value.complete, |source| source.open) {
-        partial.get_or_insert_default().open();
+        let known = partial.get_or_insert_default();
+        known.open();
+        for key in &guessed {
+            known.write(key, false, None);
+        }
     }
 }
 

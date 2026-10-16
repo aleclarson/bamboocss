@@ -137,6 +137,12 @@ describe('`+` in a style value', () => {
       "const o = { ...(c ? { a: 1 } : {}) }\ncss({ color: 'a' in o ? 'red.300' : 'blue.300' })",
       false,
     ],
+    // `o.a` may be what a branch of a spread wrote, which may hold `x` or not.
+    [
+      'a key of a value a branch of a spread may have replaced',
+      "const o = { a: { y: 1 }, ...(c ? { a: { x: 1 } } : {}) }\ncss({ color: 'x' in o.a ? 'red.300' : 'blue.300' })",
+      false,
+    ],
     // `__proto__: base` sets the prototype, whose keys the object inherits.
     [
       'a key may be inherited from an unknown prototype',
