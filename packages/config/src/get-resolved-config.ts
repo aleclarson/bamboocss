@@ -1,6 +1,6 @@
 import { BambooError, omit, pick, traverse } from '@bamboocss/shared'
 import type { Config, BambooHooks, Preset } from '@bamboocss/types'
-import { bundle, exportOf, isModule } from './bundle-config'
+import { bundle, copyOf, settle } from './bundle-config'
 import { mergeConfigs } from './merge-config'
 import { rememberExternalPreset, type ExternalPresetProvenance } from './resolution-provenance'
 
@@ -51,9 +51,10 @@ export async function getResolvedConfig(config: ExtendableConfig, cwd: string, h
           specifier: subPreset,
         })
       } else {
-        // A module, `import('./preset')`, as one a package exports is read (`bundle`).
-        presetConfig = await subPreset
-        if (isModule(presetConfig)) presetConfig = exportOf(presetConfig)
+        // A module, `import('./preset')`, as one a package exports is read (`bundle`), and what a
+        // promise of `false` gives left out, as `false` written there is.
+        presetConfig = copyOf(await settle(subPreset))
+        if ((presetConfig as unknown) === false) continue
         presetName = (presetConfig as any)?.name || 'unknown-preset'
       }
       // As a config is (`bundleConfig`): a function or `null` was merged as a preset with nothing

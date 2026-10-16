@@ -13,8 +13,9 @@ export interface BambooHooks {
   /**
    * Called when each preset is resolved, allowing modification of individual presets.
    * This hook is called for each preset during the resolution process, before they are merged together.
+   * Returning nothing keeps the preset as it is, and `false` leaves it out.
    */
-  'preset:resolved': (args: PresetResolvedHookArgs) => MaybeAsyncReturn<void | PresetResolvedHookArgs['preset']>
+  'preset:resolved': (args: PresetResolvedHookArgs) => MaybeAsyncReturn<void | false | PresetResolvedHookArgs['preset']>
   /**
    * Called when the token engine has been created
    */

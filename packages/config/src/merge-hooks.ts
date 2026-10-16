@@ -105,6 +105,8 @@ const reducers = {
 
     for (const hookFn of fns) {
       const result = await hookFn(Object.assign(args, { preset, original }))
+      // `false` leaves the preset out, and no later hook is handed it.
+      if (result === false) return false
       if (result !== undefined) {
         preset = result
       }

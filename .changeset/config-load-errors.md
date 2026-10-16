@@ -1,5 +1,6 @@
 ---
 '@bamboocss/config': patch
+'@bamboocss/types': patch
 ---
 
 Report the error a config throws, and where in its source the error came from, and bundle ES module configs as ES
@@ -23,9 +24,15 @@ modules.
   `__filename`, and each file a config imports sees its own. In a CommonJS bundle `import.meta` used to be empty, so
   `fileURLToPath(import.meta.url)` threw.
 - A config, or a preset, that is something other than an object — a function, `null`, `undefined`, or a default export
-  that is `undefined` — is reported as not being one, a preset named by its package by its name. A function preset was
-  merged as one holding nothing, and `null` failed with a `TypeError` naming no preset. So is what a `preset:resolved`
-  hook returns, unless it is nothing, or `false`, which leaves the preset out as it did; an entry that is `false` in
-  `presets` is left out too, as it was.
+  that is `undefined` — is reported as not being one, a preset named by its package by its name. In 1.56.7 a function
+  preset was merged as one holding nothing, `null` and `undefined` presets failed with a `TypeError` naming no preset,
+  and a config whose default export was `null` or `undefined` loaded as an empty one. What a `preset:resolved` hook
+  returns is checked too, unless it is nothing, or `false`, which leaves the preset out as it did; a preset that is
+  `false`, or a promise of it, is left out as it was.
 - What a promise a config or a preset exports rejects with is reported as the module's error, with its location. A
   module written in `presets`, `import('./preset')`, is read as the module, as one a config exports is.
+- A config object is copied before the loader writes its defaults into it, so a frozen one, or the exports of a config
+  bundled to CommonJS, load: they failed with a `TypeError`. What it inherits is copied with it.
+- A promise a config's default export resolves to is read as that export would be: an object holding a `default` key is
+  kept whole, where 1.56.7 read it as that key. A CommonJS package compiled from an ES module, `__esModule` beside its
+  `default`, is read as its `default`, as it was.

@@ -68,7 +68,7 @@ export async function bundle<T extends Config = Config>(filepath: string, cwd: s
     // A promise is settled here, so what it rejects with is reported as the module's error. What it
     // holds is read as it would be held without one: a module as a module — `module.exports =
     // import('./config.mjs')`, `export default import('./real')` — and anything else as it is.
-    config = await settle(exportOf(await mod))
+    config = copyOf(await settle(exportOf(await mod)))
   } catch (error) {
     const reason = reasonOf(error)
     // Where it was raised is said if it can be, and never in place of what was raised.
@@ -102,32 +102,57 @@ export async function bundle<T extends Config = Config>(filepath: string, cwd: s
  */
 export function exportOf(mod: any) {
   if (typeof mod !== 'object' || mod === null) return mod
-  if ('default' in mod) return mod.default
-  // A namespace is copied, as it cannot be written to — a module runner's, as vitest's, says it is
-  // one where it can — and anything else is kept as it is, with what it inherits, which `assign`
-  // reads.
-  const namespace = !Object.isExtensible(mod) || Object.prototype.toString.call(mod) === '[object Module]'
-  return namespace ? { ...mod } : mod
+  return 'default' in mod ? mod.default : mod
 }
 
 /**
- * Whether a value is a module, not a value one exports: a namespace, or the object esbuild holds a
- * bundled module's exports in, each a getter.
+ * Whether a value is a module, not a value one exports: a namespace; the object esbuild holds a
+ * bundled module's exports in, each a getter; esbuild's wrapper of a CommonJS module, `default`
+ * the module and every other key a getter of it; or a CommonJS module compiled from one, as tsc
+ * writes it, `__esModule` beside its `default`.
  */
 export function isModule(value: unknown) {
   if (typeof value !== 'object' || value === null) return false
   if (Object.prototype.toString.call(value) === '[object Module]') return true
-  return typeof Object.getOwnPropertyDescriptor(value, 'default')?.get === 'function'
+  const descriptors = Object.getOwnPropertyDescriptors(value)
+  if (!('default' in descriptors)) return false
+  if (typeof descriptors.default.get === 'function' || (value as { __esModule?: unknown }).__esModule === true) {
+    return true
+  }
+  return Object.keys(descriptors).every((key) => key === 'default' || typeof descriptors[key].get === 'function')
 }
 
-/** A promise settled, as often as it resolves to another, a module it resolves to read as a module. */
-async function settle(value: any) {
-  for (let depth = 0; typeof value?.then === 'function'; depth++) {
-    if (depth === 16) throw new Error('A promise that resolves to a promise, sixteen times over')
-    value = await value
-    if (isModule(value)) value = exportOf(value)
+/**
+ * What a module export amounts to: a promise settled, as often as it resolves to another, and a
+ * module read as the module it is, as often as it holds another — a promise of a module, a module
+ * whose default export is a promise, a package compiled to CommonJS from an ES module.
+ */
+export async function settle(value: any) {
+  for (let depth = 0; ; depth++) {
+    if (depth === 16) {
+      throw new Error('Its export settles to a promise or a module sixteen times over: does it import itself?')
+    }
+    if (typeof value?.then === 'function') {
+      value = await value
+      continue
+    }
+    if (!isModule(value)) return value
+    const inner = exportOf(value)
+    if (inner === value) return value
+    value = inner
   }
-  return value
+}
+
+/**
+ * An object exported, copied into one the loader can write to: a namespace cannot be, nor esbuild's
+ * getters of a module's exports, nor a frozen object. What it inherits is copied too, as the merge
+ * that reads it would read it (`for…in`).
+ */
+export function copyOf(value: any) {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return value
+  const copy: Record<string, unknown> = {}
+  for (const key in value) copy[key] = value[key]
+  return copy
 }
 
 /** Whether Node would load `file` as an ES module. */

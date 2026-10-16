@@ -19,6 +19,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, describe, expect, test } from 'vitest'
 import { bundle, bundleConfig } from '../src/bundle-config'
 import { getResolvedConfig } from '../src/get-resolved-config'
+import { loadConfig } from '../src/load-config'
 import { resolveSolutionAliases } from '../src/tsconfig-utils'
 
 describe('bundle config', () => {
@@ -603,6 +604,65 @@ describe('load config', () => {
 
     expect(config).toMatchObject({ preflight: true })
     expect(config).not.toHaveProperty('default')
+  })
+
+  /**
+   * Through the whole load, which writes into what a config exports: an object a module holds as
+   * getters — esbuild's exports of a CommonJS module, of a config bundled to CommonJS — could not be
+   * written to, and failed with a `TypeError` naming no file.
+   */
+  describe('loaded whole', () => {
+    test.each([
+      [
+        'a promise of a CommonJS module',
+        {
+          'real.cjs': `module.exports = { presets: [], preflight: true }`,
+          'bamboo.config.ts': `export default import('./real.cjs')`,
+        },
+      ],
+      [
+        'named exports bundled to CommonJS',
+        { 'bamboo.config.ts': `export const presets = []\nexport const preflight = true` },
+      ],
+      ['a frozen object', { 'bamboo.config.ts': `export default Object.freeze({ presets: [], preflight: true })` }],
+      // tsc's CommonJS of an ES module: imported by an ES module, its `default` is the config.
+      [
+        'a package compiled from an ES module',
+        {
+          'package.json': JSON.stringify({ type: 'module' }),
+          'node_modules/compiled/package.json': JSON.stringify({ name: 'compiled', main: 'index.js' }),
+          'node_modules/compiled/index.js': `Object.defineProperty(exports, '__esModule', { value: true })\nexports.default = { presets: [], preflight: true }`,
+          'bamboo.config.ts': `import config from 'compiled'\nexport default config`,
+        },
+      ],
+    ])('%s', async (_, files) => {
+      const root = project(files)
+
+      const { config } = await loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })
+
+      expect(config.preflight).toBe(true)
+      expect(config).not.toHaveProperty('default')
+    })
+
+    test('a preset written as a module whose default export is a promise', async () => {
+      const root = project({
+        'preset.ts': `export default Promise.resolve({ name: 'p', theme: { tokens: { colors: { x: { value: 'red' } } } } })`,
+        'bamboo.config.ts': `export default { presets: [import('./preset')] }`,
+      })
+
+      const { config } = await loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })
+
+      expect(config.theme?.tokens?.colors).toMatchObject({ x: { value: 'red' } })
+    })
+  })
+
+  test('a preset that is a promise of `false` is left out, as `false` is', async () => {
+    const colors = { x: { value: 'red' } }
+    const entries = [Promise.resolve(false), { name: 'p', theme: { tokens: { colors } } }] as never[]
+
+    const config = await getResolvedConfig({ presets: entries }, tmpdir())
+
+    expect(config.theme?.tokens?.colors).toMatchObject(colors)
   })
 
   // `false`, as `dark && darkPreset` gives, is what it always was: an entry left out.
