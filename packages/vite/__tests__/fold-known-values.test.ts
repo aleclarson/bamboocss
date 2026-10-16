@@ -521,6 +521,37 @@ describe('what a call is given', () => {
     expect(foldOf(withImport(body))).toMatchObject({ classes: [className], skipped: [] })
   })
 
+  // A namespace of types alone adds no member, and a `declare`d one says only of members the
+  // program has from elsewhere: the enum's own are what they are.
+  test.each([
+    ['merged with a namespace of types', 'enum Tone { zIndex = 1 }\nnamespace Tone { export type X = string }'],
+    ['merged with a `declare`d namespace', 'enum Tone { zIndex = 1 }\ndeclare namespace Tone { const margin: string }'],
+    ['merged with a `declare`d enum', 'enum Tone { zIndex = 1 }\ndeclare enum Tone { lifted = 2 }'],
+  ])('an enum %s', (_, tone) => {
+    const code = withImport(`${tone}\nexport const A = css({ zIndex: Tone.zIndex })`)
+
+    expect(foldOf(code)).toMatchObject({ classes: ['z_1'], skipped: [] })
+  })
+
+  test('an enum another module exports merged with a namespace of types', () => {
+    const files = {
+      'app/src/tone.ts':
+        'export enum Tone { zIndex = 1 }\nexport namespace Tone { export type Key = keyof typeof Tone }\n',
+    }
+    const code = withImport(`import { Tone } from './tone'\nexport const A = css({ zIndex: Tone.zIndex })`)
+
+    expect(foldOf(code, files)).toMatchObject({ classes: ['z_1'], skipped: [] })
+  })
+
+  // A spread of unknown length stands for sixteen arguments, and one written after it is given to
+  // no parameter past them: where it lands is not known.
+  test('an argument after a spread of unknown length is not given to a parameter past its run', () => {
+    const parameters = Array.from({ length: 17 }, (_, index) => `a${index}`).join(', ')
+    const body = `const pick = (${parameters}) => a16 ?? 'blue.300'\nexport const A = (p) => css({ color: pick(...p.xs, 'red.300') })`
+
+    expect(foldOf(withImport(body)).classes).not.toContain('c_red.300')
+  })
+
   // `compactStyles` leaves out what holds no style, and gives back one style object left alone.
   test.each([
     ['`undefined`', 'undefined'],
@@ -728,10 +759,45 @@ describe('what is still not known', () => {
       'a rest pattern’s object taken from one',
       'const { b, ...rest } = (track(), { zIndex: 1, b: f() })\nconst g = () => rest\nexport const A = css(g())',
     ],
+    // An undecided element of a rest parameter is not what it holds without its values.
+    [
+      'a choice on a key of an undecided rest element',
+      "const variant = (...args) => { if ('size' in args[0]) return { padding: '2' }; return { padding: '4' } }\nexport const A = (p) => css(variant({ size: p.big ? 'lg' : 'sm' }))",
+    ],
+    [
+      '`typeof` of an element inside an undecided rest element',
+      "const kind = (...xs) => (typeof xs[0][0] === 'string') + 1\nexport const A = (p) => css({ zIndex: kind([p.on ? 'a' : 'b']) })",
+    ],
+    [
+      '`??` on an element inside an undecided rest element',
+      "const first = (...xs) => xs[0][0] ?? 'green.300'\nexport const A = (p) => css({ color: first([p.on ? 'red.300' : 'blue.300']) })",
+    ],
+    [
+      'a key of an undecided rest element choosing a style',
+      "const has = (...styles) => ('color' in styles[0] ? { color: 'green.300' } : {})\nexport const A = (p) => css(has({ color: p.on ? 'red.300' : 'blue.300' }))",
+    ],
+    // A default stands in for `undefined`, not for one of several values.
+    [
+      'a parameter default given one of two values',
+      "const f = (x = 'green.300') => x\nexport const A = (p) => css({ color: f(p.on ? 'red.300' : 'blue.300') })",
+    ],
+    [
+      'a destructuring default given one of two values',
+      "const g = (a) => { const { color = 'green.300' } = a; return { color } }\nexport const A = (p) => css(g({ color: p.on ? 'red.300' : 'blue.300' }))",
+    ],
+    // An array holds an element's undecided values under no index of its own.
+    [
+      'a key of an array element holding one of two values, read by index',
+      "const c = Math.random() > 0.5\nconst arr = [{ color: c ? 'red.300' : 'blue.300' }]\nexport const A = css({ zIndex: ('color' in arr[0]) + 1 })",
+    ],
     // Declared again, an enum holds what each declaration adds, not what the first does alone.
     [
       'a member another declaration of an enum adds',
       'enum Tone { zIndex = 1 }\nenum Tone { lifted = 2 }\nexport const A = css({ zIndex: Tone.lifted })',
+    ],
+    [
+      'a member a `declare`d namespace says an enum has',
+      "enum Tone { zIndex = 1 }\ndeclare namespace Tone { const margin: string }\nexport const A = css({ color: 'red.300', margin: Tone.margin })",
     ],
     [
       'a member a namespace adds to an enum',

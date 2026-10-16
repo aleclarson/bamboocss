@@ -22,7 +22,7 @@ use oxc_semantic::{AstNodes, NodeId, Scoping, Semantic, SemanticBuilder};
 use oxc_span::{GetSpan, SourceType};
 use oxc_syntax::{
     operator::{BinaryOperator, LogicalOperator, UnaryOperator},
-    symbol::SymbolId,
+    symbol::{SymbolFlags, SymbolId},
 };
 
 use crate::{NativeEntrypoint, NativePathMapping, NativeProjectOptions, NativeToken};
@@ -1703,9 +1703,20 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                             let value = element
                                 .as_expression()
                                 .map_or_else(EvalResult::unknown, |value| self.evaluate(value));
-                            let exact = value.complete && value.value.is_some() && !value.nullish;
+                            let decided = value.conditions.is_empty();
+                            let exact = value.complete
+                                && value.value.is_some()
+                                && !value.nullish
+                                && decided;
                             if !partial.open && (!exact || value.partial.is_some()) {
-                                partial.write_value(&output.len().to_string(), &value);
+                                if decided {
+                                    partial.write_value(&output.len().to_string(), &value);
+                                } else {
+                                    // Its undecided values are held under no index of its own
+                                    // (`conditions`), so what is held there is not it: read by
+                                    // index, `'x' in [{ x: c ? 1 : 2 }][0]` was false.
+                                    partial.write(&output.len().to_string(), false, None);
+                                }
                             }
                             complete &= value.complete;
                             refusal = refusal.or(value.refusal);
@@ -2054,15 +2065,10 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                         .cloned()
                         .unwrap_or_else(EvalResult::unknown)
                 }
-                // Declared again — another enum of the name, a namespace — it holds what each
-                // declaration adds, and the first is all that is read here: what another adds was
-                // read as a known `undefined`, and the property dropped.
-                AstKind::TSEnumDeclaration(_)
-                    if !self.scoping.symbol_redeclarations(symbol).is_empty() =>
-                {
-                    EvalResult::unknown()
-                }
-                AstKind::TSEnumDeclaration(declaration) => self.evaluate_enum(declaration),
+                AstKind::TSEnumDeclaration(declaration) => match self.enum_redeclared(symbol) {
+                    Some(open) => self.evaluate_enum(declaration, open),
+                    None => EvalResult::unknown(),
+                },
                 _ => EvalResult::unknown(),
             }
         };
@@ -2196,9 +2202,35 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
     /// including it would put numeric keys into every object this spreads into.
     ///
     /// A `declare enum` has no runtime object, so its members are not values.
+    /// What declaring the enum `symbol` again says of it. A namespace of types alone adds nothing
+    /// (`Some(false)`). A `declare`d one — a namespace, an enum — says of members the program has
+    /// from elsewhere, so the enum's own are known and no others are (`Some(true)`). Any other —
+    /// another enum, a namespace holding values — adds members of its own, which are not read
+    /// here, so nothing is (`None`): what one added was read as a known `undefined`, and the
+    /// property dropped.
+    fn enum_redeclared(&self, symbol: SymbolId) -> Option<bool> {
+        let own = self.semantic.symbol_declaration(symbol).id();
+        let mut open = false;
+        for redeclaration in self.scoping.symbol_redeclarations(symbol) {
+            if redeclaration.declaration == own
+                || redeclaration.flags.contains(SymbolFlags::NamespaceModule)
+            {
+                continue;
+            }
+            if !redeclaration.flags.contains(SymbolFlags::Ambient) {
+                return None;
+            }
+            open = true;
+        }
+        Some(open)
+    }
+
+    /// An enum's object. `open` where other declarations of it say of members the program has
+    /// from elsewhere (`enum_redeclared`): its own are known, and no others.
     fn evaluate_enum(
         &mut self,
         declaration: &'a oxc_ast::ast::TSEnumDeclaration<'a>,
+        open: bool,
     ) -> EvalResult {
         if declaration.declare {
             return EvalResult::unknown();
@@ -2257,9 +2289,9 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         EvalResult {
             value: Some(object.into()),
             conditions: Vec::new(),
-            complete,
+            complete: complete && !open,
             refusal: None,
-            partial: (!complete).then(|| Arc::new(known)),
+            partial: (!complete || open).then(|| Arc::new(known)),
             nullish: false,
         }
     }
@@ -3112,7 +3144,9 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 .cloned()
                 .unwrap_or_else(EvalResult::undefined);
             if let Some(initializer) = parameter.initializer.as_deref() {
-                if value.value.is_none() && value.complete {
+                // For `undefined`, and not for a value one of several: `(x = 'g') => x` given
+                // `c ? 'r' : 'b'` was read as `'g'`.
+                if value.is_undefined() {
                     value = self.evaluate(initializer);
                 } else if value.nullish {
                     // A hole passed for it may be the `undefined` the default stands in for.
@@ -3133,10 +3167,18 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             let complete = values.iter().all(|value| {
                 value.complete && (value.value.is_some() || !value.conditions.is_empty())
             });
+            // An undecided element is held as `null`, as one not known at all is: what it holds
+            // without its values is not it, and was read for it — `'size' in args[0]` false.
             let value = complete.then(|| {
                 values
                     .iter()
-                    .map(|value| value.value.clone().unwrap_or(serde_json::Value::Null))
+                    .map(|value| {
+                        value
+                            .value
+                            .clone()
+                            .filter(|_| value.conditions.is_empty())
+                            .unwrap_or(serde_json::Value::Null)
+                    })
                     .collect::<Vec<_>>()
                     .into()
             });
@@ -3172,7 +3214,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 }
             }
             BindingPattern::AssignmentPattern(pattern) => {
-                let value = if value.value.is_none() && value.complete {
+                let value = if value.is_undefined() {
                     self.evaluate(&pattern.right)
                 } else if value.nullish {
                     // The default stands in for `undefined`, and a hole held as `null` does not
