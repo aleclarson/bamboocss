@@ -3,15 +3,13 @@ import { FALLBACK_SEPARATOR, parseFallbackValue } from './fallback-value'
 
 const IMPORTANT = 'important'
 const BANG = 0x21
-const QUOTE = 0x22
-const APOSTROPHE = 0x27
 const STAR = 0x2a
 const SLASH = 0x2f
 const BACKSLASH = 0x5c
 const OPEN_BRACKET = 0x5b
-const OPEN_PAREN = 0x28
-const CLOSE_PAREN = 0x29
 const whitespaceRegex = /\s/
+/** What can hide a `/*` from the tokenizer: a string, an escape, an unquoted `url()`. */
+const commentHidingRegex = /["'\\]|url\(/i
 
 /**
  * Where the important mark ending `value` — read up to `end` — starts, or -1.
@@ -23,127 +21,58 @@ const whitespaceRegex = /\s/
  *
  * Whitespace is any run of it, not only CSS's: the build writes each run as one space, so
  * `red !\u00a0important` reaches the browser as `red ! important`, a mark. Read as CSS's alone,
- * the class was named for an ordinary declaration and the rule for an important one. NUL is
- * whitespace here too, as `sanitize` removes it, and a comment is whitespace to CSS, before the
- * keyword or after it. An escaped `\!` is no mark: it is part of the identifier before it.
+ * the class was named for an ordinary declaration and the rule for an important one. NUL beside
+ * the mark is whitespace here too, as `sanitize` removes it, and a comment is whitespace to CSS,
+ * before the keyword or after it, where `commentsIn` can find it. An escaped `\!` is no mark: it
+ * is part of the identifier before it.
  *
  * Read from the end, so finding one costs the whitespace around the keyword and its nine
- * characters, and stripping a run of them is linear however long the value is.
+ * characters, and stripping a run of them is linear however long the value is: the comments are
+ * found once, by the caller that strips the run.
  */
-function markAt(value: string, end = value.length): number {
-  end = beforeTrivia(value, end)
+function markAt(value: string, end = value.length, comments = commentsIn(value)): number {
+  end = beforeTrivia(value, end, comments)
   if (end > 0 && value.charCodeAt(end - 1) === BANG) return isEscaped(value, end - 1) ? -1 : end - 1
   const keyword = end - IMPORTANT.length
   if (keyword <= 0 || !isKeyword(value, keyword)) return -1
-  const bang = beforeTrivia(value, keyword)
+  const bang = beforeTrivia(value, keyword, comments)
   return bang > 0 && value.charCodeAt(bang - 1) === BANG && !isEscaped(value, bang - 1) ? bang - 1 : -1
 }
 
 /** Where the whitespace and comments that end `value` before `end` begin. */
-function beforeTrivia(value: string, end: number): number {
+function beforeTrivia(value: string, end: number, comments: Map<number, number> | undefined): number {
   for (;;) {
     while (end > 0 && isTrivia(value.charCodeAt(end - 1))) end--
     if (end < 4 || value.charCodeAt(end - 1) !== SLASH || value.charCodeAt(end - 2) !== STAR) return end
-    const open = commentsOf(value).get(end)
+    const open = comments?.get(end)
     if (open === undefined) return end
     end = open
   }
 }
 
-let commentsFor: string | undefined
-let comments = new Map<number, number>()
-
 /**
- * The comments in `value`, by where each ends, to where it opens. Found once for a value — a run
- * of marks each with a comment after it is stripped one mark at a time, and looking for each
- * comment from the start again made that quadratic.
- */
-function commentsOf(value: string): Map<number, number> {
-  if (value !== commentsFor) {
-    commentsFor = value
-    comments = findComments(value)
-  }
-  return comments
-}
-
-/**
- * Where each comment in `value` ends, and where it opens: CSS's comments, read as its tokenizer
- * reads them, in one pass from the start.
+ * The comments in `value`, by where each ends, to where it opens — read only where nothing in the
+ * value can hide a `/*` from CSS's tokenizer.
  *
- * They do not nest, and a `/*` in a string or an unquoted `url()` opens none. A comment holding a
- * second `/*` and a `!` before it is one comment, whose `!` is no mark; looking back for the
- * nearest `/*` cut it in two, stripped the `!` as a mark and left the comment unclosed, swallowing
- * the rules after it.
+ * Where nothing does, every `/*` opens a comment, and as they do not nest, one runs from the first
+ * `/*` to the first close after it: a comment holding a second `/*` and a `!` is one comment,
+ * whose `!` is no mark. A string, an escape or an unquoted `url()` can hold a `/*` that opens none, and telling
+ * which is the tokenizer's job: a value holding one has its comments left as written, as every
+ * value had before comments were read at all. Reading them anyway, a scan that took a url's `/*`
+ * for a comment's lost a mark, and one that took a comment's `!` for a mark stripped it and left
+ * the comment unclosed, swallowing the rules after it.
  */
-function findComments(value: string): Map<number, number> {
+function commentsIn(value: string): Map<number, number> | undefined {
+  if (!value.includes('/*') || commentHidingRegex.test(value)) return undefined
   const found = new Map<number, number>()
-  let index = 0
-  while (index < value.length) {
-    const code = value.charCodeAt(index)
-    if (code === BACKSLASH) {
-      index += 2
-    } else if (code === QUOTE || code === APOSTROPHE) {
-      index = afterString(value, index)
-    } else if (code === SLASH && value.charCodeAt(index + 1) === STAR) {
-      // Its opening `*` is not its closing one: `/*/` is no comment.
-      const close = value.indexOf('*/', index + 2)
-      if (close === -1) break
-      found.set(close + 2, index)
-      index = close + 2
-    } else if (isUrlStart(value, index)) {
-      index = afterUrl(value, index + 4)
-    } else {
-      index++
-    }
+  for (let open = value.indexOf('/*'); open !== -1; ) {
+    // Its opening `*` is not its closing one: `/*/` is no comment.
+    const close = value.indexOf('*/', open + 2)
+    if (close === -1) break
+    found.set(close + 2, open)
+    open = value.indexOf('/*', close + 2)
   }
   return found
-}
-
-/** Past the string opening at `start`, to its closing quote or the end of the value. */
-function afterString(value: string, start: number): number {
-  const quote = value.charCodeAt(start)
-  let index = start + 1
-  while (index < value.length && value.charCodeAt(index) !== quote) {
-    index += value.charCodeAt(index) === BACKSLASH ? 2 : 1
-  }
-  return index + 1
-}
-
-/** Whether `url(` starts at `at`, as a function name, in any case. */
-function isUrlStart(value: string, at: number): boolean {
-  return (
-    value.charCodeAt(at + 3) === OPEN_PAREN &&
-    (value.charCodeAt(at) | 0x20) === 0x75 &&
-    (value.charCodeAt(at + 1) | 0x20) === 0x72 &&
-    (value.charCodeAt(at + 2) | 0x20) === 0x6c &&
-    (at === 0 || !isNameCode(value.charCodeAt(at - 1)))
-  )
-}
-
-/**
- * Past a `url(` whose contents start at `start`: quoted, a string the scan reads on; unquoted, a
- * token to its unescaped `)`, holding whatever it holds, `/*` included.
- */
-function afterUrl(value: string, start: number): number {
-  let index = start
-  while (index < value.length && isTrivia(value.charCodeAt(index))) index++
-  const code = value.charCodeAt(index)
-  if (code === QUOTE || code === APOSTROPHE) return index
-  while (index < value.length && value.charCodeAt(index) !== CLOSE_PAREN) {
-    index += value.charCodeAt(index) === BACKSLASH ? 2 : 1
-  }
-  return index + 1
-}
-
-/** A character an identifier may hold: so `myurl(` is not `url(`. */
-function isNameCode(code: number): boolean {
-  return (
-    code === 0x2d ||
-    code === 0x5f ||
-    (code >= 0x30 && code <= 0x39) ||
-    ((code | 0x20) >= 0x61 && (code | 0x20) <= 0x7a) ||
-    code >= 0x80
-  )
 }
 
 /** What the build writes as one space, or as nothing: whitespace, and NUL. */
@@ -185,8 +114,9 @@ function isKeyword(value: string, from: number): boolean {
 
 /** `value` without the marks that end it — every one, so `red !important !important` is `red`. */
 function stripMarks(value: string): string {
+  const comments = commentsIn(value)
   let end = value.length
-  for (let at = markAt(value, end); at !== -1; at = markAt(value, end)) end = at
+  for (let at = markAt(value, end, comments); at !== -1; at = markAt(value, end, comments)) end = at
   return (end === value.length ? value : value.slice(0, end)).trim()
 }
 
@@ -263,16 +193,7 @@ export function sanitize<T>(value: T): T {
 
 export function isImportant<T extends string | number | boolean>(value: T) {
   if (typeof value !== 'string' || !value.includes('!')) return false
-  const text = withoutNul(value)
-  return isMarked(text) || markedFallback(text.trim()) !== undefined
-}
-
-/**
- * `value` without NUL, as `sanitize` leaves it: the class is named from the value sanitized and
- * the stylesheet's rule from the value as written, and both have to find the same mark.
- */
-function withoutNul(value: string): string {
-  return value.includes(FALLBACK_SEPARATOR) ? value.replaceAll(FALLBACK_SEPARATOR, '') : value
+  return isMarked(value) || markedFallback(value.trim()) !== undefined
 }
 
 /**
@@ -283,7 +204,7 @@ function withoutNul(value: string): string {
  */
 export function importantMark(value: string): string | undefined {
   if (!value.includes('!')) return undefined
-  const trimmed = withoutNul(value).trim()
+  const trimmed = value.trim()
   const own = markOf(trimmed)
   if (own !== undefined) return own
   const candidate = markedFallback(trimmed)?.find(isMarked)
@@ -294,7 +215,7 @@ export function importantMark(value: string): string | undefined {
 function markOf(value: string): string | undefined {
   const inside = markAt(value) === -1 ? markedHatch(value) : value
   if (inside === undefined) return undefined
-  return inside.slice(markAt(inside), beforeTrivia(inside, inside.length))
+  return inside.slice(markAt(inside), beforeTrivia(inside, inside.length, commentsIn(inside)))
 }
 
 // `string | T` is stated rather than inferred: `T` is a literal type at most call sites, and
@@ -303,7 +224,7 @@ function markOf(value: string): string | undefined {
 export function withoutImportant<T extends string | number | boolean>(value: T): string | T {
   if (typeof value !== 'string') return value
   if (!value.includes('!')) return value.trim()
-  const stripped = stripMarks(withoutNul(value))
+  const stripped = stripMarks(value)
   // The common case, `red !important`: nothing left that a bracket or a candidate could hold.
   if (!stripped.includes('!')) return stripped
   const inside = markedHatch(stripped)

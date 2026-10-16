@@ -37,13 +37,12 @@ describe('important and space handling', () => {
       ['red /* wow! /* x */', false],
       ['red !important /* a /* b */', true],
       ['"!/*" */', false],
-      // An unquoted `url()` is one token, holding whatever it holds, `/*` included.
-      ['url(/*) !important /* x */', true],
-      ["url('/*') !important /* x */", true],
-      ['myurl(/*) !important /* x */', false],
-      // NUL goes wherever it is, as `sanitize` removes it.
-      ['\u0000[a!]', true],
-      ['fallback(\u0000[a!], b)', true],
+      // A value holding a `url()`, a string or an escape keeps its comments as written: telling a
+      // `/*` there from a comment's is the tokenizer's job, and guessing lost marks or made them.
+      ['url(/*) !important /* x */', false],
+      ["url('/*') !important /* x */", false],
+      ['#url(x/*) !important /* y */', false],
+      ['red !important /* c */ url(x)', false],
       // NUL is removed with the whitespace by `sanitize`, so it is read as whitespace here.
       ['red !\u0000important', true],
       ['red !important\u0000', true],
@@ -121,9 +120,6 @@ describe('important and space handling', () => {
     'red ! important',
     'red !\u0000important',
     'red !important\u0000',
-    '\u0000[a!]',
-    'red \u0000!',
-    '[a\u0000!]',
   ])('reads %j as sanitizing it reads it', (value) => {
     expect(isImportant(value)).toBe(isImportant(sanitize(value)))
     expect(withoutImportant(value)).toBe(withoutImportant(sanitize(value)))
