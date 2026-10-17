@@ -33,12 +33,6 @@ use crate::{NativeEntrypoint, NativePathMapping, NativeProjectOptions, NativeTok
 /// Real helpers nest a handful. See `FileEvaluator::enter_call`.
 const MAX_CALL_DEPTH: u32 = 64;
 
-/// How many arguments a spread of a length the build does not know stands for: more than a helper
-/// takes, so no parameter after it is bound as `undefined`, which a missing argument is. A helper
-/// is given nothing written after the spread, which it would take as the argument after the run
-/// (`positional`), so a parameter past it is still `undefined`.
-const SPREAD_ARGUMENTS: usize = 16;
-
 /// How many helper calls one outermost call may make. Depth does not bound a recursion that
 /// branches: a helper calling itself twice per level makes `2^depth` calls. Real helpers make a
 /// few dozen.
@@ -269,6 +263,15 @@ impl Partial {
         }
     }
 
+    /// Whether what it says leaves nothing of the value not known, inside it included: neither
+    /// open nor holding a property it does not know. A `null` that may be `undefined` converts as
+    /// either does, to nothing, in `join`.
+    fn read_whole(&self) -> bool {
+        !self.open
+            && self.unsettled.is_empty()
+            && self.children.values().all(|child| child.read_whole())
+    }
+
     /// Whether every property is known and none holds an object known only in part, so there is
     /// nothing to record.
     fn is_empty(&self) -> bool {
@@ -363,6 +366,30 @@ impl EvalResult {
             && self.conditions == other.conditions
             && self.partial == other.partial
             && self.nullish == other.nullish
+    }
+
+    /// A helper's arguments from a spread of unknown length on (`positional`): none is where it is
+    /// placed, so no parameter from here on is known. Held as what no value is — `nullish`, with
+    /// no value and not complete — and read only by `bind_parameters`.
+    fn unplaced(refusal: Option<Arc<Refusal>>) -> Self {
+        Self {
+            refusal,
+            nullish: true,
+            ..Self::unknown()
+        }
+    }
+
+    fn is_unplaced(&self) -> bool {
+        self.nullish && self.value.is_none() && !self.complete
+    }
+
+    /// Whether converting the value — to a string, a number, an answer to `==` — reads only what
+    /// the build knows of it: complete, one value and not several, and with no part of it not
+    /// known. A complete array may still hold an element it could not decide between.
+    fn converts(&self) -> bool {
+        self.complete
+            && self.conditions.is_empty()
+            && self.partial.as_deref().is_none_or(Partial::read_whole)
     }
 
     fn undefined() -> Self {
@@ -1636,7 +1663,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                     if let Some(expression) = template.expressions.get(index) {
                         let value = self.evaluate(expression);
                         let unsure = value.nullish;
-                        complete &= value.complete;
+                        complete &= value.converts();
                         refusal = refusal.or(value.refusal);
                         let Some(value) = value.value.filter(|_| !unsure) else {
                             return EvalResult {
@@ -1714,8 +1741,13 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                                 } else {
                                     // Its undecided values are held under no index of its own
                                     // (`conditions`), so what is held there is not it: read by
-                                    // index, `'x' in [{ x: c ? 1 : 2 }][0]` was false.
-                                    partial.write(&output.len().to_string(), false, None);
+                                    // index, `'x' in [{ x: c ? 1 : 2 }][0]` was false. What its
+                                    // record says of the rest of it still holds.
+                                    partial.write(
+                                        &output.len().to_string(),
+                                        false,
+                                        undecided_record(&value),
+                                    );
                                 }
                             }
                             complete &= value.complete;
@@ -2065,8 +2097,12 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                         .cloned()
                         .unwrap_or_else(EvalResult::unknown)
                 }
-                AstKind::TSEnumDeclaration(declaration) => match self.enum_redeclared(symbol) {
-                    Some(open) => self.evaluate_enum(declaration, open),
+                AstKind::TSEnumDeclaration(declaration) => {
+                    self.evaluate_merged_enum(symbol, declaration)
+                }
+                // A namespace declared first, with the enum it merges with after it.
+                AstKind::TSNamespaceDeclaration(_) => match self.enum_declared_later(symbol) {
+                    Some(declaration) => self.evaluate_merged_enum(symbol, declaration),
                     None => EvalResult::unknown(),
                 },
                 _ => EvalResult::unknown(),
@@ -2197,40 +2233,18 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
     /// `B = A + 1` — which is why members are bound into scope as they are read. A string
     /// member ends auto-increment, so a bare member after one is unknown, as it is to `tsc`.
     ///
-    /// Only the forward direction exists. The reverse mapping a numeric enum also carries
-    /// (`Tone[0] === 'Warm'`) is left out: nothing reads a style value through it, and
-    /// including it would put numeric keys into every object this spreads into.
+    /// Only the forward direction is held. The reverse mapping a numeric enum also carries
+    /// (`Tone[0] === 'Warm'`) is not, as it would put numeric keys into every object this spreads
+    /// into, so a numeric enum is known member by member and not as a whole: a read through the
+    /// mapping, `Tone[Tone.Warm]`, is not known, where it was a missing key's `undefined`.
+    ///
+    /// Another declaration of the enum adds to it what `merge` says (`enum_redeclared`).
     ///
     /// A `declare enum` has no runtime object, so its members are not values.
-    /// What declaring the enum `symbol` again says of it. A namespace of types alone adds nothing
-    /// (`Some(false)`). A `declare`d one — a namespace, an enum — says of members the program has
-    /// from elsewhere, so the enum's own are known and no others are (`Some(true)`). Any other —
-    /// another enum, a namespace holding values — adds members of its own, which are not read
-    /// here, so nothing is (`None`): what one added was read as a known `undefined`, and the
-    /// property dropped.
-    fn enum_redeclared(&self, symbol: SymbolId) -> Option<bool> {
-        let own = self.semantic.symbol_declaration(symbol).id();
-        let mut open = false;
-        for redeclaration in self.scoping.symbol_redeclarations(symbol) {
-            if redeclaration.declaration == own
-                || redeclaration.flags.contains(SymbolFlags::NamespaceModule)
-            {
-                continue;
-            }
-            if !redeclaration.flags.contains(SymbolFlags::Ambient) {
-                return None;
-            }
-            open = true;
-        }
-        Some(open)
-    }
-
-    /// An enum's object. `open` where other declarations of it say of members the program has
-    /// from elsewhere (`enum_redeclared`): its own are known, and no others.
     fn evaluate_enum(
         &mut self,
         declaration: &'a oxc_ast::ast::TSEnumDeclaration<'a>,
-        open: bool,
+        merge: &EnumMerge,
     ) -> EvalResult {
         if declaration.declare {
             return EvalResult::unknown();
@@ -2286,14 +2300,83 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 }
             }
         }
+        for name in &merge.written {
+            known.write(name, false, None);
+        }
+        let numeric = object.values().any(serde_json::Value::is_number);
+        let whole = complete && !merge.open && !numeric;
         EvalResult {
             value: Some(object.into()),
             conditions: Vec::new(),
-            complete: complete && !open,
+            complete: whole,
             refusal: None,
-            partial: (!complete || open).then(|| Arc::new(known)),
+            partial: (!whole).then(|| Arc::new(known)),
             nullish: false,
         }
+    }
+
+    /// The enum `symbol` is, with what each other declaration of it adds (`enum_redeclared`).
+    fn evaluate_merged_enum(
+        &mut self,
+        symbol: SymbolId,
+        declaration: &'a oxc_ast::ast::TSEnumDeclaration<'a>,
+    ) -> EvalResult {
+        match self.enum_redeclared(symbol, declaration.node_id.get()) {
+            Some(merge) => self.evaluate_enum(declaration, &merge),
+            None => EvalResult::unknown(),
+        }
+    }
+
+    /// Whether `symbol`, first declared as a namespace, is an enum it merges with — see
+    /// `enum_declared_later`.
+    pub(crate) fn merges_enum(&self, symbol: SymbolId) -> bool {
+        self.enum_declared_later(symbol).is_some()
+    }
+
+    /// The enum a symbol first declared as a namespace is, declared after it.
+    fn enum_declared_later(
+        &self,
+        symbol: SymbolId,
+    ) -> Option<&'a oxc_ast::ast::TSEnumDeclaration<'a>> {
+        let nodes = self.semantic.nodes();
+        self.scoping
+            .symbol_redeclarations(symbol)
+            .iter()
+            .find_map(
+                |redeclaration| match nodes.kind(redeclaration.declaration) {
+                    AstKind::TSEnumDeclaration(declaration) => Some(declaration),
+                    _ => None,
+                },
+            )
+    }
+
+    /// What declaring the enum `symbol` again, besides at `own`, adds to it. A namespace of types
+    /// alone adds nothing. A `declare`d one — a namespace, an enum — says of members the program
+    /// has from elsewhere, so the enum's own are known and no others (`open`). A namespace holding
+    /// values adds those it exports, which are not read here, and may add others (`open`, with
+    /// each it exports `written`). Another enum adds members of its own, and nothing is known
+    /// (`None`), nor of a namespace whose exports are not all named: what one added was read as a
+    /// known `undefined`, and the property dropped.
+    fn enum_redeclared(&self, symbol: SymbolId, own: NodeId) -> Option<EnumMerge> {
+        let nodes = self.semantic.nodes();
+        let mut merge = EnumMerge::default();
+        for redeclaration in self.scoping.symbol_redeclarations(symbol) {
+            if redeclaration.declaration == own
+                || redeclaration.flags.contains(SymbolFlags::NamespaceModule)
+            {
+                continue;
+            }
+            merge.open = true;
+            if redeclaration.flags.contains(SymbolFlags::Ambient) {
+                continue;
+            }
+            let AstKind::TSNamespaceDeclaration(namespace) = nodes.kind(redeclaration.declaration)
+            else {
+                return None;
+            };
+            merge.written.extend(namespace_exports(namespace)?);
+        }
+        Some(merge)
     }
 
     /// An enum initializer, where an earlier member may be named without its enum.
@@ -2398,8 +2481,8 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             };
         }
         // `in` says for itself whether its answer is exact: it reads which keys an object has, not
-        // what they hold.
-        let mut complete = left.complete && right.complete;
+        // what they hold. Any other reads all of each: `[c ? 'a' : 'b'] + 'x'` gave `x`.
+        let mut complete = left.converts() && right.converts();
         let (left_complete, right_complete) = (left.complete, right.complete);
         let refusal = left.refusal.or(right.refusal);
         let receiver = right.partial;
@@ -2499,14 +2582,18 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                         (Some(false), keyed)
                     }
                     // A hole is no property at all, so `0 in [, 2]` is false, and it is held as
-                    // `null` and recorded nullish, like an `undefined` element, which is one.
+                    // `null` and recorded nullish, like an `undefined` element, which is one. An
+                    // element whose value is not known is there, unless a spread of unknown length
+                    // came before it, which opened the record.
                     serde_json::Value::Array(ref array) => match array_index(&key) {
                         Some(index)
                             if receiver.as_ref().is_none_or(|known| {
-                                known.knows(&key) && !known.nullish.contains(&key)
+                                (known.knows(&key) || !known.open) && !known.nullish.contains(&key)
                             }) =>
                         {
-                            let placed = receiver.as_ref().is_some_and(|known| known.knows(&key));
+                            let placed = receiver
+                                .as_ref()
+                                .is_some_and(|known| known.knows(&key) || !known.open);
                             (Some(index < array.len()), keyed || placed)
                         }
                         _ if key == "length" => (Some(true), true),
@@ -2574,7 +2661,8 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
 
     fn evaluate_call(&mut self, call: &'a CallExpression<'a>) -> EvalResult {
         let mut arguments = Vec::with_capacity(call.arguments.len());
-        // Where the run standing for a spread of unknown length ends — see `positional`.
+        // Where the first spread of unknown length came, and why its length is not known — see
+        // `positional`.
         let mut positioned = None;
         for argument in &call.arguments {
             let Argument::SpreadElement(spread) = argument else {
@@ -2586,17 +2674,18 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 continue;
             };
             // Of a spread whose length is not known, neither is what a parameter from here on is
-            // given: it used to be `undefined`, a parameter given nothing. What comes after it is
-            // still read — `Object.assign` writes each source whatever came before it — though not
-            // by a helper, which would take it as the argument after the run.
+            // given: it used to be `undefined`, a parameter given nothing. It stands as one value
+            // not known to a call that reads its arguments in order — `Object.assign` writes each
+            // source whatever came before it — and a helper, which takes them by position, is
+            // given none from here on (`positional`).
             match spread_arguments(self.evaluate(&spread.argument)) {
                 Ok(elements) => arguments.extend(elements),
                 Err(refusal) => {
-                    arguments.extend((0..SPREAD_ARGUMENTS).map(|_| EvalResult {
-                        refusal: refusal.clone(),
+                    positioned = positioned.or(Some((arguments.len(), refusal.clone())));
+                    arguments.push(EvalResult {
+                        refusal,
                         ..EvalResult::unknown()
-                    }));
-                    positioned = positioned.or(Some(arguments.len()));
+                    });
                 }
             }
         }
@@ -2616,6 +2705,9 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 .first()
                 .and_then(|argument| argument.value.as_ref())
                 .map_or_else(|| ",".to_string(), to_js_string);
+            // Of an array holding an element it could not decide between, that element was
+            // written as nothing: `[c ? 'a' : 'b', 'x'].join('-')` gave `-x`.
+            let converts = array.converts() && arguments.iter().all(EvalResult::converts);
             if let Some(serde_json::Value::Array(values)) = array.value {
                 return EvalResult {
                     value: Some(
@@ -2627,7 +2719,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                             .into(),
                     ),
                     conditions: Vec::new(),
-                    complete: array.complete && arguments.iter().all(|argument| argument.complete),
+                    complete: converts,
                     refusal: array.refusal.or_else(|| {
                         arguments
                             .iter()
@@ -3138,11 +3230,19 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
     }
 
     fn bind_parameters(&mut self, parameters: &'a FormalParameters<'a>, arguments: &[EvalResult]) {
+        // From a spread of unknown length on, which argument a parameter is given is not known.
+        let unplaced = arguments.iter().position(EvalResult::is_unplaced);
+        let placed = &arguments[..unplaced.unwrap_or(arguments.len())];
+        let not_placed = || EvalResult {
+            refusal: unplaced.and_then(|index| arguments[index].refusal.clone()),
+            ..EvalResult::unknown()
+        };
         for (index, parameter) in parameters.items.iter().enumerate() {
-            let mut value = arguments
-                .get(index)
-                .cloned()
-                .unwrap_or_else(EvalResult::undefined);
+            let mut value = match placed.get(index) {
+                Some(value) => value.clone(),
+                None if unplaced.is_some() => not_placed(),
+                None => EvalResult::undefined(),
+            };
             if let Some(initializer) = parameter.initializer.as_deref() {
                 // For `undefined`, and not for a value one of several: `(x = 'g') => x` given
                 // `c ? 'r' : 'b'` was read as `'g'`.
@@ -3154,12 +3254,22 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                         refusal: value.refusal,
                         ..EvalResult::unknown()
                     };
+                } else if value.value.is_none() && !value.conditions.is_empty() {
+                    // One of several values, `undefined` perhaps among them — a choice keeps no
+                    // branch that is — so the default may stand in for one: its rules are
+                    // written too, and nothing is decided.
+                    let default = self.evaluate(initializer);
+                    value.conditions.extend(default.data());
                 }
             }
             self.bind_pattern(&parameter.pattern, value);
         }
-        if let Some(rest) = &parameters.rest {
-            let values = &arguments[parameters.items.len().min(arguments.len())..];
+        if let Some(rest) = &parameters.rest
+            && unplaced.is_some()
+        {
+            self.bind_pattern(&rest.rest.argument, not_placed());
+        } else if let Some(rest) = &parameters.rest {
+            let values = &placed[parameters.items.len().min(placed.len())..];
             // An array holds its elements' undecided values under no index of theirs, so the rest
             // holds none of them, and an element with any is not known: spread on into another
             // call, it passed as exact what it had lost (`merge(...styles)`). The others still
@@ -3167,16 +3277,27 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             let complete = values.iter().all(|value| {
                 value.complete && (value.value.is_some() || !value.conditions.is_empty())
             });
-            // An undecided element is held as `null`, as one not known at all is: what it holds
-            // without its values is not it, and was read for it — `'size' in args[0]` false.
+            // An undecided element is held as what is known of it (`undecided_record`), its
+            // undecided keys not known: as what it holds without them it was read for what it is —
+            // `'size' in args[0]` false. One of which nothing is known is held as `null`, as one
+            // not known at all is.
+            let records: Vec<Option<Arc<Partial>>> = values
+                .iter()
+                .map(|value| {
+                    (!value.conditions.is_empty())
+                        .then(|| undecided_record(value))
+                        .flatten()
+                })
+                .collect();
             let value = complete.then(|| {
                 values
                     .iter()
-                    .map(|value| {
+                    .zip(&records)
+                    .map(|(value, record)| {
                         value
                             .value
                             .clone()
-                            .filter(|_| value.conditions.is_empty())
+                            .filter(|_| value.conditions.is_empty() || record.is_some())
                             .unwrap_or(serde_json::Value::Null)
                     })
                     .collect::<Vec<_>>()
@@ -3184,10 +3305,10 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             });
             let mut partial = Partial::default();
             let mut decided = true;
-            for (index, value) in values.iter().enumerate() {
+            for (index, (value, record)) in values.iter().zip(records).enumerate() {
                 if !value.conditions.is_empty() {
                     decided = false;
-                    partial.write(&index.to_string(), false, None);
+                    partial.write(&index.to_string(), false, record);
                 } else if value.nullish || value.partial.is_some() {
                     partial.write_value(&index.to_string(), value);
                 }
@@ -3223,6 +3344,12 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                         refusal: value.refusal,
                         ..EvalResult::unknown()
                     }
+                } else if value.value.is_none() && !value.conditions.is_empty() {
+                    // One of several values, `undefined` perhaps among them (`bind_parameters`).
+                    let default = self.evaluate(&pattern.right);
+                    let mut value = value;
+                    value.conditions.extend(default.data());
+                    value
                 } else {
                     value
                 };
@@ -3659,6 +3786,86 @@ fn strip_keys(conditions: &mut Vec<serde_json::Value>, stripped: impl Fn(&str) -
     });
 }
 
+/// What other declarations of an enum add to it — see `FileEvaluator::enum_redeclared`.
+#[derive(Default)]
+struct EnumMerge {
+    /// Members the program has from elsewhere, or a namespace adds, may be there.
+    open: bool,
+    /// Names a namespace merged with it exports, over a member of the name if it has one.
+    written: Vec<String>,
+}
+
+/// The names a namespace exports, as one merged with an enum adds them to it, or `None` where one
+/// is not named: a destructuring, an export the walk does not know.
+fn namespace_exports(namespace: &oxc_ast::ast::TSNamespaceDeclaration<'_>) -> Option<Vec<String>> {
+    let block = match &namespace.body {
+        // `namespace Tone.Inner { … }` adds `Inner`.
+        oxc_ast::ast::TSNamespaceDeclarationBody::TSNamespaceDeclaration(inner) => {
+            return Some(vec![inner.id.name.to_string()]);
+        }
+        oxc_ast::ast::TSNamespaceDeclarationBody::TSModuleBlock(block) => block,
+    };
+    let mut names = Vec::new();
+    for statement in &block.body {
+        let declaration = match statement {
+            Statement::ExportDeclaration(export) => &export.declaration,
+            Statement::ExportNamedDeclaration(export) => {
+                names.extend(
+                    export
+                        .specifiers
+                        .iter()
+                        .map(|specifier| module_name(&specifier.exported).to_string()),
+                );
+                continue;
+            }
+            _ => continue,
+        };
+        match declaration {
+            Declaration::VariableDeclaration(variables) => {
+                for declarator in &variables.declarations {
+                    names.push(declarator.id.get_binding_identifier()?.name.to_string());
+                }
+            }
+            Declaration::FunctionDeclaration(function) => {
+                names.push(function.id.as_ref()?.name.to_string())
+            }
+            Declaration::ClassDeclaration(class) => names.push(class.id.as_ref()?.name.to_string()),
+            Declaration::TSEnumDeclaration(inner) => names.push(inner.id.name.to_string()),
+            Declaration::TSNamespaceDeclaration(inner) => names.push(inner.id.name.to_string()),
+            Declaration::TSImportEqualsDeclaration(import) => {
+                names.push(import.id.name.to_string())
+            }
+            Declaration::TSTypeAliasDeclaration(_) | Declaration::TSInterfaceDeclaration(_) => {}
+            _ => return None,
+        }
+    }
+    Some(names)
+}
+
+/// What is known of an element holding values the build could not decide between, which its array
+/// holds under no index of the element's (`conditions`): what its own record says, with each key
+/// those values are under not known. Of one not surely an object or an array — a scalar, a guess,
+/// an object whose values are alternatives to it rather than to its keys — nothing.
+fn undecided_record(value: &EvalResult) -> Option<Arc<Partial>> {
+    let surely = value.complete || value.partial.is_some();
+    let held = match value.value {
+        Some(serde_json::Value::Object(_)) => {
+            value.conditions.iter().all(serde_json::Value::is_object)
+        }
+        // Its elements', which its record says where.
+        Some(serde_json::Value::Array(_)) => value.partial.is_some(),
+        _ => false,
+    };
+    if !surely || !held {
+        return None;
+    }
+    let mut record = value.partial.as_deref().cloned().unwrap_or_default();
+    for key in condition_keys(&value.conditions) {
+        record.write(key, false, None);
+    }
+    Some(Arc::new(record))
+}
+
 /// The keys under the values an object could not decide between: a fragment's, a branch's.
 fn condition_keys(conditions: &[serde_json::Value]) -> impl Iterator<Item = &String> {
     conditions
@@ -3860,11 +4067,16 @@ fn merged_styles(arguments: Vec<EvalResult>) -> EvalResult {
     }
 }
 
-/// What a helper is given of `arguments`, which it takes by position: nothing past `end`, where the
-/// run standing for a spread of unknown length ends, as where any of it lands is not known.
-fn positional(mut arguments: Vec<EvalResult>, end: Option<usize>) -> Vec<EvalResult> {
-    if let Some(end) = end {
-        arguments.truncate(end);
+/// What a helper is given of `arguments`, which it takes by position: those before the first
+/// spread of unknown length, and in its place a marker that no argument from there on is placed
+/// (`EvalResult::unplaced`), so each parameter there is not known, however far past it.
+fn positional(
+    mut arguments: Vec<EvalResult>,
+    from: Option<(usize, Option<Arc<Refusal>>)>,
+) -> Vec<EvalResult> {
+    if let Some((at, refusal)) = from {
+        arguments.truncate(at);
+        arguments.push(EvalResult::unplaced(refusal));
     }
     arguments
 }

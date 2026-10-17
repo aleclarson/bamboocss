@@ -521,6 +521,67 @@ describe('what a call is given', () => {
     expect(foldOf(withImport(body))).toMatchObject({ classes: [className], skipped: [] })
   })
 
+  // An element holding values the build could not decide between is what its record says of it,
+  // its undecided keys not known.
+  test.each([
+    [
+      'a choice on a key surely in an undecided rest element',
+      "const variant = (...args) => { if ('size' in args[0]) return { padding: '2' }; return { padding: '4' } }\nexport const A = (p) => css(variant({ size: p.big ? 'lg' : 'sm' }))",
+      'p_2',
+    ],
+    [
+      'a style chosen on such a key',
+      "const has = (...styles) => ('color' in styles[0] ? { color: 'green.300' } : {})\nexport const A = (p) => css(has({ color: p.on ? 'red.300' : 'blue.300' }))",
+      'c_green.300',
+    ],
+    [
+      'a decided key of an undecided rest element',
+      "const py = (...xs) => xs[0].py\nexport const A = (p) => css({ paddingY: py({ px: p.on ? '2' : '4', py: '1' }) })",
+      'py_1',
+    ],
+    [
+      'a decided key of an undecided array element',
+      "const c = Math.random() > 0.5\nconst sizes = [{ px: c ? '2' : '4', py: '1' }]\nconst f = () => sizes[0].py\nexport const A = css({ paddingY: f() })",
+      'py_1',
+    ],
+    [
+      'a key surely in an undecided array element',
+      "const c = Math.random() > 0.5\nconst a = [{ px: c ? '2' : '4' }]\nexport const A = css({ zIndex: ('px' in a[0]) + 1 })",
+      'z_2',
+    ],
+    [
+      'an index of an array holding an undecided element',
+      "const c = Math.random() > 0.5\nconst a = [{ px: c ? '2' : '4' }]\nexport const A = css({ zIndex: (0 in a) + 1 })",
+      'z_2',
+    ],
+    [
+      'the length of an array inside one',
+      "const c = Math.random() > 0.5\nconst a = [[{ px: c ? '2' : '4' }]]\nconst f = () => a[0].length\nexport const A = css({ zIndex: f() })",
+      'z_1',
+    ],
+    [
+      'a key it does not hold, standing in for a default',
+      "const c = Math.random() > 0.5\nconst sizes = [{ px: c ? '2' : '4' }]\nconst f = (x = 'green.300') => x\nexport const A = css({ color: f(sizes[0].missing) })",
+      'c_green.300',
+    ],
+  ])('%s', (_, body, className) => {
+    expect(foldOf(withImport(body))).toMatchObject({ classes: [className], skipped: [] })
+  })
+
+  // A namespace holding values adds the names it exports, and the enum's own members are known.
+  test.each([
+    [
+      'a function',
+      'enum Tone { zIndex = 1 }\nnamespace Tone { export function parse(value: string) { return value } }',
+    ],
+    ['a value', "enum Tone { zIndex = 1 }\nnamespace Tone { export const margin = '2' }"],
+    ['declared before it', 'namespace Tone { export type X = string }\nenum Tone { zIndex = 1 }'],
+  ])('an enum merged with a namespace holding %s', (_, tone) => {
+    const code = withImport(`${tone}\nexport const A = css({ zIndex: Tone.zIndex })`)
+
+    expect(foldOf(code)).toMatchObject({ classes: ['z_1'], skipped: [] })
+  })
+
   // A namespace of types alone adds no member, and a `declare`d one says only of members the
   // program has from elsewhere: the enum's own are what they are.
   test.each([
@@ -541,15 +602,6 @@ describe('what a call is given', () => {
     const code = withImport(`import { Tone } from './tone'\nexport const A = css({ zIndex: Tone.zIndex })`)
 
     expect(foldOf(code, files)).toMatchObject({ classes: ['z_1'], skipped: [] })
-  })
-
-  // A spread of unknown length stands for sixteen arguments, and one written after it is given to
-  // no parameter past them: where it lands is not known.
-  test('an argument after a spread of unknown length is not given to a parameter past its run', () => {
-    const parameters = Array.from({ length: 17 }, (_, index) => `a${index}`).join(', ')
-    const body = `const pick = (${parameters}) => a16 ?? 'blue.300'\nexport const A = (p) => css({ color: pick(...p.xs, 'red.300') })`
-
-    expect(foldOf(withImport(body)).classes).not.toContain('c_red.300')
   })
 
   // `compactStyles` leaves out what holds no style, and gives back one style object left alone.
@@ -761,10 +813,6 @@ describe('what is still not known', () => {
     ],
     // An undecided element of a rest parameter is not what it holds without its values.
     [
-      'a choice on a key of an undecided rest element',
-      "const variant = (...args) => { if ('size' in args[0]) return { padding: '2' }; return { padding: '4' } }\nexport const A = (p) => css(variant({ size: p.big ? 'lg' : 'sm' }))",
-    ],
-    [
       '`typeof` of an element inside an undecided rest element',
       "const kind = (...xs) => (typeof xs[0][0] === 'string') + 1\nexport const A = (p) => css({ zIndex: kind([p.on ? 'a' : 'b']) })",
     ],
@@ -772,10 +820,43 @@ describe('what is still not known', () => {
       '`??` on an element inside an undecided rest element',
       "const first = (...xs) => xs[0][0] ?? 'green.300'\nexport const A = (p) => css({ color: first([p.on ? 'red.300' : 'blue.300']) })",
     ],
+    // Past a spread of unknown length no parameter is known, however far past it.
     [
-      'a key of an undecided rest element choosing a style',
-      "const has = (...styles) => ('color' in styles[0] ? { color: 'green.300' } : {})\nexport const A = (p) => css(has({ color: p.on ? 'red.300' : 'blue.300' }))",
+      'a parameter far past a spread of unknown length',
+      "const pick = (a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16) => a16 ?? 'blue.300'\nexport const A = (p) => css({ color: pick(...p.xs, 'red.300') })",
     ],
+    [
+      'a parameter past one, nothing after it',
+      "const pick = (a0, a1, a2, a3, a4, a5, a6, a7, a8, a9, a10, a11, a12, a13, a14, a15, a16) => a16 ?? 'blue.300'\nexport const A = (p) => css({ color: pick(...p.xs) })",
+    ],
+    // A numeric enum also maps each value to its member's name, which the build does not hold.
+    [
+      'a read through an enum’s reverse mapping',
+      "enum Area { main = 1 }\nexport const A = css({ color: 'red.300', gridArea: Area[Area.main] })",
+    ],
+    [
+      'a key of the reverse mapping',
+      'enum Tone { zIndex = 1 }\nconst g = () => (1 in Tone) + 1\nexport const A = css({ zIndex: g() })',
+    ],
+    [
+      'a reverse read of an enum merged with a namespace of types',
+      "enum Tone { zIndex = 1 }\nnamespace Tone { export type K = keyof typeof Tone }\nexport const A = css({ color: 'red.300', gridArea: Tone[Tone.zIndex] })",
+    ],
+    // A namespace's export over an enum's member is not the member.
+    [
+      'a member a namespace exports over',
+      'enum Tone { zIndex = 1 }\nnamespace Tone { export const zIndex = 5 }\nexport const A = css({ zIndex: Tone.zIndex })',
+    ],
+    // Converting an array reads all of it.
+    [
+      '`join` of an array holding an undecided element',
+      `export const A = (p) => css({ gridTemplateAreas: [p.wide ? '"a b"' : '"a"', '"c c"'].join(' ') })`,
+    ],
+    [
+      '`+` on an array holding an undecided element',
+      "export const A = (p) => css({ gridArea: [p.on ? 'a' : 'b'] + 'x' })",
+    ],
+    ['a template literal of one', "export const A = (p) => css({ gridArea: `${[p.on ? 'a' : 'b']}x` })"],
     // A default stands in for `undefined`, not for one of several values.
     [
       'a parameter default given one of two values',
@@ -784,11 +865,6 @@ describe('what is still not known', () => {
     [
       'a destructuring default given one of two values',
       "const g = (a) => { const { color = 'green.300' } = a; return { color } }\nexport const A = (p) => css(g({ color: p.on ? 'red.300' : 'blue.300' }))",
-    ],
-    // An array holds an element's undecided values under no index of its own.
-    [
-      'a key of an array element holding one of two values, read by index',
-      "const c = Math.random() > 0.5\nconst arr = [{ color: c ? 'red.300' : 'blue.300' }]\nexport const A = css({ zIndex: ('color' in arr[0]) + 1 })",
     ],
     // Declared again, an enum holds what each declaration adds, not what the first does alone.
     [
@@ -834,6 +910,18 @@ describe('what is still not known', () => {
     const code = withImport(`import { Tone } from './tone'\nexport const A = ${call}`)
 
     expect(foldOf(code, files)).toMatchObject({ classes: [], skipped: ['dynamic'] })
+  })
+
+  // One of several values may be `undefined`, which a choice keeps no branch for, so the default's
+  // rules are written too.
+  test("a default given one of several values writes the default's rules", () => {
+    const body =
+      "const f = (x = 'green.300') => x\nexport const A = (p) => css({ color: f(p.on ? undefined : 'red.300') })"
+    const { classes, skipped, css } = foldOf(withImport(body))
+
+    expect(classes).toEqual([])
+    expect(skipped).toContain('dynamic')
+    expect(css).toContain('green\\.300')
   })
 
   // It throws there.

@@ -42,25 +42,33 @@ Read values in style expressions as JavaScript does, where the build used Rust's
   call never returns.
 - A call is given the elements of an array it spreads where the build knows how many there are, each as it knows it. A
   spread of an unknown length was read as one argument, so a parameter after it was given what was written one place on,
-  or `undefined`, and a default stood in for it: now a parameter up to sixteen places after such a spread is not known.
+  or `undefined`, and a default stood in for it: now a parameter after such a spread is not known, however far after it.
   `Object.assign` still writes the sources after one.
-- An element of a rest parameter that the call could not decide between is not known, where it was read without what it
-  could be: `(...xs) => xs[0]` given `{ color: c ? 'a' : 'b' }` compiled with no color. The rest's other elements are
-  still known, and so is how many there are.
+- An element of a rest parameter holding a value the call could not decide between is not known as a whole, where it was
+  read without what it could be: `(...xs) => xs[0]` given `{ color: c ? 'a' : 'b' }` compiled with no color. What is
+  known of it still is — its other keys, and that it holds `color` — and so are the rest's other elements and how many
+  there are.
 - `css.raw` of more than one style object was read as the first of them, so `css()` of it compiled without the others.
   Extraction now writes the rules of each, and such a `css()` fails the compile as `dynamic`. What `css.raw` leaves out
   at runtime — `undefined`, `null`, `false`, an object with nothing defined in it — is left out, so
   `css.raw(style, undefined)` is still read as `style`; and `css.raw` of an array, which throws, is not known, where the
   compile itself failed on it.
 - An enum with a member the build cannot evaluate is still known by its other members: `E.A` beside `B = compute()`
-  compiles, and so does `'A' in` it. An enum exported from another module is read as one in the module itself is. One
-  declared again with members of its own — another enum, a namespace holding values — is not known, where it was read as
-  its first declaration, so a member another added was dropped; beside a `declare`d one it is known by its own members
-  alone; and a namespace of types alone changes nothing.
+  compiles, and so does `'A' in` it. An enum exported from another module is read as one in the module itself is. A
+  numeric enum is known member by member and not as a whole: the reverse mapping from a value to its member's name is
+  not held, so a read through it, `Area[Area.main]`, is not known, where it dropped the property. An enum declared again
+  with members of its own, another enum, is not known, where it was read as its first declaration, so a member the other
+  added was dropped. Merged with a namespace holding values it is known by its own members, and not by the names the
+  namespace exports, as it is merged with a `declare`d one; a namespace of types alone changes nothing, declared before
+  the enum or after it.
 - A parameter's or a destructuring default no longer stands in for an argument that is one of several values:
-  `(x = 'green.300') => x` given `c ? 'red.300' : 'blue.300'` compiled to green, which the call never gives.
-- An array element holding values the build could not decide between is not known read by index, where it was read as
-  what it holds without them: `('color' in [{ color: c ? 'a' : 'b' }][0]) + 1` compiled to `z-index: 1`.
+  `(x = 'green.300') => x` given `c ? 'red.300' : 'blue.300'` compiled to green, which the call never gives. As one of
+  them may be `undefined`, which a choice keeps no branch for, extraction writes the default's rules beside them.
+- An array element holding values the build could not decide between is not known as a whole read by index, where it was
+  read as what it holds without them: `css(sizes[0])`, with `sizes = [{ color: c ? 'a' : 'b' }]`, compiled with no
+  color. What is known of it still is, as of a rest parameter's element.
+- Converting an array holding an element the build could not decide between — `join`, `+`, a template literal — is not
+  known, where 1.56.7 wrote that element as `null`: `[c ? 'a' : 'b', 'x'].join('-')` compiled to `null-x`.
 - `fallback()` of a value the build cannot evaluate is not known: it was read as `undefined`, so
   `css({ height: fallback(p.h, '100vh') })` compiled with no height. It writes `null` and `undefined` as nothing, as the
   runtime's `join` does, where `undefined` dropped the property and `null` was written as `null`.

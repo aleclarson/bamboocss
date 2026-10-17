@@ -459,6 +459,8 @@ impl<'a> Exactness<'_, 'a, '_, '_> {
             AstKind::FormalParameter(_) | AstKind::CatchParameter(_) => false,
             AstKind::BindingRestElement(_) => false,
             AstKind::TSEnumDeclaration(_) => true,
+            // The enum a namespace declared before it merges with, read as the enum is.
+            AstKind::TSNamespaceDeclaration(_) if self.evaluator.merges_enum(symbol) => true,
             _ => {
                 // A binding declared through a pattern whose node kind is the pattern element
                 // (for-of heads, nested patterns) is not a plain value.
