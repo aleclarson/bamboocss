@@ -335,12 +335,38 @@ impl EvalResult {
     }
 
     /// Truthiness, when it is decided. `undefined` decides as surely as a value: falsy.
+    ///
+    /// A value the build only guessed decides nothing: part of an object a spread it could not
+    /// evaluate may have written over, `{ dense: false, ...props }`, or worked out from one. It
+    /// used to decide on the guess, and the arm it chose was as complete as any, so the fold
+    /// compiled `options.dense ? '2' : '4'` to `p_4` whatever the caller passed. An object or an
+    /// array that surely is one is truthy however much of it is known.
     pub fn truthiness(&self) -> Option<bool> {
         match &self.value {
-            Some(value) => Some(truthy(value)),
+            Some(_) if self.surely_structured() => Some(true),
+            Some(value) if self.decides() => Some(truthy(value)),
+            Some(_) => None,
             None if self.is_undefined() => Some(false),
             None => None,
         }
+    }
+
+    /// Whether the value is what the program will have, so a choice may be made on it: complete,
+    /// with no other value it may be instead. A value read off an array carries its siblings'
+    /// choices for their rules (`converts`), and decides all the same.
+    fn decides(&self) -> bool {
+        self.complete && (self.conditions.is_empty() || self.converts())
+    }
+
+    /// Whether the value surely is the object or array it holds, however much of what it holds is
+    /// known: whole, or with a record of what is not. Read where a spread may have written over it,
+    /// it is a guess even of that — `{ icon: {}, ...props }` may hold `null` there — and has no
+    /// record, as `Partial::open` drops what the object said of each key.
+    fn surely_structured(&self) -> bool {
+        matches!(
+            self.value,
+            Some(serde_json::Value::Object(_) | serde_json::Value::Array(_))
+        ) && (self.complete || self.partial.is_some())
     }
 
     fn refused(refusal: Refusal) -> Self {
@@ -2443,6 +2469,11 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         {
             return EvalResult::known(!truthy);
         }
+        // Worked out from a value the build only guessed, or one holding a part it could not decide
+        // or read (`converts`), the answer is a guess too — but not what `typeof` says of an object
+        // or an array that surely is one.
+        let guessed = !result.converts()
+            && !(operator == UnaryOperator::Typeof && result.surely_structured());
         if result.nullish {
             return EvalResult {
                 refusal: result.refusal,
@@ -2455,8 +2486,9 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 ..EvalResult::unknown()
             };
         };
-        match operator {
-            UnaryOperator::LogicalNot => EvalResult::known(!truthy(&value)),
+        let mut answer = match operator {
+            // Reached only for a value whose truthiness is not decided.
+            UnaryOperator::LogicalNot => EvalResult::unknown(),
             UnaryOperator::UnaryPlus => number_value(&value)
                 .and_then(serde_json::Number::from_f64)
                 .map_or_else(EvalResult::unknown, |n| {
@@ -2479,7 +2511,12 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             }),
             UnaryOperator::Delete => EvalResult::known(true),
             UnaryOperator::Void => EvalResult::undefined(),
+        };
+        if guessed || !answer.complete {
+            answer.complete = false;
+            answer.refusal = result.refusal;
         }
+        answer
     }
 
     fn evaluate_binary(
@@ -2654,14 +2691,18 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         let left = self.evaluate(&expression.left);
         // `undefined` decides a choice as surely as a value does: it is falsy, and nullish.
         // `o.display ?? 'block'` on an option nobody passed used to stay undecided.
+        // As a test decides (`truthiness`): not on a value the build only guessed.
         let select_right = match &left.value {
-            Some(value) => Some(match expression.operator {
+            Some(_) if left.surely_structured() => {
+                Some(expression.operator == LogicalOperator::And)
+            }
+            Some(value) if left.decides() => Some(match expression.operator {
                 LogicalOperator::Or => !truthy(value),
                 LogicalOperator::And => truthy(value),
                 LogicalOperator::Coalesce => value.is_null(),
             }),
             None if left.is_undefined() => Some(expression.operator != LogicalOperator::And),
-            None => None,
+            _ => None,
         };
         if let Some(select_right) = select_right {
             return if select_right {
@@ -3750,10 +3791,12 @@ enum MemberKey<'a> {
 }
 
 /// A value `?.` short-circuits on: known `null`, or known `undefined` (no value, complete).
+/// Whether `?.` stops at it: a `null` the build is sure of — a guessed one may be anything — or
+/// `undefined`.
 fn is_nullish(result: &EvalResult) -> bool {
     match &result.value {
-        Some(serde_json::Value::Null) => true,
-        None => result.complete && result.conditions.is_empty(),
+        Some(serde_json::Value::Null) => result.decides(),
+        None => result.is_undefined(),
         _ => false,
     }
 }

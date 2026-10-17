@@ -239,6 +239,17 @@ describe('`+` in a style value', () => {
     for (const rule of rules) expect(css).toContain(rule)
   })
 
+  // A guess decides nothing: both arms of a choice on a default the caller may override are written.
+  test('a choice on a default a spread may write over writes both arms', () => {
+    const { css } = extract(
+      "const box = (o) => { const options = { dense: false, ...o }; return { padding: options.dense ? '2' : '4' } }\n" +
+        'export const A = (props) => css(box(props))',
+    )
+
+    expect(css).toContain('--spacing-2')
+    expect(css).toContain('--spacing-4')
+  })
+
   test('a string JavaScript reads as `NaN` is not read as a number', () => {
     // U+0085 is whitespace to Rust's `trim` and not to JavaScript, so `'\u00855' * 2` is `NaN`.
     expect(extract("css({ zIndex: '\\u00855' * 2 })").css).not.toContain('z-index')

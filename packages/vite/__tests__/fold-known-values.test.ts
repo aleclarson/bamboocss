@@ -378,6 +378,84 @@ describe('a property written as `undefined`', () => {
   })
 })
 
+/**
+ * A choice on a value the build only guessed: part of an object a spread it could not evaluate may
+ * have written over. It used to decide on the guess and take the arm it chose for exact, so
+ * `{ dense: false, ...props }` compiled `options.dense ? '2' : '4'` to `p_4` whatever the caller
+ * passed.
+ */
+describe('a choice on a value only guessed', () => {
+  const helper = (options: string, value: string) =>
+    `const box = (o) => { const options = ${options}; return ${value} }\nexport const A = (props) => css(box(props))`
+
+  test.each([
+    ['a test', helper('{ dense: false, ...o }', "{ padding: options.dense ? '2' : '4' }")],
+    ['`||`', helper("{ size: '', ...o }", "{ width: options.size || '10' }")],
+    ['`??`', helper('{ size: null, ...o }', "{ width: options.size ?? '10' }")],
+    ['`&&`', helper('{ on: true, ...o }', "{ width: options.on && '10' }")],
+    ['`!`', helper('{ on: false, ...o }', '{ content: `"${!options.on}"` }')],
+    ['`?.`', helper('{ theme: null, ...o }', "{ color: options.theme?.color ?? 'red.300' }")],
+    [
+      'an `if`',
+      "const box = (o) => { const options = { dense: false, ...o }; if (options.dense) return { padding: '2' }; return { padding: '4' } }\nexport const A = (props) => css(box(props))",
+    ],
+    // An operator on a guess gives a guess.
+    ['unary `-`', helper('{ size: 10, ...o }', '{ zIndex: -options.size }')],
+    [
+      '`typeof`',
+      helper("{ size: 'md', ...o }", "{ color: typeof options.size === 'string' ? 'red.300' : 'blue.300' }"),
+    ],
+    // An object read where a spread may have written over it may not be one at all.
+    ['an object read after a spread', helper('{ icon: {}, ...o }', "{ color: options.icon ? 'red.300' : 'blue.300' }")],
+    // A hole read off an object rest is held as `null` though it is `undefined`, and is a guess
+    // once stored: `-o.v` compiled to `z_0`, and `typeof` said `object`.
+    [
+      '`-` of a guess stored and read back',
+      "const { ...r } = [, 'x']\nconst o = { v: r[0] }\nexport const A = css({ zIndex: -o.v })",
+    ],
+    [
+      '`typeof` of a guess stored and read back',
+      "const { ...r } = [, 'x']\nconst o = { v: r[0] }\nexport const A = css({ content: typeof o.v })",
+    ],
+    // A join over an element it could not decide writes that element as nothing, a guess: `+`
+    // of it compiled to `z_3`, where the runtime has 13 or 23.
+    [
+      '`+` of a join over an element not decided',
+      "export const A = (p) => css({ zIndex: +[p.on ? '1' : '2', '3'].join('') })",
+    ],
+  ])('%s', (_, body) => {
+    expect(foldOf(withImport(body))).toMatchObject({ classes: [], skipped: ['dynamic'] })
+  })
+
+  // A value read off an array carries its siblings' choices for their rules, and decides all the same.
+  test('a value read off an array decides', () => {
+    const body =
+      "const pick = (s) => (s[1] ? 2 : 3)\nexport const A = (p) => css({ zIndex: pick([p.compact ? '1' : '2', '4']) })"
+
+    expect(foldOf(withImport(body))).toMatchObject({ classes: ['z_2'], skipped: [] })
+  })
+
+  // Written after the spread, the default is what the object holds whatever the caller passed.
+  test('a default written after the spread decides', () => {
+    expect(
+      foldOf(withImport(helper('{ ...o, dense: false }', "{ padding: options.dense ? '2' : '4' }"))),
+    ).toMatchObject({
+      classes: ['p_4'],
+      skipped: [],
+    })
+  })
+
+  // An object is an object however much of what it holds is known.
+  test.each([
+    ['truthy', "(t ? 'red.300' : 'blue.300')"],
+    ['of `typeof` object', "(typeof t === 'object' ? 'red.300' : 'blue.300')"],
+  ])('an object known in part is %s', (_, choice) => {
+    const body = `const t = { a: compute() }\nconst f = () => ${choice}\nexport const A = css({ color: f() })`
+
+    expect(foldOf(withImport(body))).toMatchObject({ classes: ['c_red.300'], skipped: [] })
+  })
+})
+
 // A recipe takes a `null` variant for an explicit miss and `undefined` for its default, so a hole
 // is never compiled as the one or the other: the selection is made where it runs.
 test('a hole selecting a recipe variant selects at runtime', () => {
