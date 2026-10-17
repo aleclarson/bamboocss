@@ -299,16 +299,16 @@ announcing them has no last environment to wait for. Both prune the sheet as it 
 environment compiles that the sheet no longer carries fails that build, naming the classes:
 
 ```text
-bamboocss: 2 class(es) compiled in the "ssr" environment were already pruned out of a
+bamboocss: 2 class(es) in use as the "ssr" environment finished were already pruned out of a
 stylesheet emitted by an earlier one. Elements carrying them would render unstyled.
 
   md\:d_inline-block
   h_\[31\.3px\]
 ```
 
-Write the in-memory build's output, or configure `builder` so the run announces itself, or set `pruneCss: false` to ship
-the whole extracted stylesheet. A run that declares an environment and never builds it is reported as the process exits:
-its sheet stays pruned against what the run knew.
+Write the build's output and configure `builder` so the run announces itself, or set `pruneCss: false` to ship the whole
+extracted stylesheet. A run that declares an environment and never builds it is reported as the process exits: its sheet
+stays pruned against what the run knew when it was written, without a rule only a later environment reaches.
 
 ### Seeing every diagnostic
 

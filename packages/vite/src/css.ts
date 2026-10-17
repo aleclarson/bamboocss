@@ -138,6 +138,7 @@ type OutputContext = {
         sourcemap?: StaticCompilationSession['sourcemap']
         ssr?: boolean | string
         ssrEmitAssets?: boolean
+        emitAssets?: boolean
         cssCodeSplit?: boolean
       }
     }
@@ -282,7 +283,12 @@ const pruneEmittedSheets = async (
     handledNames = new Set()
     session.prunedSheetNames.set(outputOptions, handledNames)
   }
-  const carriesSheet = containsGeneratedCssAsset(bundle as never, session.prunedAssets, handledNames)
+  // Vite drops what an environment that does not emit assets emits as one — SSR's, unless asked —
+  // so a sheet there is never written: pruning it recorded as lost what no stylesheet had, and a
+  // class this environment's next build compiled failed the guard for it.
+  const build = context.environment?.config?.build
+  const emitsAssets = build?.emitAssets ?? (!build?.ssr || build?.ssrEmitAssets === true)
+  const carriesSheet = emitsAssets && containsGeneratedCssAsset(bundle as never, session.prunedAssets, handledNames)
 
   const environmentName = context.environment?.name ?? 'default'
   // This environment is the candidate completing the run, not one still to compile: it has

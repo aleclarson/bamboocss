@@ -4718,6 +4718,56 @@ describe('an SSR bundle', () => {
   const outputsOf = (result: Rollup.RollupOutput | Rollup.RollupOutput[]) =>
     (Array.isArray(result) ? result : [result]).flatMap((one) => one.output)
 
+  // Vite drops what an SSR build emits as an asset, so its sheet is never written: what pruning it
+  // would have removed was lost from no stylesheet, and a rebuild that starts using such a class is
+  // not refused for it. It was, naming a class whose rule no sheet had ever been without.
+  test('a watch rebuild using a class its first build did not is not refused for a sheet it never writes', async () => {
+    const later = join(cwd, 'src/__ssr-watch-later.tsx')
+    const outDir = join(cwd, '__ssr-watch-out')
+    const source = (exports: string) =>
+      `import 'virtual:bamboo.css'\nimport { css } from '../styled-system/css'\n${exports}export const cls = css({ width: '[912.4px]' })\n`
+    rmSync(outDir, { force: true, recursive: true })
+    writeFileSync(entry, source(''))
+    writeFileSync(
+      later,
+      `import { css } from '../styled-system/css'\nexport const later = css({ width: '[912.5px]' })\n`,
+    )
+    await settled()
+
+    const watcher = (await build({
+      root: cwd,
+      logLevel: 'silent',
+      css: { postcss: { plugins: [] } },
+      plugins: [bamboocss({ cwd, reportSummary: false })],
+      build: {
+        watch: {},
+        minify: false,
+        outDir,
+        emptyOutDir: false,
+        ssr: entry,
+        rollupOptions: { external: [/^react/] },
+      },
+    })) as Rollup.RollupWatcher
+
+    try {
+      expect(await nextEnvironmentWatchBuild(watcher as never)).toBeUndefined()
+      expect(readOutputFiles(outDir, '.js')).not.toContain('w_[912.5px]')
+
+      const rebuilt = watchCycleUntil(
+        watcher as never,
+        () => readOutputFiles(outDir, '.js').includes('w_[912.5px]'),
+        'rebuilding SSR to use the class',
+      )
+      await new Promise((settle) => setTimeout(settle, 800))
+      writeFileSync(entry, source(`export { later } from './__ssr-watch-later'\n`))
+      expect(await rebuilt).toBeUndefined()
+    } finally {
+      await watcher.close()
+      rmSync(later, { force: true })
+      rmSync(outDir, { force: true, recursive: true })
+    }
+  }, 120_000)
+
   test('compiles without being asked to carry the stylesheet', async () => {
     const outputs = outputsOf(await buildSsr(false))
     const js = outputs.map((output) => ('code' in output ? output.code : '')).join('\n')

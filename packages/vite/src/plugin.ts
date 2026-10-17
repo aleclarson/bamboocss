@@ -1142,7 +1142,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
    * earlier environments' references to the sheet on disk and its own still in its bundle. Its
    * write hook reaches it too, should the output hook not have. A run that never completes — an
    * environment declared and never built — leaves the sheets as they were written, without a rule
-   * only that environment reaches, and says so as the process exits.
+   * reached only by an environment that compiled after them, and says so as the process exits.
    */
   const finalizeDeferredSheetsIfComplete = async (
     /** An environment proving it completes the run from inside its own output hook. */
@@ -2079,8 +2079,9 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
       host.setWatch(config.command === 'build' && config.build.watch != null)
       defaultEmitAssets = config.build?.emitAssets ?? (!config.build?.ssr || config.build?.ssrEmitAssets === true)
 
-      // A sheet written for a run that never completes stays pruned against what the run knew,
-      // without a rule only the environments left would reach, and would ship so in silence.
+      // A sheet written for a run that never completes stays pruned against what the run knew when
+      // it was written, without a rule only an environment that compiled after it reaches, and
+      // would ship so in silence.
       // There is no whole-run hook to say it from: `buildApp` runs before the default
       // environment loop, not after it.
       if (config.command === 'build' && !exitWarningInstalled) {
@@ -2091,7 +2092,8 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
             'vite',
             `The stylesheet was pruned against an incomplete run: ` +
               `${truncateList(remainingEnvironments(staticSession), { unit: 'environment', separator: ', ' })} never ` +
-              `completed, so a rule only those reach was never restored. Build every declared environment, or set ` +
+              `completed, so a rule reached only by an environment that compiled after the sheet was written was ` +
+              `never restored. Build every declared environment, or set ` +
               `\`bamboocss({ pruneCss: false })\` to ship the full extracted stylesheet.`,
           )
         })
@@ -2380,22 +2382,23 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
             : [...staticSession.usedClasses].filter((className) => staticSession.prunedClasses.has(bare(className)))
         if (lost.length) {
           throw new Error(
-            `bamboocss: ${lost.length} class(es) compiled in the ${JSON.stringify(environment)} environment were ` +
-              `already pruned out of a stylesheet emitted by an earlier one. Elements carrying them would render ` +
+            `bamboocss: ${lost.length} class(es) in use as the ${JSON.stringify(environment)} environment finished ` +
+              `were already pruned out of a stylesheet emitted by an earlier one. Elements carrying them would render ` +
               `unstyled.\n\n` +
               `${truncateList(
                 lost.map((className) => `  ${className}`),
                 { unit: 'class', separator: '\n' },
               )}\n\n` +
               `The stylesheet was pruned before this environment compiled, and nothing prunes it again. A run prunes ` +
-              `a sheet it wrote again once its last environment reaches its output, so this is an in-memory build ` +
-              `(\`build.write: false\`), which has no file to finalize; a run that built environments one at a time ` +
-              `without announcing them — \`builder\` in the Vite config, which every framework building more than ` +
-              `one sets; or a rebuild of this environment alone after the sheet was finalized. These classes are ` +
-              `reached only from here, so no rule for them survived.\n\n` +
-              `Write the build's output, configure \`builder\` so the run announces its environments, rebuild every ` +
-              `environment together, or set \`bamboocss({ pruneCss: false })\` to ship the whole extracted ` +
-              `stylesheet.`,
+              `a sheet it wrote again once its last environment reaches its output, and does not when its output ` +
+              `is held in memory (\`build.write: false\`), which has no file to finalize; when it built ` +
+              `environments one at a time without announcing them — \`builder\` in the Vite config, which every ` +
+              `framework building more than one sets; or when this environment built again after the sheet was ` +
+              `pruned against its last output — a rebuild of it alone, or of every environment at once in a watch. ` +
+              `These classes are reached only from here, so no rule for them survived.\n\n` +
+              `Write the build's output and configure \`builder\` so the run announces its environments, restart ` +
+              `a watch this was a rebuild of, or set \`bamboocss({ pruneCss: false })\` to ship the whole ` +
+              `extracted stylesheet.`,
           )
         }
 

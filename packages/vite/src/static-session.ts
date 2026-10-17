@@ -251,8 +251,8 @@ export const createStaticCompilationSession = (): StaticCompilationSession => {
  *
  * An environment a run declares and then never builds leaves this permanently non-empty, and
  * those judgements are skipped for the run: the guards assert less, and a sheet written before
- * then stays pruned against what the run knew, without a rule only that environment reaches,
- * which the process says as it exits.
+ * then stays pruned against what the run knew when it was written, without a rule reached only
+ * by an environment that compiled after it, which the process says as it exits.
  */
 export const remainingEnvironments = (
   session: StaticCompilationSession,
