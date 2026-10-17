@@ -831,6 +831,7 @@ describe('load config', () => {
     test.each([
       ['as given', 'target[key] = value'],
       ['copied', 'target[key] = Array.isArray(value) ? [...value] : value'],
+      ['changed', "target[key] = key === 'outdir' ? `out/${value}` : value"],
     ])('a proxy taking the writes the loader makes, %s, and returning nothing loads with them', async (_, store) => {
       const root = project({
         'bamboo.config.ts': `export default new Proxy({ include: [] }, { set(target, key, value) { ${store} } })`,
@@ -838,8 +839,41 @@ describe('load config', () => {
 
       const { config } = await loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })
 
-      expect(config).toMatchObject({ outdir: 'styled-system', validation: 'warn' })
+      expect(config).toMatchObject({ validation: 'warn' })
+      expect(config.outdir).toMatch(/styled-system$/)
       expect(config.presets?.length).toBeGreaterThan(0)
+    })
+
+    // What every read of it gives is wrapped, the list included: a deep proxy, as reactive stores make.
+    test('a proxy wrapping all it gives, taking the writes and returning nothing, loads with them', async () => {
+      const root = project({
+        'bamboo.config.ts': [
+          `const wrapped = new WeakMap<object, any>()`,
+          `const wrap = (value: any): any => {`,
+          `  if (typeof value !== 'object' || value === null) return value`,
+          `  if (!wrapped.has(value)) wrapped.set(value, new Proxy(value, { get: (target, key, receiver) => wrap(Reflect.get(target, key, receiver)), set(target: any, key, next) { target[key] = next } } as ProxyHandler<any>))`,
+          `  return wrapped.get(value)`,
+          `}`,
+          `export default wrap({ include: ['src'], preflight: true })`,
+        ].join('\n'),
+      })
+
+      const { config } = await loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })
+
+      expect(config).toMatchObject({ outdir: 'styled-system', validation: 'warn', preflight: true })
+      expect(config.presets?.length).toBeGreaterThan(0)
+    })
+
+    // Inherited read-only, and reading as nothing: the default written over it is the config's own,
+    // which the merge's `for…in` reads, where it was left out and the context crashed on no `outdir`.
+    test('a default written over a read-only key it inherits is merged', async () => {
+      const root = project({
+        'bamboo.config.ts': `export default Object.create(Object.freeze(Object.create(Object.prototype, { outdir: { value: undefined }, presets: { value: [] } })), { include: { value: ['src'], enumerable: true } })`,
+      })
+
+      const { config } = await loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })
+
+      expect(config).toMatchObject({ outdir: 'styled-system', include: ['src'] })
     })
 
     // Nothing written is lost: it holds the presets the loader writes, an empty list.
@@ -851,6 +885,18 @@ describe('load config', () => {
       const { config } = await loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })
 
       expect(config).toMatchObject({ outdir: 'out', presets: [], preflight: true })
+    })
+
+    // A new proxy every level: walked until a set of them could hold no more, seconds on, where
+    // 1.56.7 failed at once.
+    test('a proxy whose prototype chain has no end fails the load at once', async () => {
+      const root = project({
+        'bamboo.config.ts': `const handler: ProxyHandler<object> = { getPrototypeOf: () => new Proxy({}, handler) }\nexport default new Proxy({ presets: [], preflight: true }, handler)`,
+      })
+      const started = Date.now()
+
+      await expect(loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })).rejects.toThrow()
+      expect(Date.now() - started).toBeLessThan(1000)
     })
 
     // The walk for what it inherits went round the cycle for good, and the load never returned.

@@ -152,13 +152,23 @@ export async function settle(value: any) {
 const writtenKeys = (config: any) => [...['outdir', 'validation'].filter((key) => config[key] == null), 'presets']
 
 /**
+ * How far up a prototype chain the loader looks. A proxy's `getPrototypeOf` may make one with no
+ * end, a new proxy every level, which was walked until memory ran out.
+ */
+const CHAIN_LIMIT = 100
+
+/**
  * Whether `object[key] = value` would succeed, as assignment decides it: through a setter, into a
  * writable property, or by adding one to an object that takes one. A proxy's `set` trap is not seen,
  * and a prototype chain a proxy's `getPrototypeOf` makes a cycle of is walked once around.
  */
 function assignable(object: object, key: string) {
   const walked = new Set<object>()
-  for (let from: object | null = object; from !== null && !walked.has(from); from = Object.getPrototypeOf(from)) {
+  for (
+    let from: object | null = object;
+    from !== null && !walked.has(from) && walked.size < CHAIN_LIMIT;
+    from = Object.getPrototypeOf(from)
+  ) {
     walked.add(from)
     const descriptor = Object.getOwnPropertyDescriptor(from, key)
     if (!descriptor) continue
@@ -204,7 +214,7 @@ function writableOf(value: any) {
   const walked = new Set<object>()
   for (
     let from = value;
-    from !== null && from !== Object.prototype && !walked.has(from);
+    from !== null && from !== Object.prototype && !walked.has(from) && walked.size < CHAIN_LIMIT;
     from = Object.getPrototypeOf(from)
   ) {
     walked.add(from)
@@ -218,7 +228,8 @@ function writableOf(value: any) {
       }
       seen.add(key)
       const enumerable = listed.has(key) || Boolean(descriptor.enumerable)
-      define(key, enumerable, Boolean(descriptor.get || descriptor.set || enumerable))
+      // Written over one it inherits, it is a property of its own, as an assignment makes one.
+      define(key, enumerable, from !== value || Boolean(descriptor.get || descriptor.set || enumerable))
     }
   }
   // Written, it is the property an assignment makes through the proxy's `set`, which `for…in` reads.
@@ -226,31 +237,21 @@ function writableOf(value: any) {
   return copy
 }
 
-/** Whether `read`, what the config holds after a write of `value`, is it: or for a list, its items. */
-function holds(read: unknown, value: unknown) {
-  if (Object.is(read, value)) return true
-  return (
-    Array.isArray(value) &&
-    Array.isArray(read) &&
-    read.length === value.length &&
-    value.every((item, index) => Object.is(read[index], item))
-  )
-}
-
 /**
- * Write one of the loader's defaults into the config, failing where the config refuses it — a
- * `Proxy` whose trap returns false, and does not hold the value after (`holds`) — as an assignment
- * does in an ES module. The loader's CommonJS build is not strict, where the refusal was dropped in
- * silence and the config loaded without the default. A trap that takes the write, a copy of the list
- * included, and returns nothing refuses nothing, though an assignment in an ES module throws for it,
- * and nor does one already holding what is written.
+ * Write one of the loader's defaults into the config, failing where the config refuses it and is
+ * left holding none — a `Proxy` whose trap returns false — as an assignment does in an ES module.
+ * The loader's CommonJS build is not strict, where the refusal was dropped in silence and the config
+ * loaded without the default. One left holding a value — what its trap stored, wrapped or changed
+ * as it was, or the config's own — loses nothing the loader needs, and loads with that, as it did
+ * there.
  */
 export function writeDefault(config: Record<PropertyKey, any>, key: string, value: unknown) {
-  if (!Reflect.set(config, key, value) && !holds(config[key], value)) {
+  if (!Reflect.set(config, key, value) && config[key] == null) {
     throw new BambooError(
       'CONFIG_ERROR',
-      `💥 The config refused \`${key}\`, which the loader writes into it: a \`Proxy\` whose trap returns ` +
-        `false for the write does. Have the trap take the write and return \`true\`, or export a plain object.`,
+      `💥 The config refused \`${key}\`, which the loader writes into it, and holds none: a \`Proxy\` whose ` +
+        `trap returns false for the write does. Have the trap take the write and return \`true\`, or export a ` +
+        `plain object.`,
     )
   }
 }
