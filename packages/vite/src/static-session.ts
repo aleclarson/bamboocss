@@ -109,6 +109,12 @@ export interface StaticCompilationSession {
   /** Environments whose latest generation reached its observable output commit point. */
   completedEnvironments: Set<string>
   /**
+   * Environments whose sheet survives Vite deleting the assets they do not emit, as it is emitted
+   * after: an SSR build's with `cssCodeSplit` off, before Vite 7.1.10. Seen in the late pass, they
+   * write it again on a rebuild, and the guard reads them as emitting one.
+   */
+  lateSheetEnvironments: Set<string>
+  /**
    * Escape-free class names a completed prune removed from an emitted stylesheet.
    *
    * Kept so a later environment can notice that a class it just compiled is already gone from
@@ -193,6 +199,7 @@ export const createStaticCompilationSession = (): StaticCompilationSession => {
     expectedEnvironments: undefined,
     participatingEnvironments: new Set(),
     completedEnvironments: new Set(),
+    lateSheetEnvironments: new Set(),
     prunedClasses: new Set(),
     deferredSheets: [],
     writtenOutputs: [],

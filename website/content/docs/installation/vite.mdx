@@ -306,9 +306,13 @@ stylesheet emitted by an earlier one, and elements carrying them would render un
   h_\[31\.3px\]
 ```
 
-Write the build's output and configure `builder` so the run announces itself, or set `pruneCss: false` to ship the whole
-extracted stylesheet. A run that declares an environment and never builds it is reported as the process exits: its sheet
-stays pruned against what the run knew when it was written, without a rule only a later environment reaches.
+A watch rebuild ends the same way when an environment builds again after the sheet was pruned against its last output:
+rebuilt alone, or finishing first in a rebuild of every environment, before the one emitting the sheet writes a new one.
+
+Write the build's output and configure `builder` so the run announces itself, restart a watch the error came from, or
+set `pruneCss: false` to ship the whole extracted stylesheet. A run that declares an environment and never builds it is
+reported as the process exits: its sheet stays pruned against what the run knew when it was written, without a rule only
+a later environment reaches.
 
 ### Seeing every diagnostic
 

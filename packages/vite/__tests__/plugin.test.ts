@@ -558,6 +558,61 @@ describe('compiler', () => {
   }, 60_000)
 
   /**
+   * Before Vite 7.1.10 an SSR build with `cssCodeSplit` off, a library's default, writes its sheet
+   * after Vite's asset plugin deletes what the environment does not emit, so the late pass prunes a
+   * sheet that is written. A watch rebuild starting to use a class that sheet pruned failed the
+   * guard, though it writes the sheet again with that class's rule.
+   */
+  test('a rebuild of an environment whose sheet survives Vite discarding its assets writes it again', async () => {
+    const entry = join(cwd, 'src/__late-sheet.tsx')
+    const widths = { first: '94.101px', later: '94.202px' }
+    const source = (width: string) =>
+      `import { css } from 'styled-system/css'\n` + `export const className = css({ width: '[${width}]' })\n`
+    const { css, fold: compiler } = plugins({ cwd, reportSummary: false })
+    const build = { sourcemap: false, ssr: true, cssCodeSplit: false }
+    const config = { command: 'build', root: cwd, build }
+    const environment = { name: 'ssr', config: { build: { ...build, emitAssets: false } } }
+    const resolvedCss = hookOf(css.resolveId)!.call({} as never, VIRTUAL_CSS_ID, undefined, {} as never) as string
+    const ids = [entry, resolvedCss]
+    const context = {
+      addWatchFile() {},
+      environment,
+      getModuleIds: () => ids.values(),
+      getModuleInfo: () => null,
+    }
+
+    writeFileSync(
+      entry,
+      `import 'virtual:bamboo.css'\n` +
+        `import { css } from 'styled-system/css'\n` +
+        `export const inventory = [css({ width: '[${widths.first}]' }), css({ width: '[${widths.later}]' })]\n`,
+    )
+    try {
+      await hookOf(css.configResolved)?.call({} as never, config as never)
+      await hookOf(compiler.configResolved)?.call({} as never, config as never)
+      const run = async (width: string) => {
+        await hookOf(css.buildStart)?.call(context as never, {} as never)
+        await hookOf(compiler.buildStart)?.call(context as never, {} as never)
+        const stylesheet = await hookOf(css.load)?.call(context as never, resolvedCss, {} as never)
+        await hookOf(compiler.transform)!.call(context as never, source(width), entry, {} as never)
+        await hookOf(compiler.buildEnd)?.call(context as never, undefined as never)
+        const bundle = {
+          'style.css': { type: 'asset', fileName: 'style.css', names: [], originalFileNames: [], source: stylesheet },
+        }
+        await hookOf(css.generateBundle)?.call({ environment } as never, {} as never, bundle as never, false)
+        return Object.values(bundle)
+          .map((asset) => String(asset.source))
+          .join('\n')
+      }
+
+      expect(await run(widths.first)).not.toContain(widths.later)
+      expect(await run(widths.later)).toContain(widths.later)
+    } finally {
+      rmSync(entry, { force: true })
+    }
+  }, 60_000)
+
+  /**
    * No foreign recipe config outlives the edit that changed it, in any environment.
    *
    * The config of an imported recipe is parsed once per declaring module and cached, and both

@@ -292,9 +292,14 @@ const pruneEmittedSheets = async (
   // but what pruning it removes is lost from no written sheet: counted, a class this environment
   // went on to compile failed the guard. A bundler with no environments reads the run's options.
   const build = context.environment?.config?.build ?? session.ssrBuild
-  const discarded = early && !(build?.emitAssets ?? (!build?.ssr || build?.ssrEmitAssets === true))
+  const emitsAssets = build?.emitAssets ?? (!build?.ssr || build?.ssrEmitAssets === true)
+  const discarded = early && !emitsAssets
 
   const environmentName = context.environment?.name ?? 'default'
+  // A sheet the late pass still finds there was emitted after that deletion, and is written: an
+  // SSR build's with `cssCodeSplit` off, before Vite 7.1.10. Such an environment writes it again
+  // on a rebuild, which the guard in `buildEnd` has to know before this hook runs.
+  if (!early && carriesSheet && !emitsAssets) session.lateSheetEnvironments.add(environmentName)
   // This environment is the candidate completing the run, not one still to compile: it has
   // finished transforming, and what it emits here is what it contributes.
   const pending = remainingEnvironments(session, environmentName)

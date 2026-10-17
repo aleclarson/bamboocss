@@ -2339,8 +2339,12 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
           // A sheet this environment is about to emit supersedes its previous generation. Old
           // prune history must not make a newly reachable class fail before generateBundle can
           // restore its rule. An SSR graph may load CSS while Vite deliberately suppresses its
-          // assets, so use Vite's resolved per-environment decision rather than the `ssr` flag.
-          currentWillEmitCss = state.cssLoaded && (this.environment?.config?.build?.emitAssets ?? defaultEmitAssets)
+          // assets, so use Vite's resolved per-environment decision rather than the `ssr` flag —
+          // and what a previous build showed it writes all the same (`lateSheetEnvironments`).
+          currentWillEmitCss =
+            state.cssLoaded &&
+            ((this.environment?.config?.build?.emitAssets ?? defaultEmitAssets) ||
+              staticSession.lateSheetEnvironments.has(environment))
         }
 
         // This candidate is complete enough to judge, but is not published until every
