@@ -5,8 +5,7 @@
   "imports": {
     "#bamboo/css": "./ts-import-map-outdir/css/index.mjs",
     "#bamboo/recipes": "./ts-import-map-outdir/recipes/index.mjs",
-    "#bamboo/patterns": "./ts-import-map-outdir/patterns/index.mjs",
-    "#bamboo/jsx": "./ts-import-map-outdir/jsx/index.mjs"
+    "#bamboo/patterns": "./ts-import-map-outdir/patterns/index.mjs"
   },
   "scripts": {
     "prepare": "bamboo codegen",

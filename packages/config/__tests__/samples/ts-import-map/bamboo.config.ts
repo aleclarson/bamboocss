@@ -11,7 +11,6 @@ export default defineConfig({
     css: '#bamboo/css',
     recipes: '#bamboo/recipes',
     patterns: '#bamboo/patterns',
-    jsx: '#bamboo/jsx',
   },
   theme: {
     extend: {

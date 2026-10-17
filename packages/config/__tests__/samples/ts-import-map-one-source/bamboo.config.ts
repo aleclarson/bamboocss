@@ -11,7 +11,6 @@ export default defineConfig({
     css: '@my-bamboo-styled-system',
     recipes: '@my-bamboo-styled-system',
     patterns: '@my-bamboo-styled-system',
-    jsx: '@my-bamboo-styled-system',
   },
   theme: {
     extend: {
