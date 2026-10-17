@@ -57,25 +57,32 @@ Read values in style expressions as JavaScript does, where the build used Rust's
   compiles, and so does `'A' in` it. An enum exported from another module is read as one in the module itself is. A
   numeric enum is known member by member and not as a whole: the reverse mapping from a value to its member's name is
   not held, so a read through it, `Area[Area.main]`, is not known, where it dropped the property. Which keys it has is
-  still known, the mapping's among them: `'1' in E` is true and `'B' in E` false. An enum declared again with members of
-  its own, another enum, is not known, where it was read as its first declaration, so a member the other added was
-  dropped. Merged with a namespace holding values it is known by its own members, and not by the names the namespace
-  exports, as it is merged with a `declare`d one; a namespace of types alone changes nothing, declared before the enum
-  or after it.
+  known, the mapping's among them, which `in` took for absent: `'1' in E` is true, and `'B' in E` false. An enum
+  declared again with members of its own, another enum, is not known, where it was read as its first declaration, so a
+  member the other added was dropped. Merged with a namespace holding values it is known by its own members, and not by
+  the names the namespace exports, as it is merged with a `declare`d one; a namespace of types alone changes nothing,
+  declared before the enum or after it.
 - A parameter's or a destructuring default no longer stands in for an argument that is one of several values:
   `(x = 'green.300') => x` given `c ? 'red.300' : 'blue.300'` compiled to green, which the call never gives. As one of
-  them may be `undefined`, which a choice keeps no branch for, extraction writes the default's rules beside them.
+  them may be `undefined`, which a choice keeps no branch for, extraction writes the default's rules beside them where
+  the default is a literal, or an array or object of literals: one that reads a binding or calls anything is not run for
+  this, as what it runs could cut the whole call short.
 - An array element holding values the build could not decide between is not known as a whole read by index, where it was
   read as what it holds without them: `(sizes) => sizes[0]` given `[{ color: c ? 'a' : 'b' }]` compiled with no color.
-  What is known of it still is, as of a rest parameter's element. One read where a sibling holds a key that is its index
-  is not known at all, as what the array holds under that key may be the sibling's.
+  What is known of it still is, as of a rest parameter's element. One read where any element, that one included, holds a
+  value the build could not decide between under a key that is its index is not known at all, as what the array holds
+  under that key may be another element's.
 - Converting an array holding an element the build could not decide between — `join`, `+`, a template literal — is not
   known, where 1.56.7 wrote that element as `null`: `[c ? 'a' : 'b', 'x'].join('-')` compiled to `null-x`.
 - `==` converts its operands as JavaScript does — `'0' == 0` is true — and `===` of two objects or arrays is not known,
   as they are the same only as one object: both compared what the values hold, so `n == 0` given `'0'` was false and
-  `[1] === [1]` true. Two strings holding whitespace are not compared, as for `<`.
-- A computed key, `sizes[parts.join('-')]`, and the left of `in`, are converted as any value is, so one the build could
-  not wholly read is not known, where it picked a property as if it were the one.
+  `[1] === [1]` true. Two numbers are compared as numbers, where how each was held was compared too: a length or a
+  bitwise result never equalled a literal, so `xs.length === 2 ? a : b` compiled to `b`. Two strings are known to be the
+  same only where they hold no whitespace, which the build collapses as it reads a literal, and to differ wherever they
+  still do once each run of it is one space: `'a  b' === 'a b'` was true, and `'a ' + ' b' === 'a  b'` false.
+- A computed key and the left of `in` are converted as any value is, so one the build could not wholly read is not
+  known, where it read what that value converted to: `sizes[[c ? 'lg' : 'sm', 'x'].join('-')]` was `sizes['null-x']`, a
+  known `undefined`.
 - `fallback()` of a value the build cannot evaluate is not known: it was read as `undefined`, so
   `css({ height: fallback(p.h, '100vh') })` compiled with no height. It writes `null` and `undefined` as nothing, as the
   runtime's `join` does, where `undefined` dropped the property and `null` was written as `null`.

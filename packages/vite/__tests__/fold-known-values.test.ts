@@ -664,6 +664,62 @@ describe('what a call is given', () => {
       'p_0',
     ],
     [
+      '`==` of a number and a string padded with whitespace',
+      "const f = (s) => (s == 1 ? 2 : 3)\nexport const A = css({ zIndex: f(' 1 ') })",
+      'z_2',
+    ],
+    // A number is compared as a number, however it is held: a length or a bitwise result never
+    // equalled a literal.
+    [
+      '`===` of a length and a number',
+      "const f = (n) => (n === 2 ? 'red.300' : 'blue.300')\nexport const A = css({ color: f([1, 2].length) })",
+      'c_red.300',
+    ],
+    [
+      '`===` of a bitwise result and a number',
+      "const f = (n) => (n === 1 ? 'red.300' : 'blue.300')\nexport const A = css({ color: f(1 | 0) })",
+      'c_red.300',
+    ],
+    // Different once each run of whitespace is one space, two strings differ however it was written.
+    [
+      '`===` of a value holding a space and a keyword',
+      "const border = (value = '1px solid') => ({ border: value === 'none' ? '0' : value })\nexport const A = css(border())",
+      'bd_1px_solid',
+    ],
+    [
+      '`!==` of a value holding a space and a keyword',
+      "const t = (v = 'all 0.2s') => ({ transition: v !== 'none' ? v : 'none' })\nexport const A = css(t())",
+      'trs_all_0.2s',
+    ],
+    // The elements before a spread are where they are written.
+    ['`in` of an index before a spread', 'export const A = (p) => css({ zIndex: (0 in [p.x, ...p.ys]) + 1 })', 'z_2'],
+    [
+      '`in` of a later index before a spread',
+      "export const A = (p) => css({ zIndex: (1 in ['a', p.x, ...p.ys]) + 1 })",
+      'z_2',
+    ],
+    // A value read off an array carries its siblings' choices, and is one value wherever it is put.
+    [
+      'decided elements given to a rest parameter, joined',
+      "const pad = (...xs) => xs.join(' ')\nexport const A = (p) => { const space = [p.compact ? '1' : '2', '4', '8']; return css({ padding: pad(space[1], space[2]) }) }",
+      'p_4_8',
+    ],
+    [
+      'a decided element read off a rest parameter',
+      "const second = (...xs) => xs[1] + 'px'\nexport const A = (p) => { const space = [p.compact ? '1' : '2', '4', '8']; return css({ padding: second(space[1], space[2]) }) }",
+      'p_8px',
+    ],
+    [
+      'decided elements put in an array, joined',
+      "const both = (a, b) => [a, b].join(' ')\nexport const A = (p) => { const space = [p.compact ? '1' : '2', '4', '8']; return css({ padding: both(space[1], space[2]) }) }",
+      'p_4_8',
+    ],
+    [
+      'decided elements spread into a call',
+      "const pad = (a, b) => a + ' ' + b\nexport const A = (p) => { const space = [p.compact ? '1' : '2', '4', '8']; return css({ padding: pad(...[space[1], space[2]]) }) }",
+      'p_4_8',
+    ],
+    [
       'a key of a numeric enum it does not hold',
       "enum E { A = 1 }\nexport const A = css({ zIndex: ('B' in E) + 1 })",
       'z_1',
@@ -982,6 +1038,16 @@ describe('what is still not known', () => {
     ],
     // Two objects are the same only as one object, which the build does not say.
     ['`===` of two arrays', 'export const A = css({ zIndex: ([1] === [1]) + 1 })'],
+    // The same once each run of whitespace is one space, two strings holding any may still differ:
+    // the build collapses a literal's as it reads it, and keeps what a string built from others held.
+    [
+      '`===` of strings the same but for how their whitespace was written',
+      "const same = (a, b) => (a === b ? 1 : 2)\nexport const A = css({ zIndex: same('a ' + ' b', 'a  b') })",
+    ],
+    [
+      '`===` of a value holding a space and the same string',
+      "const g = (t = '1fr 1fr') => ({ gridTemplateColumns: t === '1fr 1fr' ? 'auto' : t })\nexport const A = css(g())",
+    ],
     // A fragment an array holds under the index read may be a sibling's, under a key that is it.
     [
       'a key of an element read where a sibling holds a key that is its index',
@@ -1073,6 +1139,17 @@ describe('what is still not known', () => {
     expect(css).toContain('blue\\.300')
   })
 
+  // Nor is one that reads a binding: reading it runs what the binding was given, which may call a
+  // helper in turn.
+  test('a default reading a binding is not run for one of several values', () => {
+    const body =
+      "const DEFAULT = 'gray.500'\nconst f = (x = DEFAULT) => ({ color: x })\nexport const A = (p) => css(f(p.on ? undefined : 'red.300'))"
+    const { css } = foldOf(withImport(body))
+
+    expect(css).toContain('red\\.300')
+    expect(css).not.toContain('gray\\.500')
+  })
+
   // It throws there.
   test('`css.raw` of an array, in a module the compiler does not transform', () => {
     const files = {
@@ -1117,6 +1194,15 @@ describe('`fallback()`', () => {
     const code = withFallback("export const A = (p) => css({ height: fallback(p.h, '100vh') })")
 
     expect(foldOf(code)).toMatchObject({ classes: [], skipped: ['dynamic'] })
+  })
+
+  // A value read off an array is what it is, whatever its siblings could be.
+  test('of a value read off an array is known', () => {
+    const code = withFallback(
+      "export const A = (p) => { const sizes = [p.tall ? '50vh' : '25vh', '100vh']; return css({ height: fallback(sizes[1], '100dvh') }) }",
+    )
+
+    expect(foldOf(code)).toMatchObject({ classes: ['h_fallback(100vh,_100dvh)'], skipped: [] })
   })
 
   // As the runtime's `join` writes them, which the candidates are then read without.

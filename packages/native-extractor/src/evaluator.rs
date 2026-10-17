@@ -422,6 +422,15 @@ impl EvalResult {
         self.complete && self.partial.as_deref().is_none_or(Partial::read_whole)
     }
 
+    /// Whether it holds a value the build could not decide between: it is one of several, with none
+    /// of its own, or an object with such a property, held beside it (`conditions`). Anything else
+    /// with `conditions` was read off an array and carries its siblings' choices, for their rules:
+    /// it is one value all the same, where it is whole (`converts`).
+    fn is_undecided(&self) -> bool {
+        !self.conditions.is_empty()
+            && !(self.value.as_ref().is_some_and(|value| !value.is_object()) && self.converts())
+    }
+
     fn undefined() -> Self {
         // JavaScript `undefined` is a known value, but has no JSON representation. It is
         // deliberately omitted from an object or argument just like the TypeScript extractor.
@@ -1760,7 +1769,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                             let value = element
                                 .as_expression()
                                 .map_or_else(EvalResult::unknown, |value| self.evaluate(value));
-                            let decided = value.conditions.is_empty();
+                            let decided = !value.is_undecided();
                             let exact = value.complete
                                 && value.value.is_some()
                                 && !value.nullish
@@ -2833,7 +2842,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                         // writes: it was taken for `undefined`, and the property dropped.
                         if arguments
                             .iter()
-                            .any(|value| !value.complete || !value.conditions.is_empty())
+                            .any(|value| !value.complete || value.is_undecided())
                         {
                             return EvalResult {
                                 refusal: arguments.iter().find_map(|value| value.refusal.clone()),
@@ -3352,11 +3361,14 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             // An undecided element is held as what is known of it (`undecided_record`), its
             // undecided keys not known: as what it holds without them it was read for what it is —
             // `'size' in args[0]` false. One of which nothing is known is held as `null`, as one
-            // not known at all is.
+            // not known at all is. A value read off an array is not undecided for the choices it
+            // carries of its siblings' (`is_undecided`): it was held as `null`, so `xs.join(' ')`
+            // given `space[1]` and `space[2]` wrote a space.
             let records: Vec<Option<Arc<Partial>>> = values
                 .iter()
                 .map(|value| {
-                    (!value.conditions.is_empty())
+                    value
+                        .is_undecided()
                         .then(|| undecided_record(value))
                         .flatten()
                 })
@@ -3369,7 +3381,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                         value
                             .value
                             .clone()
-                            .filter(|_| value.conditions.is_empty() || record.is_some())
+                            .filter(|_| !value.is_undecided() || record.is_some())
                             .unwrap_or(serde_json::Value::Null)
                     })
                     .collect::<Vec<_>>()
@@ -3378,7 +3390,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             let mut partial = Partial::default();
             let mut decided = true;
             for (index, (value, record)) in values.iter().zip(records).enumerate() {
-                if !value.conditions.is_empty() {
+                if value.is_undecided() {
                     decided = false;
                     partial.write(&index.to_string(), false, record);
                 } else if value.nullish || value.partial.is_some() {
@@ -4193,7 +4205,7 @@ fn positional(
 /// element by element, or one whose record says where each element is, each as the record has
 /// it. Otherwise how many is not known, and the refusal, if any, says why.
 fn spread_arguments(value: EvalResult) -> Result<Vec<EvalResult>, Option<Arc<Refusal>>> {
-    let counted = value.conditions.is_empty()
+    let counted = !value.is_undecided()
         && !value.nullish
         && value
             .partial
@@ -4536,19 +4548,23 @@ fn is_javascript_whitespace(character: char) -> bool {
 
 fn normalize_whitespace(value: &str) -> String {
     let mut output = String::with_capacity(value.len());
-    let mut whitespace = false;
-    for character in value.chars() {
-        if is_javascript_whitespace(character) {
-            if !whitespace {
-                output.push(' ');
-                whitespace = true;
-            }
-        } else {
-            output.push(character);
-            whitespace = false;
-        }
-    }
+    output.extend(collapsed(value));
     output
+}
+
+/// `value` with each run of whitespace one space, as a literal is read.
+fn collapsed(value: &str) -> impl Iterator<Item = char> + '_ {
+    let mut whitespace = false;
+    value.chars().filter_map(move |character| {
+        let space = is_javascript_whitespace(character);
+        let first = space && !whitespace;
+        whitespace = space;
+        if space {
+            first.then_some(' ')
+        } else {
+            Some(character)
+        }
+    })
 }
 
 /// An element as `Array.prototype.join` writes it: a `null` or `undefined` one — and a hole, which
@@ -4721,16 +4737,27 @@ fn integer_binary(
 fn shift_count(count: i32) -> u32 {
     count as u32 & 31
 }
-/// A relational comparison: two strings by their UTF-16 code units, as JavaScript compares them,
-/// and anything else as numbers. `'10' < '9'` is true.
 /// `===` as JavaScript answers it, where the build can: two objects or arrays are the same only as
-/// one object, which nothing here says, and two strings holding whitespace may not be the strings
-/// their literals were, collapsed as they are read. Values of two types are never the same.
+/// one object, which nothing here says, and two numbers are compared as numbers, however each is
+/// held. Values of two types are never the same.
+///
+/// A literal's whitespace is collapsed as it is read, while a string built from others keeps what
+/// each held, so two strings are compared with each run of it one space: different so, they differ
+/// at runtime too, but the same, they are known to be the same only holding none. Any space made
+/// them unknown, so `value === 'none'` given `'1px solid'` was not decided.
 fn strict_equals(left: &serde_json::Value, right: &serde_json::Value) -> Option<bool> {
     use serde_json::Value;
     match (left, right) {
         (Value::Object(_) | Value::Array(_), Value::Object(_) | Value::Array(_)) => None,
-        (Value::String(a), Value::String(b)) if a.contains(' ') || b.contains(' ') => None,
+        (Value::String(a), Value::String(b)) => {
+            if !collapsed(a).eq(collapsed(b)) {
+                Some(false)
+            } else if a.contains(is_javascript_whitespace) {
+                None
+            } else {
+                Some(true)
+            }
+        }
         (Value::Number(a), Value::Number(b)) => Some(a.as_f64() == b.as_f64()),
         _ => Some(left == right),
     }
@@ -4762,16 +4789,17 @@ fn loose_equals(left: &serde_json::Value, right: &serde_json::Value) -> Option<b
             };
             loose_equals(&number(left)?, &number(right)?)
         }
-        (Value::Number(_), Value::String(text)) | (Value::String(text), Value::Number(_)) => {
-            if text.contains(' ') {
-                return None;
-            }
+        // A run of whitespace collapsed to one space converts as the run does: trimmed at either
+        // end, and no number inside.
+        (Value::Number(_), Value::String(_)) | (Value::String(_), Value::Number(_)) => {
             Some(number_value(left)? == number_value(right)?)
         }
         _ => strict_equals(left, right),
     }
 }
 
+/// A relational comparison: two strings by their UTF-16 code units, as JavaScript compares them,
+/// and anything else as numbers. `'10' < '9'` is true.
 fn compare_binary(
     left: &serde_json::Value,
     right: &serde_json::Value,
