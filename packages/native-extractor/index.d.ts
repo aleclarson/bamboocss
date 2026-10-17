@@ -167,8 +167,8 @@ export interface FoldCall {
  * apart, `depth` when calls nest deeper than it follows, `calls` when one call makes more of them
  * than it follows, `module` when the helper is called again through another module while it runs;
  * `helper` and the location are the recursive helper: for `loop` the first to run of those its
- * cycle goes through, past a limit the one most of the calls running are of. `line` is 1-based;
- * `column` too, in UTF-16.
+ * cycle goes through, for `calls` the same of the cycle the innermost recurring call closes, for
+ * `depth` the one most of the calls running are of. `line` is 1-based; `column` too, in UTF-16.
  */
 export interface FoldRefusal {
   kind: 'statement' | 'write' | 'recursion'

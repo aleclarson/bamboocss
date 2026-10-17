@@ -1281,24 +1281,32 @@ impl<'a> ProjectEvaluator<'a> {
         }
         let mut evaluator = FileEvaluator::new(filename, self, &semantic.semantic, &parsed.program);
 
-        // `export const value = …` and `export function helper() { … }`.
+        // `export const value = …` and `export function helper() { … }`: what the module declares
+        // itself, destructured or a class too, before any `export *` has a say.
         for statement in &parsed.program.body {
             if let Statement::ExportDeclaration(export) = statement {
                 match &export.declaration {
                     Declaration::VariableDeclaration(declaration) => {
                         for declarator in &declaration.declarations {
-                            if declarator
+                            if let Some(identifier) = declarator
                                 .id
-                                .get_binding_identifier()
-                                .is_some_and(|id| id.name == name)
-                                && let Some(symbol) = declarator
-                                    .id
-                                    .get_binding_identifier()
-                                    .and_then(|id| id.symbol_id.get())
+                                .get_binding_identifiers()
+                                .into_iter()
+                                .find(|id| id.name == name)
                             {
-                                return evaluator.evaluate_symbol(symbol);
+                                return identifier
+                                    .symbol_id
+                                    .get()
+                                    .map_or_else(EvalResult::unknown, |symbol| {
+                                        evaluator.evaluate_symbol(symbol)
+                                    });
                             }
                         }
+                    }
+                    Declaration::ClassDeclaration(class)
+                        if class.id.as_ref().is_some_and(|id| id.name == name) =>
+                    {
+                        return EvalResult::unknown();
                     }
                     Declaration::FunctionDeclaration(function)
                         if function.id.as_ref().is_some_and(|id| id.name == name) =>
@@ -1357,9 +1365,24 @@ impl<'a> ProjectEvaluator<'a> {
         }
 
         // A star barrel. Cycles terminate through `export_stack`, while another exported name
-        // may still continue through the same file because the key includes the name.
+        // may still continue through the same file because the key includes the name. Never for
+        // `default`, which `export *` does not give, nor through `export type *`, and an
+        // `export * as ns` gives `ns` alone, a namespace: each, read as an `export *`, compiled
+        // another module's value.
+        if name == "default" {
+            return EvalResult::unknown();
+        }
         for statement in &parsed.program.body {
             if let Statement::ExportAllDeclaration(export) = statement {
+                if let Some(exported) = &export.exported {
+                    if module_name(exported) == name {
+                        return EvalResult::unknown();
+                    }
+                    continue;
+                }
+                if export.export_kind.is_type() {
+                    continue;
+                }
                 let Some(target) = self.resolve(filename, export.source.value.as_str()) else {
                     continue;
                 };
@@ -1514,7 +1537,22 @@ impl<'a> ProjectEvaluator<'a> {
                                     evaluator.call_expression_value(expression, arguments)
                                 });
                             }
+                            // Destructured, it is the module's own all the same, not a star
+                            // member's, and what it holds is not followed to a call.
+                            if declarator
+                                .id
+                                .get_binding_identifiers()
+                                .iter()
+                                .any(|id| id.name == name)
+                            {
+                                return EvalResult::unknown();
+                            }
                         }
+                    }
+                    Declaration::ClassDeclaration(class)
+                        if class.id.as_ref().is_some_and(|id| id.name == name) =>
+                    {
+                        return EvalResult::unknown();
                     }
                     _ => {}
                 }
@@ -1574,10 +1612,22 @@ impl<'a> ProjectEvaluator<'a> {
                 _ => {}
             }
         }
+        if name == "default" {
+            return EvalResult::unknown();
+        }
         for statement in &parsed.program.body {
             let Statement::ExportAllDeclaration(export) = statement else {
                 continue;
             };
+            if let Some(exported) = &export.exported {
+                if module_name(exported) == name {
+                    return EvalResult::unknown();
+                }
+                continue;
+            }
+            if export.export_kind.is_type() {
+                continue;
+            }
             let Some(target) = self.resolve(filename, export.source.value.as_str()) else {
                 continue;
             };
@@ -1646,7 +1696,8 @@ struct ActiveCall<'a> {
 
 /// An argument a running call was given. One bound as it is to a parameter — a name with no
 /// default, before any spread of unknown length — is read back from where it is bound, so a theme
-/// passed down is not copied beside each call it passes through; any other is held.
+/// passed down is not copied beside each call it passes through; any other is held, and so is
+/// every one a helper is given whose parameters run code as they are bound (`bind_parameters`).
 enum Given {
     Bound(SymbolId),
     Held(EvalResult),
@@ -1734,23 +1785,58 @@ fn same_environment(
             .all(|(symbol, value)| next.get(symbol).is_some_and(|other| value.same_as(other)))
 }
 
+/// What a recursion was refused for, as `recursion_at` names it: repeating the call at an index
+/// into the calls running, or past the depth or the number of calls.
+#[derive(Clone, Copy)]
+enum Refused {
+    Repeating(usize),
+    Depth,
+    Calls,
+}
+
+impl Refused {
+    /// Past which limit a refusal for `subject` was made.
+    fn limit(subject: &str) -> Self {
+        if subject == "calls" {
+            Self::Calls
+        } else {
+            Self::Depth
+        }
+    }
+}
+
 /// The call a recursion is named for, an index into `calls`: the outermost call of the helper that
 /// recurs, given that `entered`, the function of a call inside them all, is being called or has
 /// returned.
 ///
-/// Repeating its arguments, at `repeating`, the call it is the same as, the recursion is the cycle
+/// Repeating its arguments, as the call at `Refused::Repeating` does, the recursion is the cycle
 /// that closes: every helper running from that call in, and `entered`. It is named for the first of
 /// them to run — `a` of `a → b → a`, whichever of the two was found repeating, and `nest` of
 /// `walk(2) → nest → walk(1) → nest`, where `nest` repeats and `walk` is not in it.
 ///
-/// Past a limit it is the recurring helper most of the calls running are of, named before one
+/// Past the depth it is the recurring helper most of the calls running are of, named before one
 /// written in place where as many, and the first to run where still level: a small helper called
 /// at each level, or a closure written there, is called no more often than once a level.
-fn recursion_at(
-    calls: &[ActiveCall<'_>],
-    entered: usize,
-    repeating: Option<usize>,
-) -> Option<usize> {
+///
+/// Past the number of calls it is the cycle closing at the innermost call that recurs — the one
+/// being made, where its helper is running — named the same way as a loop's. A recursion making
+/// that many calls branches, so is shallow: `grid` calling itself ten times a level reaches them
+/// four levels down, where any recursion it runs inside is deeper.
+fn recursion_at(calls: &[ActiveCall<'_>], entered: usize, refused: Refused) -> Option<usize> {
+    let repeating = match refused {
+        Refused::Repeating(repeating) => Some(repeating),
+        Refused::Calls => calls
+            .iter()
+            .rposition(|call| call.function == entered)
+            .or_else(|| {
+                calls.iter().enumerate().rev().find_map(|(index, call)| {
+                    calls[..index]
+                        .iter()
+                        .rposition(|earlier| earlier.function == call.function)
+                })
+            }),
+        Refused::Depth => None,
+    };
     if let Some(repeating) = repeating {
         let cycle = |function: usize| {
             function == entered
@@ -3466,14 +3552,14 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         let Some(state) = abandoned.as_mut().filter(|state| !state.named) else {
             return;
         };
-        let Some(recursion) = recursion_at(&self.calls, function, None) else {
-            return;
-        };
         let subject = state
             .refusal
             .refusal
             .as_ref()
             .map_or_else(String::new, |refusal| refusal.subject.clone());
+        let Some(recursion) = recursion_at(&self.calls, function, Refused::limit(&subject)) else {
+            return;
+        };
         let at = self.calls[recursion].at;
         state.refusal = self.recursion_refusal(&subject, Some(recursion), None, at);
         state.named = true;
@@ -3566,7 +3652,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         if let Some(repeating) = repeating {
             // Found among this file's calls alone, so wherever the evaluation started, it stops
             // here: unlike the limits below, what it gives may be cached.
-            let recursion = recursion_at(&self.calls, function, Some(repeating));
+            let recursion = recursion_at(&self.calls, function, Refused::Repeating(repeating));
             let refused = self.recursion_refusal("loop", recursion, name, at);
             if let Some(index) = recursion {
                 self.calls[index].refused = Some(refused.clone());
@@ -3582,7 +3668,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             return Ok(depth);
         };
         // When this module's calls do not show the recursion, a module returned to will.
-        let recursion = recursion_at(&self.calls, function, None);
+        let recursion = recursion_at(&self.calls, function, Refused::limit(subject));
         let refused = self.recursion_refusal(subject, recursion, name, at);
         // Depth and count are counted from the outermost call, so no export asked for inside one
         // may be cached with it.

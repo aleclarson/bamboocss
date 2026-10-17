@@ -282,6 +282,19 @@ describe('a recursion with no end the build can see', () => {
     expect(refusal).toMatchObject({ kind: 'recursion', subject: 'loop', helper: 'f' })
   })
 
+  test.each([
+    ['in a pattern', '{ b = f(a - 1, { b: 0 }) } = {}', '{ b: 0 }'],
+    ['in a rest', '...[b = f(a - 1, 0)]', '0'],
+  ])('through a default %s calling the helper on what it was given', (_, parameter, given) => {
+    const refusal = refusalOf(
+      withImport(
+        `function f(a, ${parameter}) {\n  return b === 0 ? { '& > div': f(a + 1) } : b\n}\nexport const A = css(f(1, ${given}))`,
+      ),
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'loop', helper: 'f' })
+  })
+
   // A small helper called at each level, or a closure written there, is called no more often than
   // once a level; the recursion is the one most calls are of.
   test.each([
@@ -508,6 +521,25 @@ describe('a recursion with no end the build can see', () => {
     expect(refusal).toMatchObject({ kind: 'recursion', subject: 'calls', helper: 'fan' })
   })
 
+  // A recursion making that many calls branches, and is shallow: `walk` has seven calls running
+  // when `grid` runs out the calls, and `grid` five at most. It is the one making them.
+  const grid = `const grid = (d) => (d > 0 ? { ${Array.from({ length: 10 }, (_, k) => `k${k}: grid(d - 1)`).join(', ')} } : LEAF)\n`
+  test.each([
+    ['', '{}'],
+    [', whose every leaf another helper gives', 'cell()'],
+  ])('past the calls, named for a branching one a recursion reached%s', (_, leaf) => {
+    const refusal = refusalOf(
+      withImport(
+        `const cell = () => ({ color: 'red.300' })\n` +
+          grid.replace('LEAF', leaf) +
+          `const walk = (n) => (n > 0 ? { '& > a': walk(n - 1) } : { '& > b': grid(4) })\n` +
+          `export const A = css(walk(6))`,
+      ),
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'calls', helper: 'grid', line: 3, column: 14 })
+  })
+
   test.each([
     [
       'nested',
@@ -533,6 +565,14 @@ describe('a recursion with no end the build can see', () => {
     [
       'through a default calling the helper',
       `const scale = (n, base = UNIT) => (n > 1 ? scale(n - 1) * base : base)\nconst UNIT = scale(1, 4)\nexport const A = css({ width: scale(2, 4) })`,
+    ],
+    [
+      'through a default in a pattern calling the helper',
+      `const scale = (n, { base = UNIT } = {}) => (n > 1 ? scale(n - 1) * base : base)\nconst UNIT = scale(1, { base: 4 })\nexport const A = css({ width: scale(2, { base: 4 }) })`,
+    ],
+    [
+      'through a default in a rest calling the helper',
+      `const scale = (n, ...[base = UNIT]) => (n > 1 ? scale(n - 1) * base : base)\nconst UNIT = scale(1, 4)\nexport const A = css({ width: scale(2, 4) })`,
     ],
   ])('a recursion that ends still compiles: %s', (_, body) => {
     const result = createFoldFixture().fold(withImport(body))
@@ -563,6 +603,71 @@ describe('a helper a barrel exports by name', () => {
     )
 
     expect(result.folded.map((entry) => entry.className)).toEqual(['c_red.300'])
+  })
+})
+
+// `export *` gives what JavaScript's does: never `default`, and `export * as legacy` only `legacy`,
+// and a name the barrel declares itself is its own. Each gave another module's helper or value.
+describe('what an `export *` gives', () => {
+  const foldThrough = (files: Record<string, string>, style: string) => {
+    const fixture = createFoldFixture()
+    fixture.addFiles(files)
+    return fixture.fold(
+      `import { css } from 'styled-system/css'\nimport { tone } from './index'\nexport const A = css(${style})\n`,
+      'app/use.tsx',
+    )
+  }
+  const helper = (color: string) => `(t) => ({ color: ${color} })`
+  const value = (color: string) => `{ color: ${color} }`
+
+  test.each([
+    ['a helper', helper(`'blue.300'`), helper('t'), `tone('red.300')`],
+    ['a value', value(`'blue.300'`), value(`'red.300'`), 'tone'],
+  ])('not %s of a module it exports as a namespace', (_, base, custom, style) => {
+    const result = foldThrough(
+      {
+        'app/index.ts': `export * as legacy from './base'\nexport * from './custom'\n`,
+        'app/base.ts': `export const tone = ${base}\n`,
+        'app/custom.ts': `export const tone = ${custom}\n`,
+      },
+      style,
+    )
+
+    expect(result.folded.map((entry) => entry.className)).toEqual(['c_red.300'])
+  })
+
+  // `custom`'s own `export default` is not followed; `base`'s is never the answer.
+  test.each([
+    ['a helper', helper(`'blue.300'`), `function (t) {\n  return { color: t }\n}`, `tone('red.300')`],
+    ['a value', value(`'blue.300'`), value(`'red.300'`), 'tone'],
+  ])('not as `default`, %s', (_, base, custom, style) => {
+    const result = foldThrough(
+      {
+        'app/index.ts': `export { default as tone } from './custom'\n`,
+        'app/custom.ts': `export default ${custom}\nexport * from './base'\n`,
+        'app/base.ts': `const b = ${base}\nexport { b as default }\n`,
+      },
+      style,
+    )
+
+    expect(result.folded).toEqual([])
+    expect(result.skipped.map((entry) => entry.reason)).toEqual(['dynamic'])
+  })
+
+  // The value is read as the barrel's own; a helper held destructured is not followed to a call.
+  test.each([
+    ['a helper', helper(`'blue.300'`), helper('t'), `tone('red.300')`, []],
+    ['a value', value(`'blue.300'`), value(`'red.300'`), 'tone', ['c_red.300']],
+  ])('not over %s the barrel declares itself, destructured', (_, base, own, style, classes) => {
+    const result = foldThrough(
+      {
+        'app/index.ts': `export * from './base'\nexport const { tone } = { tone: ${own} }\n`,
+        'app/base.ts': `export const tone = ${base}\n`,
+      },
+      style,
+    )
+
+    expect(result.folded.map((entry) => entry.className)).toEqual(classes)
   })
 })
 
