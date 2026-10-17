@@ -134,6 +134,8 @@ export interface StaticCompilationSession {
   splitCss: boolean
   /** `build.cssCodeSplit` of the run's own config, for a bundler with no per-environment one. */
   cssCodeSplit?: boolean
+  /** Whether the run's own config builds for SSR, and emits its assets, for the same. */
+  ssrBuild?: { ssr?: boolean | string; ssrEmitAssets?: boolean; emitAssets?: boolean }
   /**
    * Whether the bundler driving this run refuses new keys on the output bundle.
    *

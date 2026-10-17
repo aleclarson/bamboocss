@@ -2389,13 +2389,13 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
                 lost.map((className) => `  ${className}`),
                 { unit: 'class', separator: '\n' },
               )}\n\n` +
-              `The stylesheet was pruned before this environment compiled, and nothing prunes it again. A run prunes ` +
-              `a sheet it wrote again once its last environment reaches its output, and does not when its output ` +
-              `is held in memory (\`build.write: false\`), which has no file to finalize; when it built ` +
+              `The stylesheet written last was pruned without them, before this environment compiled them. A run ` +
+              `prunes a sheet it wrote again once its last environment reaches its output, and does not when its ` +
+              `output is held in memory (\`build.write: false\`), which has no file to finalize; when it built ` +
               `environments one at a time without announcing them — \`builder\` in the Vite config, which every ` +
               `framework building more than one sets; or when this environment built again after the sheet was ` +
-              `pruned against its last output — a rebuild of it alone, or of every environment at once in a watch. ` +
-              `These classes are reached only from here, so no rule for them survived.\n\n` +
+              `pruned against its last output: a rebuild of it alone, or one of every environment at once in a ` +
+              `watch that this one finished first, where the one emitting the sheet may yet write one holding them.\n\n` +
               `Write the build's output and configure \`builder\` so the run announces its environments, restart ` +
               `a watch this was a rebuild of, or set \`bamboocss({ pruneCss: false })\` to ship the whole ` +
               `extracted stylesheet.`,

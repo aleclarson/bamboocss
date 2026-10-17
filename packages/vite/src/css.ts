@@ -273,6 +273,8 @@ const pruneEmittedSheets = async (
    * for the HTML, the manifest and the preload list to carry it.
    */
   splitCss: boolean,
+  /** Whether this is the early pass, which runs before Vite deletes the assets it will not write. */
+  early: boolean,
 ) => {
   // Load the complete parser/remapping closure before opening the output projection. A
   // rejected chunk load therefore publishes no partial reachability or prune state, and the
@@ -283,12 +285,14 @@ const pruneEmittedSheets = async (
     handledNames = new Set()
     session.prunedSheetNames.set(outputOptions, handledNames)
   }
-  // Vite drops what an environment that does not emit assets emits as one — SSR's, unless asked —
-  // so a sheet there is never written: pruning it recorded as lost what no stylesheet had, and a
-  // class this environment's next build compiled failed the guard for it.
-  const build = context.environment?.config?.build
-  const emitsAssets = build?.emitAssets ?? (!build?.ssr || build?.ssrEmitAssets === true)
-  const carriesSheet = emitsAssets && containsGeneratedCssAsset(bundle as never, session.prunedAssets, handledNames)
+  const carriesSheet = containsGeneratedCssAsset(bundle as never, session.prunedAssets, handledNames)
+  // Vite deletes what an environment that emits no assets — SSR's, unless asked — emits as one,
+  // after this early pass and before the late one, which sees only what survived. Such a sheet is
+  // pruned and renamed all the same, as its name is how a server bundle links the client's sheet,
+  // but what pruning it removes is lost from no written sheet: counted, a class this environment
+  // went on to compile failed the guard. A bundler with no environments reads the run's options.
+  const build = context.environment?.config?.build ?? session.ssrBuild
+  const discarded = early && !(build?.emitAssets ?? (!build?.ssr || build?.ssrEmitAssets === true))
 
   const environmentName = context.environment?.name ?? 'default'
   // This environment is the candidate completing the run, not one still to compile: it has
@@ -339,6 +343,8 @@ const pruneEmittedSheets = async (
           }
         : undefined
 
+    // What the loss history held before this prune, for one whose losses do not count.
+    const before = discarded ? new Set(session.prunedClasses) : undefined
     const { sheets, results } = optimizeStaticCssAssets(bundle as never, session, {
       environment: environmentName,
       prune: pruneCss,
@@ -350,6 +356,11 @@ const pruneEmittedSheets = async (
       handledNames,
       split,
     })
+    if (before) {
+      for (const className of [...session.prunedClasses]) {
+        if (!before.has(className)) session.prunedClasses.delete(className)
+      }
+    }
 
     // Said out loud, both ways. Pruning is the difference between the sheet a project
     // measures and the one it extracted, and it used to go missing in silence — a build
@@ -421,6 +432,7 @@ export const bamboocssCssEarly = (options: { session: StaticCompilationSession; 
         bundle,
         isWrite,
         options.pruneCss ?? true,
+        true,
         true,
       )
     },
@@ -749,6 +761,7 @@ export const bamboocssCss = (options: BambooCssPluginOptions): Plugin => {
       session.cssCodeSplit = config.build.cssCodeSplit
       session.refusesBundleKeys = bundlerRefusesBundleKeys(config)
       ssrBuildOptions = { ssr: config.build.ssr, ssrEmitAssets: config.build.ssrEmitAssets }
+      session.ssrBuild = ssrBuildOptions
 
       /**
        * Tell Vite that `bamboo.config.ts` is a config file, so editing one restarts the server.
@@ -1039,7 +1052,7 @@ export const bamboocssCss = (options: BambooCssPluginOptions): Plugin => {
       order: 'post',
       async handler(outputOptions, bundle, isWrite) {
         const context = this as OutputContext
-        await pruneEmittedSheets(context, session, outputOptions, bundle, isWrite, pruneCss, false)
+        await pruneEmittedSheets(context, session, outputOptions, bundle, isWrite, pruneCss, false, false)
 
         const { containsGeneratedCssAsset } = await loadCssOutputModule()
         const environment = context.environment

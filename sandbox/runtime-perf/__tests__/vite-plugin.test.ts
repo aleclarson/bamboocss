@@ -4119,6 +4119,47 @@ describe('the stylesheet URL', () => {
     expect(js).toContain(sheet!.fileName.split('/').pop()!)
   }, 120_000)
 
+  // A server bundle links the client's sheet by the name pruning gives it, so the server's own copy,
+  // which Vite does not write, is pruned and renamed as the client's is: left whole, the page linked
+  // a stylesheet nothing wrote. One entry for both, as an app's is, so both reach the same classes.
+  test('a server bundle links the sheet the client writes', async () => {
+    const app = join(cwd, 'src/__url-app.tsx')
+    const clientOut = join(cwd, '__url-client-out')
+    const ssrOut = join(cwd, '__url-ssr-out')
+    writeFileSync(
+      app,
+      `import href from 'virtual:bamboo.css?url'\nimport { css } from '../styled-system/css'\nexport const cls = css({ width: '[51.3px]' })\n;(globalThis as any).__bambooUrlApp = { href, cls }\n`,
+    )
+    try {
+      const builder = await createVite7Builder({
+        root: cwd,
+        configFile: false,
+        logLevel: 'silent',
+        css: { postcss: { plugins: [] } },
+        plugins: [bamboocss({ cwd, reportSummary: false })],
+        builder: {},
+        // One CSS target for both, so each environment's copy of the sheet holds the same bytes.
+        build: { emptyOutDir: true, minify: false, cssTarget: 'esnext', cssMinify: false },
+        environments: {
+          client: { build: { outDir: clientOut, rollupOptions: { input: { app } } } },
+          ssr: { build: { outDir: ssrOut, rollupOptions: { input: { app } } } },
+        },
+      })
+      await builder.buildApp()
+
+      const linked = [...new Set(readOutputFiles(ssrOut, '.js').match(/\/assets\/[\w.-]+\.css/g) ?? [])]
+      expect(linked, 'the server bundle links no stylesheet').not.toEqual([])
+      const written = readdirSync(join(clientOut, 'assets')).filter((file) => file.endsWith('.css'))
+      for (const href of linked) {
+        expect(existsSync(join(clientOut, href)), `the client wrote no ${href}, but ${written.join(', ')}`).toBe(true)
+      }
+    } finally {
+      rmSync(app, { force: true })
+      rmSync(clientOut, { force: true, recursive: true })
+      rmSync(ssrOut, { force: true, recursive: true })
+    }
+  }, 180_000)
+
   /**
    * The same import on a dev server, which leaves `?url` to Vite's asset plugin, and that plugin
    * skips an id with no file behind it. The CSS itself came back as the module, which neither the
