@@ -1260,6 +1260,10 @@ impl<'a> ProjectEvaluator<'a> {
     }
 
     fn evaluate_export_uncached(&self, filename: &str, name: &str) -> EvalResult {
+        // What a declaration file says is declared elsewhere, as `declare` says it.
+        if is_declaration_file(filename) {
+            return EvalResult::unknown();
+        }
         let Some(source) = self.source(filename) else {
             return EvalResult::unknown();
         };
@@ -1507,6 +1511,9 @@ impl<'a> ProjectEvaluator<'a> {
         arguments: Vec<EvalResult>,
         key: &ExportKey,
     ) -> EvalResult {
+        if is_declaration_file(filename) {
+            return EvalResult::unknown();
+        }
         let Some(source) = self.source(filename) else {
             return EvalResult::unknown();
         };
@@ -1546,16 +1553,17 @@ impl<'a> ProjectEvaluator<'a> {
                     }
                     Declaration::VariableDeclaration(declaration) => {
                         for declarator in &declaration.declarations {
-                            if declarator
+                            // Refused, as within the module, once anything writes to it, or declares
+                            // it again with a value.
+                            if let Some(identifier) = declarator
                                 .id
                                 .get_binding_identifier()
-                                .is_some_and(|id| id.name == name)
+                                .filter(|id| id.name == name)
                                 && let Some(expression) = &declarator.init
+                                && let Some(symbol) = identifier.symbol_id.get()
                             {
                                 self.call_site(key, &evaluator, name, expression.span());
-                                return evaluator.with_helper(name, |evaluator| {
-                                    evaluator.call_expression_value(expression, arguments)
-                                });
+                                return evaluator.call_symbol(symbol, arguments);
                             }
                             // Destructured, it is the module's own all the same, not a star
                             // member's, and what it holds is not followed to a call.
@@ -1700,9 +1708,10 @@ pub(crate) struct FileEvaluator<'a, 'project, 'sources> {
     callee: Option<Cow<'a, str>>,
     /// Helper calls running in this file, outermost first.
     calls: Vec<ActiveCall<'a>>,
-    /// How many calls each helper has made in this file since the outermost call began, by its
-    /// function, for one refused past the number of calls to be named for the one making them.
-    made: Vec<(usize, u32)>,
+    /// How many calls each helper has made, and been made, in this file since the outermost call
+    /// began, by its function, for one refused past the number of calls to be named for the one
+    /// making them (`recursion_at`).
+    made: ByAddress<Made>,
 }
 
 /// A helper call that is running, as `FileEvaluator::enter_call` compares the next one against.
@@ -1722,6 +1731,8 @@ struct ActiveCall<'a> {
     environment: HashMap<SymbolId, EvalResult>,
     /// What the call returns instead, once a recursion through it is refused.
     refused: Option<EvalResult>,
+    /// Whether it has made a call, as `Made` counts the calls that make any.
+    made_any: bool,
 }
 
 /// An argument a running call was given. One bound as it is to a parameter — a name with no
@@ -1815,6 +1826,53 @@ fn same_environment(
             .all(|(symbol, value)| next.get(symbol).is_some_and(|other| value.same_as(other)))
 }
 
+/// How many calls a helper made in one module since the outermost call began, and how many of its
+/// calls made any, as past the number of calls the one making them is named: what one call of it
+/// makes, of those that make any, is how far it branches — `grid` calling itself ten times ten, a
+/// recursion making one each, `space(n)`, one, however deep it goes.
+#[derive(Clone, Copy, Default)]
+struct Made {
+    made: u64,
+    makers: u64,
+}
+
+impl Made {
+    /// Whether it branches further than `other` does.
+    fn per_call_beyond(self, other: Self) -> bool {
+        u128::from(self.made) * u128::from(other.makers.max(1))
+            > u128::from(other.made) * u128::from(self.makers.max(1))
+    }
+
+    /// Whether it branches as far as `other` does.
+    fn per_call_level(self, other: Self) -> bool {
+        u128::from(self.made) * u128::from(other.makers.max(1))
+            == u128::from(other.made) * u128::from(self.makers.max(1))
+    }
+}
+
+/// A function's address, which is unique and spread enough as it is, hashed as it is: `made` is
+/// counted at every call, where hashing it with SipHash cost more than the count is worth.
+#[derive(Default)]
+struct AddressHasher(u64);
+
+impl Hasher for AddressHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.0 = (self.0.rotate_left(8) ^ u64::from(byte)).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+        }
+    }
+
+    fn write_usize(&mut self, value: usize) {
+        self.0 = (value as u64).wrapping_mul(0x9e37_79b9_7f4a_7c15);
+    }
+}
+
+type ByAddress<V> = HashMap<usize, V, std::hash::BuildHasherDefault<AddressHasher>>;
+
 /// What a recursion was refused for, as `recursion_at` names it: repeating the call at an index
 /// into the calls running, or past the depth or the number of calls.
 #[derive(Clone, Copy)]
@@ -1848,29 +1906,41 @@ impl Refused {
 /// written in place where as many, and the first to run where still level: a small helper called
 /// at each level, or a closure written there, is called no more often than once a level.
 ///
-/// Past the number of calls it is the running helper that has made the most of them (`made`, by
-/// function), named the same way. A recursion making that many branches: `grid` calling itself
-/// ten times a call makes them four levels down, where any recursion it runs inside is deeper and
-/// a small one each of its calls makes, `space(2)`, runs deeper than it at times.
+/// Past the number of calls it is the recurring helper that branches furthest (`Made`), named
+/// before one written in place where as far, and the first to run where still level. A recursion
+/// making that many branches: `grid`, calling itself ten times a call, makes them four levels down,
+/// where any recursion it runs inside is deeper, a small one each of its calls makes, `space(5)`,
+/// may make more in all, and a helper calling another five times, which recurs not at all, makes
+/// more a call. None recurring in this module, a module returned to names it.
 fn recursion_at(
     calls: &[ActiveCall<'_>],
     entered: usize,
     refused: Refused,
-    made: &[(usize, u32)],
+    made: &ByAddress<Made>,
 ) -> Option<usize> {
+    let running = |function: usize| {
+        calls
+            .iter()
+            .filter(|call| call.function == function)
+            .count()
+    };
     let repeating = match refused {
         Refused::Repeating(repeating) => Some(repeating),
         Refused::Calls => {
-            let made = |function: usize| {
-                made.iter()
-                    .find(|(maker, _)| *maker == function)
-                    .map_or(0, |(_, count)| *count)
-            };
-            let mut best: Option<(u32, bool, usize)> = None;
+            let mut best: Option<(Made, bool, usize)> = None;
             for (index, call) in calls.iter().enumerate() {
-                let rank = (made(call.function), call.name.is_some());
-                if rank.0 > 0 && best.is_none_or(|(most, named, _)| rank > (most, named)) {
-                    best = Some((rank.0, rank.1, index));
+                if running(call.function) + usize::from(call.function == entered) < 2 {
+                    continue;
+                }
+                let Some(&counts) = made.get(&call.function) else {
+                    continue;
+                };
+                let named = call.name.is_some();
+                if best.is_none_or(|(most, was_named, _)| {
+                    counts.per_call_beyond(most)
+                        || (counts.per_call_level(most) && named && !was_named)
+                }) {
+                    best = Some((counts, named, index));
                 }
             }
             return best.map(|(_, _, index)| index);
@@ -1886,12 +1956,6 @@ fn recursion_at(
         };
         return calls.iter().position(|call| cycle(call.function));
     }
-    let running = |function: usize| {
-        calls
-            .iter()
-            .filter(|call| call.function == function)
-            .count()
-    };
     let mut best: Option<(usize, bool, usize)> = None;
     for (index, call) in calls.iter().enumerate() {
         let count = running(call.function);
@@ -1955,7 +2019,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             helper: None,
             callee: None,
             calls: Vec::new(),
-            made: Vec::new(),
+            made: ByAddress::default(),
         }
     }
 
@@ -2432,6 +2496,15 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         if let Some(value) = self.environment.get(&symbol) {
             return value.clone();
         }
+        // Read from its declaration, as no body the evaluator runs bound it: a component's, the
+        // module's. One declared again with a value, or in a loop's head, was read as first written,
+        // and one declared in a block as if the block always ran.
+        if let Some(write) = self.declared_write(symbol) {
+            return EvalResult::refused(self.write_refusal(symbol, write));
+        }
+        if self.var_in_statement(symbol) {
+            return EvalResult::unknown();
+        }
         if !self.evaluating.insert(symbol) {
             return EvalResult::unknown();
         }
@@ -2504,34 +2577,76 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             .get_resolved_references(symbol)
             .find(|reference| reference.is_write() || mutates_through(nodes, reference.node_id()))
             .map(|reference| reference.node_id())
-            // A body binds its declarations in the order it runs them; a module's are read from
-            // where they are declared.
+            // A body the evaluator runs binds its declarations in the order it runs them; a
+            // module's are read from where they are declared (and so is one no running body
+            // bound, `evaluate_symbol`).
             .or_else(|| {
                 (self.scoping.symbol_scope_id(symbol) == self.scoping.root_scope_id())
-                    .then(|| self.redeclared_with_value(symbol))
+                    .then(|| self.declared_write(symbol))
                     .flatten()
             });
         self.mutations.insert(symbol, mutation);
         mutation
     }
 
-    /// Where a `var` declared again with a value assigns it, as a write does: the symbol table
-    /// holds the declaration it was first given, and `var tone = a; var tone = b` read as `a`
-    /// wherever it was read from its declaration — in a module, or called, or walked for a method.
-    fn redeclared_with_value(&self, symbol: SymbolId) -> Option<NodeId> {
+    /// Where a declaration of `symbol` writes it past the value it was first declared with, as an
+    /// assignment does: a `var` declared again with a value, or one a `for…in` or `for…of` head
+    /// declares, which the loop assigns. The symbol table holds the first declaration, and
+    /// `var tone = a; var tone = b` read as `a` wherever it was read from there — in a module, in a
+    /// component, called, or walked for a method.
+    fn declared_write(&self, symbol: SymbolId) -> Option<NodeId> {
+        // Only a `var` is declared again, or by a loop's head where it is read past the loop.
+        if !self
+            .scoping
+            .symbol_flags(symbol)
+            .contains(SymbolFlags::FunctionScopedVariable)
+        {
+            return None;
+        }
         let declared = self.scoping.symbol_declaration(symbol);
         let nodes = self.semantic.nodes();
-        self.scoping
-            .symbol_redeclarations(symbol)
-            .iter()
-            .map(|redeclaration| redeclaration.declaration)
+        std::iter::once(declared)
+            .chain(
+                self.scoping
+                    .symbol_redeclarations(symbol)
+                    .iter()
+                    .map(|redeclaration| redeclaration.declaration),
+            )
             .find(|&declaration| {
-                declaration != declared
-                    && matches!(
-                        nodes.kind(declaration),
-                        AstKind::VariableDeclarator(declarator) if declarator.init.is_some()
-                    )
+                let AstKind::VariableDeclarator(declarator) = nodes.kind(declaration) else {
+                    return false;
+                };
+                matches!(
+                    nodes.parent_kind(nodes.parent_id(declaration)),
+                    AstKind::ForInStatement(_) | AstKind::ForOfStatement(_)
+                ) || (declaration != declared && declarator.init.is_some())
             })
+    }
+
+    /// Whether `symbol` is a `var` declared where it may not run — in a block, a branch, a loop — so
+    /// that read from its declaration it may be `undefined`, or another value.
+    fn var_in_statement(&self, symbol: SymbolId) -> bool {
+        if !self
+            .scoping
+            .symbol_flags(symbol)
+            .contains(SymbolFlags::FunctionScopedVariable)
+        {
+            return false;
+        }
+        let declarator = self.scoping.symbol_declaration(symbol);
+        let nodes = self.semantic.nodes();
+        let declaration = nodes.parent_id(declarator);
+        let AstKind::VariableDeclaration(variables) = nodes.kind(declaration) else {
+            return false;
+        };
+        variables.kind.is_var()
+            && !matches!(
+                nodes.parent_kind(declaration),
+                AstKind::Program(_)
+                    | AstKind::FunctionBody(_)
+                    | AstKind::ExportDeclaration(_)
+                    | AstKind::TSModuleBlock(_)
+            )
     }
 
     /// `symbol` is written at `reference`: by the statement there, read as written.
@@ -3371,7 +3486,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             let write = write.node_id();
             return EvalResult::refused(self.write_refusal(symbol, write));
         }
-        if let Some(write) = self.redeclared_with_value(symbol) {
+        if let Some(write) = self.declared_write(symbol) {
             return EvalResult::refused(self.write_refusal(symbol, write));
         }
         if let Some(binding) = self.imports.get(&symbol).cloned() {
@@ -3379,10 +3494,29 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 .project
                 .call_imported(self.filename, &binding, arguments);
         }
+        // A function declared again is the last of its declarations with a body: an overload's
+        // signature has none, and a body declaring one twice calls the second.
+        let nodes = self.semantic.nodes();
+        let implementation = self
+            .scoping
+            .symbol_flags(symbol)
+            .contains(SymbolFlags::Function)
+            .then(|| self.scoping.symbol_redeclarations(symbol))
+            .into_iter()
+            .flatten()
+            .filter_map(
+                |redeclaration| match nodes.kind(redeclaration.declaration) {
+                    AstKind::Function(function) if function.body.is_some() => Some(function),
+                    _ => None,
+                },
+            )
+            .max_by_key(|function| function.span.start);
         let scoping: &'a Scoping = self.scoping;
         self.with_helper(scoping.symbol_name(symbol), |evaluator| {
             match evaluator.semantic.symbol_declaration(symbol).kind() {
-                AstKind::Function(function) => evaluator.call_function(function, arguments),
+                AstKind::Function(function) => {
+                    evaluator.call_function(implementation.unwrap_or(function), arguments)
+                }
                 AstKind::VariableDeclarator(declarator) => declarator
                     .init
                     .as_ref()
@@ -3443,7 +3577,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         symbol: SymbolId,
         members: &[String],
     ) -> Option<&'a Expression<'a>> {
-        if self.redeclared_with_value(symbol).is_some() {
+        if self.declared_write(symbol).is_some() {
             return None;
         }
         let AstKind::VariableDeclarator(declarator) =
@@ -3537,6 +3671,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             .scoping
             .get_resolved_references(symbol)
             .any(|reference| reference.is_write() || mutates_through(nodes, reference.node_id()))
+            || self.declared_write(symbol).is_some()
         {
             return None;
         }
@@ -3696,6 +3831,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             fingerprint: std::cell::OnceCell::new(),
             environment,
             refused: None,
+            made_any: false,
         });
         let result = body(self);
         self.project.call_depth.set(depth);
@@ -3846,14 +3982,12 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             "calls"
         } else {
             self.project.count_call(depth);
-            if let Some(caller) = self.calls.last() {
-                match self
-                    .made
-                    .iter_mut()
-                    .find(|(maker, _)| *maker == caller.function)
-                {
-                    Some((_, count)) => *count += 1,
-                    None => self.made.push((caller.function, 1)),
+            if let Some(caller) = self.calls.last_mut() {
+                let counts = self.made.entry(caller.function).or_default();
+                counts.made += 1;
+                if !caller.made_any {
+                    caller.made_any = true;
+                    counts.makers += 1;
                 }
             }
             return Ok(depth);
@@ -5217,10 +5351,17 @@ fn known_key(key: EvalResult) -> Option<serde_json::Value> {
     }
 }
 
+/// Whether `filename` is a declaration file, `.d.ts`, `.d.mts` or `.d.cts`, which holds no code.
+pub(crate) fn is_declaration_file(filename: &str) -> bool {
+    [".d.ts", ".d.mts", ".d.cts"]
+        .iter()
+        .any(|suffix| filename.ends_with(suffix))
+}
+
 /// Whether TypeScript erases `declaration`, so that at runtime the module does not export its name:
 /// a `declare` of any kind, a function's overload signature, which has no body, a type, or an
 /// `export import type`.
-fn erased(declaration: &Declaration<'_>) -> bool {
+pub(crate) fn erased(declaration: &Declaration<'_>) -> bool {
     match declaration {
         Declaration::VariableDeclaration(declaration) => declaration.declare,
         Declaration::FunctionDeclaration(function) => function.declare || function.body.is_none(),
@@ -5337,13 +5478,16 @@ fn wildcard_match<'a>(pattern: &str, specifier: &'a str) -> Option<&'a str> {
 }
 
 fn path_candidates(base: &Path) -> Vec<PathBuf> {
-    const EXTENSIONS: &[&str] = &["ts", "tsx", "d.ts", "mts", "cts", "js", "jsx", "mjs", "cjs"];
+    // A declaration file after the code it describes: it holds no value, and read in place of the
+    // `.js` beside it, `export const tone: string` was `undefined`, and its `export declare
+    // function` gave the name to an `export *` the `.js` overrides.
+    const EXTENSIONS: &[&str] = &["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "d.ts"];
     let mut output = vec![base.to_path_buf()];
     let text = base.to_string_lossy();
     let emitted = [
-        (".js", &[".ts", ".tsx", ".d.ts", ".js", ".jsx"][..]),
-        (".mjs", &[".mts", ".d.mts", ".mjs"][..]),
-        (".cjs", &[".cts", ".d.cts", ".cjs"][..]),
+        (".js", &[".ts", ".tsx", ".js", ".jsx", ".d.ts"][..]),
+        (".mjs", &[".mts", ".mjs", ".d.mts"][..]),
+        (".cjs", &[".cts", ".cjs", ".d.cts"][..]),
     ];
     if let Some((suffix, replacements)) = emitted.iter().find(|(suffix, _)| text.ends_with(suffix))
     {

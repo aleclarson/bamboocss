@@ -565,6 +565,17 @@ describe('what the build knows beside a guess', () => {
       "const k = 'a  b'\nconst helpers = { 'a b': () => 'red.300', [k]: () => 'blue.300' }\nexport const A = css({ color: helpers['a b']() })",
       'c_red.300',
     ],
+    // The function a name's declarations describe: the last with a body.
+    [
+      'a function declared twice in a body, the second called',
+      "const make = () => { function pick() { return { color: 'red.300' } } function pick() { return { color: 'blue.300' } } return pick() }\nexport const A = css(make())",
+      'c_blue.300',
+    ],
+    [
+      "a function's overloads, the implementation called",
+      "function tone(t: string): any\nfunction tone(t: any) { return { color: t } }\nexport const A = css(tone('red.300'))",
+      'c_red.300',
+    ],
     // The last property of the name is the one called, as at runtime: 1.56.7 called the first.
     [
       'a method a later key computed to its name writes',
@@ -661,6 +672,11 @@ describe('what the build knows beside a guess', () => {
     [
       'a spread of one of two objects, its key computed again holding whitespace',
       "const box = (o) => ({ ...(o.c ? { '& span': { color: 'blue.300' } } : null), ['&  span']: { color: 'red.300' } })\nexport const A = (p) => css(box(p))",
+    ],
+    // Spread, it is the object declared last with a value: it writes `pick`.
+    [
+      'a method past a spread of a `var` declared again',
+      "var shared = { size: '1' }\nvar shared = { pick: () => ({ color: 'blue.300' }) }\nconst helpers = { pick: () => ({ color: 'red.300' }), ...shared }\nexport const A = css(helpers.pick())",
     ],
     // Onto `null` or `undefined` it throws, whichever the choice gives.
     [

@@ -12,9 +12,9 @@ use oxc_allocator::Allocator;
 use oxc_ast::{
     AstKind,
     ast::{
-        Argument, BindingPattern, Expression, IdentifierReference, ImportDeclarationSpecifier,
-        ModuleExportName, ObjectPropertyKind, PropertyKind, Statement, StaticMemberExpression,
-        TSModuleReference,
+        Argument, BindingPattern, Declaration, Expression, IdentifierReference,
+        ImportDeclarationSpecifier, ModuleExportName, ObjectPropertyKind, PropertyKind, Statement,
+        StaticMemberExpression, TSModuleReference,
     },
 };
 use oxc_parser::Parser;
@@ -2032,10 +2032,84 @@ fn exported_recipes(
             _ => {}
         }
     }
+    // A name the module exports itself is its own, recipe or not: a star member's recipe of it is
+    // not what importing it gives, and calling the module's own `button()` compiled to the recipe.
+    let own = own_export_names(&parsed.program);
     for (name, origin) in starred {
-        if !names.contains_key(&name) && !ambiguous.contains(&name) {
+        if !names.contains_key(&name) && !own.contains(&name) && !ambiguous.contains(&name) {
             names.insert(name, origin);
         }
     }
     Some(ExportedRecipes { names })
+}
+
+/// The names `program` exports itself, before any `export *`: what it declares, what it exports by
+/// name, from itself or another module, `export * as` names, and `default`. Not a declaration
+/// TypeScript erases (`erased`), nor a type.
+fn own_export_names(program: &oxc_ast::ast::Program<'_>) -> HashSet<String> {
+    let mut names = HashSet::new();
+    for statement in &program.body {
+        match statement {
+            Statement::ExportDeclaration(export) => {
+                if crate::evaluator::erased(&export.declaration) {
+                    continue;
+                }
+                match &export.declaration {
+                    Declaration::VariableDeclaration(declaration) => {
+                        for declarator in &declaration.declarations {
+                            names.extend(
+                                declarator
+                                    .id
+                                    .get_binding_identifiers()
+                                    .iter()
+                                    .map(|id| id.name.to_string()),
+                            );
+                        }
+                    }
+                    Declaration::FunctionDeclaration(function) => {
+                        names.extend(function.id.as_ref().map(|id| id.name.to_string()));
+                    }
+                    Declaration::ClassDeclaration(class) => {
+                        names.extend(class.id.as_ref().map(|id| id.name.to_string()));
+                    }
+                    Declaration::TSEnumDeclaration(enumeration) => {
+                        names.insert(enumeration.id.name.to_string());
+                    }
+                    Declaration::TSNamespaceDeclaration(namespace) => {
+                        names.insert(namespace.id.name.to_string());
+                    }
+                    Declaration::TSImportEqualsDeclaration(import) => {
+                        names.insert(import.id.name.to_string());
+                    }
+                    _ => {}
+                }
+            }
+            Statement::ExportNamedDeclaration(export) if !export.export_kind.is_type() => {
+                names.extend(
+                    export
+                        .specifiers
+                        .iter()
+                        .filter(|specifier| !specifier.export_kind.is_type())
+                        .map(|specifier| module_export_name(&specifier.exported)),
+                );
+            }
+            Statement::ExportFromDeclaration(export) if !export.export_kind.is_type() => {
+                names.extend(
+                    export
+                        .specifiers
+                        .iter()
+                        .filter(|specifier| !specifier.export_kind.is_type())
+                        .map(|specifier| module_export_name(&specifier.exported)),
+                );
+            }
+            Statement::ExportAllDeclaration(export) if !export.export_kind.is_type() => {
+                names.extend(export.exported.as_ref().map(module_export_name));
+            }
+            Statement::ExportDefaultDeclaration(_) => {
+                names.insert("default".to_string());
+            }
+            _ => {}
+        }
+    }
+    names
 }

@@ -90,6 +90,48 @@ describe('a refused call says why', () => {
     expect(refusalOf(withImport(body))).toMatchObject({ kind: 'write', subject: 'tone', line: 3 })
   })
 
+  // Read from its declaration, as nothing ran the body: a component's, or one a loop's head assigns.
+  test.each([
+    [
+      "a component's `var` declared again with a value",
+      `export function Button() {\n  var tone = 'red.300'\n  var tone = 'blue.300'\n  return css({ color: tone })\n}`,
+    ],
+    [
+      'a `var` a `for…of` head declares again',
+      `var tone = 'red.300'\nfor (var tone of ['blue.300']) {}\nexport const A = css({ color: tone })`,
+    ],
+    [
+      'a `var` only a `for…of` head declares',
+      `for (var tone of ['blue.300']) {}\nexport const A = css({ color: tone })`,
+    ],
+  ])('%s', (_, body) => {
+    expect(refusalOf(withImport(body))).toMatchObject({ kind: 'write', subject: 'tone' })
+  })
+
+  // Another module's `var` or `let`, written after its declaration, called by its export's name.
+  test.each([
+    ['declared again', `export var tone = (t) => ({ color: t })\nvar tone = (t) => ({ color: 'blue.300' })\n`],
+    ['assigned', `export let tone = (t) => ({ color: t })\ntone = (t) => ({ color: 'blue.300' })\n`],
+  ])('an exported helper %s, called from another module', (_, helper) => {
+    const refusal = refusalOf(
+      `import { css } from 'styled-system/css'\nimport { tone } from '../h'\nexport const A = css(tone('red.300'))\n`,
+      undefined,
+      { 'app/h.ts': helper },
+    )
+
+    expect(refusal).toMatchObject({ kind: 'write', subject: 'tone' })
+  })
+
+  // It runs only where the block does.
+  test('a `var` declared in a block, read outside it', () => {
+    const result = createFoldFixture().fold(
+      withImport(`if (globalThis.flag) {\n  var tone = 'red.300'\n}\nexport const A = css({ color: tone })`),
+    )
+
+    expect(result.folded).toEqual([])
+    expect(result.skipped.map((entry) => entry.reason)).toEqual(['dynamic'])
+  })
+
   test('an array written into, then joined', () => {
     const refusal = refusalOf(
       withImport(`const parts = ['red', '300']\nparts.push('x')\nexport const A = css({ color: parts.join('.') })`),
@@ -524,11 +566,15 @@ describe('a recursion with no end the build can see', () => {
   test.each([
     ['before', (kids: string) => `{ gap: space(2), ${kids} }`],
     ['after', (kids: string) => `{ ${kids}, gap: space(2) }`],
+    // `space(5)` makes more calls in all than `tree`, one a call; `tree` three and one.
+    ['after, deeper', (kids: string) => `{ ${kids}, gap: space(5) }`],
+    // `leaf` makes five a call, but does not recur.
+    ['after, beside one calling another five times', (kids: string) => `{ ${kids}, s: leaf(d) }`],
   ])('past the calls, named for the branching one beside a small recursion called %s its branches', (_, node) => {
     const kids = Array.from({ length: 3 }, (_, k) => `k${k}: tree(d - 1)`).join(', ')
     const refusal = refusalOf(
       withImport(
-        `const space = (n) => (n > 0 ? space(n - 1) + 4 : 0)\nconst tree = (d) => (d > 0 ? ${node(kids)} : {})\nexport const A = css(tree(12))`,
+        `const space = (n) => (n > 0 ? space(n - 1) + 4 : 0)\nconst unit = () => 1\nconst leaf = (d) => unit() + unit() + unit() + unit() + unit()\nconst tree = (d) => (d > 0 ? ${node(kids)} : {})\nexport const A = css(tree(12))`,
       ),
     )
 
@@ -555,6 +601,22 @@ describe('a recursion with no end the build can see', () => {
 
     expect(result.folded).toEqual([])
     expect(result.skipped.map((entry) => entry.reason)).toEqual(['dynamic'])
+  })
+
+  // The limit is reached in `leaf`'s module, whose calls show no recursion: `tree`'s names it.
+  test('past the calls, named for the branching one beside a helper in another module calling another', () => {
+    const kids = Array.from({ length: 2 }, (_, k) => `k${k}: tree(d - 1)`).join(', ')
+    const refusal = refusalOf(
+      withImport(
+        `import { leaf } from '../leaf'\nconst tree = (d) => (d > 0 ? { ${kids}, s: leaf(d) } : {})\nexport const A = css(tree(14))`,
+      ),
+      undefined,
+      {
+        'app/leaf.ts': `const unit = () => 1\nexport const leaf = (d) => ${Array.from({ length: 10 }, () => 'unit()').join(' + ')}\n`,
+      },
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'calls', helper: 'tree' })
   })
 
   test('branching within the depth, until the calls run out', () => {
@@ -755,6 +817,63 @@ describe('what an `export *` gives', () => {
     )
 
     expect(result.folded.map((entry) => entry.className)).toEqual(['c_red.300'])
+  })
+
+  // A declaration file says what the code beside it holds, and holds none of it: the `.js` is read.
+  test.each([
+    [
+      "a barrel's own helper, which its declaration file declares",
+      {
+        'app/lib.js': `export * from './base'\nexport function tone(t) {\n  return { color: t }\n}\n`,
+        'app/lib.d.ts': `export * from './base'\nexport declare function tone(t: string): { color: string }\n`,
+        'app/base.ts': `export const tone = ${helper(`'blue.300'`)}\n`,
+      },
+      `tone('red.300')`,
+      ['c_red.300'],
+    ],
+    [
+      'a value its declaration file declares with no value',
+      {
+        'app/lib.js': `export const tone = { color: 'red.300' }\n`,
+        'app/lib.d.ts': `export const tone: { color: string }\n`,
+      },
+      'tone',
+      ['c_red.300'],
+    ],
+    [
+      'a value only a declaration file declares',
+      { 'app/lib.d.ts': `export const tone: { color: string }\n` },
+      'tone',
+      [],
+    ],
+  ])('through a module beside its declaration file: %s', (_, files, style, classes) => {
+    const fixture = createFoldFixture()
+    fixture.addFiles(files)
+    const result = fixture.fold(
+      `import { css } from 'styled-system/css'\nimport { tone } from './lib.js'\nexport const A = css(${style})\n`,
+      'app/use.tsx',
+    )
+
+    expect(result.folded.map((entry) => entry.className)).toEqual(classes)
+  })
+
+  // A recipe a star member exports is not what a barrel exporting the name itself gives.
+  test.each([
+    [
+      'a helper calling it',
+      "import { button as base } from './recipes'\nexport const button = () => base({ size: 'lg' })\n",
+    ],
+    ['anything else', "export const button = () => 'my-button'\n"],
+  ])("not a star member's recipe over %s the barrel exports as its name", (_, own) => {
+    const fixture = createFoldFixture()
+    fixture.addFiles({
+      'app/recipes.ts': `import { cva } from 'styled-system/css'\nexport const button = cva({ base: { color: 'blue.300' }, variants: { size: { sm: { padding: '2' }, lg: { padding: '8' } } } })\n`,
+      'app/index.ts': `export * from './recipes'\n${own}`,
+    })
+    const result = fixture.foldStrict(`import { button } from './index'\nexport const A = button()\n`, 'app/use.tsx')
+
+    expect(result.code).toContain('export const A = button()')
+    expect(result.folded).toEqual([])
   })
 
   // The value is read as the barrel's own; a helper held destructured is not followed to a call.
