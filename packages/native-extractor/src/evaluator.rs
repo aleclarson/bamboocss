@@ -1282,9 +1282,13 @@ impl<'a> ProjectEvaluator<'a> {
         let mut evaluator = FileEvaluator::new(filename, self, &semantic.semantic, &parsed.program);
 
         // `export const value = …` and `export function helper() { … }`: what the module declares
-        // itself, destructured or a class too, before any `export *` has a say.
+        // itself, destructured, a class or a namespace too, before any `export *` has a say — but
+        // not what TypeScript erases, which leaves the name to one (`erased`).
         for statement in &parsed.program.body {
             if let Statement::ExportDeclaration(export) = statement {
+                if erased(&export.declaration) {
+                    continue;
+                }
                 match &export.declaration {
                     Declaration::VariableDeclaration(declaration) => {
                         for declarator in &declaration.declarations {
@@ -1316,7 +1320,8 @@ impl<'a> ProjectEvaluator<'a> {
                         return EvalResult::unknown();
                     }
                     // As one in the module itself is read: refused once anything writes to it, and
-                    // not known declared twice (`evaluate_symbol`).
+                    // not known declared twice (`evaluate_symbol`). A namespace is read so too,
+                    // which is an enum's where one merges with it, and not known otherwise.
                     Declaration::TSEnumDeclaration(enumeration) if enumeration.id.name == name => {
                         return enumeration
                             .id
@@ -1326,14 +1331,30 @@ impl<'a> ProjectEvaluator<'a> {
                                 evaluator.evaluate_symbol(symbol)
                             });
                     }
+                    Declaration::TSNamespaceDeclaration(namespace) if namespace.id.name == name => {
+                        return namespace
+                            .id
+                            .symbol_id
+                            .get()
+                            .map_or_else(EvalResult::unknown, |symbol| {
+                                evaluator.evaluate_symbol(symbol)
+                            });
+                    }
+                    Declaration::TSImportEqualsDeclaration(import) if import.id.name == name => {
+                        return EvalResult::unknown();
+                    }
                     _ => {}
                 }
             }
         }
 
-        // `export { local as public }` and `export { value as public } from './module'`.
+        // `export { local as public }` and `export { value as public } from './module'`, and
+        // `export * as public from './module'`, which names one as they do.
         for statement in &parsed.program.body {
             match statement {
+                Statement::ExportAllDeclaration(export) if exports_namespace(export, name) => {
+                    return EvalResult::unknown();
+                }
                 Statement::ExportNamedDeclaration(export) => {
                     for specifier in &export.specifiers {
                         if module_name(&specifier.exported) != name {
@@ -1366,21 +1387,15 @@ impl<'a> ProjectEvaluator<'a> {
 
         // A star barrel. Cycles terminate through `export_stack`, while another exported name
         // may still continue through the same file because the key includes the name. Never for
-        // `default`, which `export *` does not give, nor through `export type *`, and an
-        // `export * as ns` gives `ns` alone, a namespace: each, read as an `export *`, compiled
-        // another module's value.
+        // `default`, which `export *` does not give, nor through `export type *` or an
+        // `export * as ns`, which gives `ns` alone: each, read as an `export *`, compiled another
+        // module's value.
         if name == "default" {
             return EvalResult::unknown();
         }
         for statement in &parsed.program.body {
             if let Statement::ExportAllDeclaration(export) = statement {
-                if let Some(exported) = &export.exported {
-                    if module_name(exported) == name {
-                        return EvalResult::unknown();
-                    }
-                    continue;
-                }
-                if export.export_kind.is_type() {
+                if export.exported.is_some() || export.export_kind.is_type() {
                     continue;
                 }
                 let Some(target) = self.resolve(filename, export.source.value.as_str()) else {
@@ -1513,8 +1528,13 @@ impl<'a> ProjectEvaluator<'a> {
         }
         let mut evaluator = FileEvaluator::new(filename, self, &semantic.semantic, &parsed.program);
 
+        // What the module declares itself, as the value path reads it: an overload's signature,
+        // which has no body, is erased as a `declare` is, and the function it describes follows.
         for statement in &parsed.program.body {
             if let Statement::ExportDeclaration(export) = statement {
+                if erased(&export.declaration) {
+                    continue;
+                }
                 match &export.declaration {
                     Declaration::FunctionDeclaration(function)
                         if function.id.as_ref().is_some_and(|id| id.name == name) =>
@@ -1554,15 +1574,28 @@ impl<'a> ProjectEvaluator<'a> {
                     {
                         return EvalResult::unknown();
                     }
+                    Declaration::TSEnumDeclaration(enumeration) if enumeration.id.name == name => {
+                        return EvalResult::unknown();
+                    }
+                    Declaration::TSNamespaceDeclaration(namespace) if namespace.id.name == name => {
+                        return EvalResult::unknown();
+                    }
+                    Declaration::TSImportEqualsDeclaration(import) if import.id.name == name => {
+                        return EvalResult::unknown();
+                    }
                     _ => {}
                 }
             }
         }
 
         // A name exported by name answers before any `export *`, as in JavaScript: a barrel writing
-        // `export * from './base'` and then `export { tone } from './custom'` gives `custom`'s.
+        // `export * from './base'` and then `export { tone } from './custom'` gives `custom`'s. So
+        // does `export * as tone from './custom'`, a namespace, which is not called.
         for statement in &parsed.program.body {
             match statement {
+                Statement::ExportAllDeclaration(export) if exports_namespace(export, name) => {
+                    return EvalResult::unknown();
+                }
                 Statement::ExportNamedDeclaration(export) => {
                     for specifier in &export.specifiers {
                         if module_name(&specifier.exported) != name {
@@ -1619,13 +1652,7 @@ impl<'a> ProjectEvaluator<'a> {
             let Statement::ExportAllDeclaration(export) = statement else {
                 continue;
             };
-            if let Some(exported) = &export.exported {
-                if module_name(exported) == name {
-                    return EvalResult::unknown();
-                }
-                continue;
-            }
-            if export.export_kind.is_type() {
+            if export.exported.is_some() || export.export_kind.is_type() {
                 continue;
             }
             let Some(target) = self.resolve(filename, export.source.value.as_str()) else {
@@ -1673,6 +1700,9 @@ pub(crate) struct FileEvaluator<'a, 'project, 'sources> {
     callee: Option<Cow<'a, str>>,
     /// Helper calls running in this file, outermost first.
     calls: Vec<ActiveCall<'a>>,
+    /// How many calls each helper has made in this file since the outermost call began, by its
+    /// function, for one refused past the number of calls to be named for the one making them.
+    made: Vec<(usize, u32)>,
 }
 
 /// A helper call that is running, as `FileEvaluator::enter_call` compares the next one against.
@@ -1818,23 +1848,33 @@ impl Refused {
 /// written in place where as many, and the first to run where still level: a small helper called
 /// at each level, or a closure written there, is called no more often than once a level.
 ///
-/// Past the number of calls it is the cycle closing at the innermost call that recurs — the one
-/// being made, where its helper is running — named the same way as a loop's. A recursion making
-/// that many calls branches, so is shallow: `grid` calling itself ten times a level reaches them
-/// four levels down, where any recursion it runs inside is deeper.
-fn recursion_at(calls: &[ActiveCall<'_>], entered: usize, refused: Refused) -> Option<usize> {
+/// Past the number of calls it is the running helper that has made the most of them (`made`, by
+/// function), named the same way. A recursion making that many branches: `grid` calling itself
+/// ten times a call makes them four levels down, where any recursion it runs inside is deeper and
+/// a small one each of its calls makes, `space(2)`, runs deeper than it at times.
+fn recursion_at(
+    calls: &[ActiveCall<'_>],
+    entered: usize,
+    refused: Refused,
+    made: &[(usize, u32)],
+) -> Option<usize> {
     let repeating = match refused {
         Refused::Repeating(repeating) => Some(repeating),
-        Refused::Calls => calls
-            .iter()
-            .rposition(|call| call.function == entered)
-            .or_else(|| {
-                calls.iter().enumerate().rev().find_map(|(index, call)| {
-                    calls[..index]
-                        .iter()
-                        .rposition(|earlier| earlier.function == call.function)
-                })
-            }),
+        Refused::Calls => {
+            let made = |function: usize| {
+                made.iter()
+                    .find(|(maker, _)| *maker == function)
+                    .map_or(0, |(_, count)| *count)
+            };
+            let mut best: Option<(u32, bool, usize)> = None;
+            for (index, call) in calls.iter().enumerate() {
+                let rank = (made(call.function), call.name.is_some());
+                if rank.0 > 0 && best.is_none_or(|(most, named, _)| rank > (most, named)) {
+                    best = Some((rank.0, rank.1, index));
+                }
+            }
+            return best.map(|(_, _, index)| index);
+        }
         Refused::Depth => None,
     };
     if let Some(repeating) = repeating {
@@ -1915,6 +1955,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             helper: None,
             callee: None,
             calls: Vec::new(),
+            made: Vec::new(),
         }
     }
 
@@ -2458,9 +2499,35 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             .scoping
             .get_resolved_references(symbol)
             .find(|reference| reference.is_write() || mutates_through(nodes, reference.node_id()))
-            .map(|reference| reference.node_id());
+            .map(|reference| reference.node_id())
+            // A body binds its declarations in the order it runs them; a module's are read from
+            // where they are declared.
+            .or_else(|| {
+                (self.scoping.symbol_scope_id(symbol) == self.scoping.root_scope_id())
+                    .then(|| self.redeclared_with_value(symbol))
+                    .flatten()
+            });
         self.mutations.insert(symbol, mutation);
         mutation
+    }
+
+    /// Where a `var` declared again with a value assigns it, as a write does: the symbol table
+    /// holds the declaration it was first given, and `var tone = a; var tone = b` read as `a`
+    /// wherever it was read from its declaration — in a module, or called, or walked for a method.
+    fn redeclared_with_value(&self, symbol: SymbolId) -> Option<NodeId> {
+        let declared = self.scoping.symbol_declaration(symbol);
+        let nodes = self.semantic.nodes();
+        self.scoping
+            .symbol_redeclarations(symbol)
+            .iter()
+            .map(|redeclaration| redeclaration.declaration)
+            .find(|&declaration| {
+                declaration != declared
+                    && matches!(
+                        nodes.kind(declaration),
+                        AstKind::VariableDeclarator(declarator) if declarator.init.is_some()
+                    )
+            })
     }
 
     /// `symbol` is written at `reference`: by the statement there, read as written.
@@ -3300,6 +3367,9 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             let write = write.node_id();
             return EvalResult::refused(self.write_refusal(symbol, write));
         }
+        if let Some(write) = self.redeclared_with_value(symbol) {
+            return EvalResult::refused(self.write_refusal(symbol, write));
+        }
         if let Some(binding) = self.imports.get(&symbol).cloned() {
             return self
                 .project
@@ -3348,6 +3418,9 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         symbol: SymbolId,
         members: &[String],
     ) -> Option<&'a Expression<'a>> {
+        if self.redeclared_with_value(symbol).is_some() {
+            return None;
+        }
         let AstKind::VariableDeclarator(declarator) =
             self.semantic.symbol_declaration(symbol).kind()
         else {
@@ -3604,7 +3677,9 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             .refusal
             .as_ref()
             .map_or_else(String::new, |refusal| refusal.subject.clone());
-        let Some(recursion) = recursion_at(&self.calls, function, Refused::limit(&subject)) else {
+        let Some(recursion) =
+            recursion_at(&self.calls, function, Refused::limit(&subject), &self.made)
+        else {
             return;
         };
         let at = self.calls[recursion].at;
@@ -3659,6 +3734,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         let depth = self.project.call_depth.get();
         if depth == 0 {
             self.project.call_count.set(0);
+            self.made.clear();
         }
         // Against what the running call's body could read when it made the call still running
         // inside it: its parameters bound. Called by it directly, this call has nothing else to
@@ -3699,7 +3775,12 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         if let Some(repeating) = repeating {
             // Found among this file's calls alone, so wherever the evaluation started, it stops
             // here: unlike the limits below, what it gives may be cached.
-            let recursion = recursion_at(&self.calls, function, Refused::Repeating(repeating));
+            let recursion = recursion_at(
+                &self.calls,
+                function,
+                Refused::Repeating(repeating),
+                &self.made,
+            );
             let refused = self.recursion_refusal("loop", recursion, name, at);
             if let Some(index) = recursion {
                 self.calls[index].refused = Some(refused.clone());
@@ -3712,10 +3793,20 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             "calls"
         } else {
             self.project.count_call(depth);
+            if let Some(caller) = self.calls.last() {
+                match self
+                    .made
+                    .iter_mut()
+                    .find(|(maker, _)| *maker == caller.function)
+                {
+                    Some((_, count)) => *count += 1,
+                    None => self.made.push((caller.function, 1)),
+                }
+            }
             return Ok(depth);
         };
         // When this module's calls do not show the recursion, a module returned to will.
-        let recursion = recursion_at(&self.calls, function, Refused::limit(subject));
+        let recursion = recursion_at(&self.calls, function, Refused::limit(subject), &self.made);
         let refused = self.recursion_refusal(subject, recursion, name, at);
         // Depth and count are counted from the outermost call, so no export asked for inside one
         // may be cached with it.
@@ -5071,6 +5162,34 @@ fn known_key(key: EvalResult) -> Option<serde_json::Value> {
     } else {
         key.value
     }
+}
+
+/// Whether TypeScript erases `declaration`, so that at runtime the module does not export its name:
+/// a `declare` of any kind, a function's overload signature, which has no body, a type, or an
+/// `export import type`.
+fn erased(declaration: &Declaration<'_>) -> bool {
+    match declaration {
+        Declaration::VariableDeclaration(declaration) => declaration.declare,
+        Declaration::FunctionDeclaration(function) => function.declare || function.body.is_none(),
+        Declaration::ClassDeclaration(class) => class.declare,
+        Declaration::TSEnumDeclaration(enumeration) => enumeration.declare,
+        Declaration::TSNamespaceDeclaration(namespace) => namespace.declare,
+        Declaration::TSImportEqualsDeclaration(import) => import.import_kind.is_type(),
+        Declaration::TSTypeAliasDeclaration(_)
+        | Declaration::TSInterfaceDeclaration(_)
+        | Declaration::TSExternalModuleDeclaration(_)
+        | Declaration::TSGlobalDeclaration(_) => true,
+    }
+}
+
+/// Whether `export` is `export * as name from …`, which exports `name` as `export { name }` does,
+/// over any `export *`: a namespace object.
+fn exports_namespace(export: &oxc_ast::ast::ExportAllDeclaration<'_>, name: &str) -> bool {
+    !export.export_kind.is_type()
+        && export
+            .exported
+            .as_ref()
+            .is_some_and(|exported| module_name(exported) == name)
 }
 
 fn module_name<'a>(name: &'a ModuleExportName<'a>) -> &'a str {

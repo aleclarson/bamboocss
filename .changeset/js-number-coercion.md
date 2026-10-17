@@ -109,6 +109,10 @@ Read values in style expressions as JavaScript does, where the build used Rust's
   literal, an import or what a call returns that holds none, `null`, a binding declared without a value — and before a
   key the build computes to another name, `[KEYS.size]`, ``[`size`]``, `[1]`. Past a spread or a key it cannot read, the
   call fails the compile as `dynamic`, where 1.56.7 called the method before it.
+- A module's `var` declared again with a value is written there, as an assignment is: `var tone = a; var tone = b` was
+  read as `a`, whether as a value, called or holding a method, and the call fails the compile as `dynamic` now — naming
+  the write where `tone` is read or called. A function's body still reads such a `var` in the order it runs, but a
+  helper or a method one holds is not called there, where the one declared first was.
 - `join` writes a `null` element as nothing, as it does a hole: `[1, null, 2].join('-')` is `1--2`, not `1-null-2`.
 - A property the prototype has is no longer read as `undefined`: `o.toString` and `[].map` are not known, and neither is
   `'toString' in o`. A string read by index gives its character, unless a space comes at or before it, which may have

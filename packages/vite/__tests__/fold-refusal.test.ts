@@ -82,6 +82,14 @@ describe('a refused call says why', () => {
     expect(refusal).toMatchObject({ kind: 'write', subject: 'tone', excerpt: "tone = 'blue.300'", line: 3 })
   })
 
+  // Declared again with a value, a module's `var` is assigned there; it was read as declared first.
+  test.each([
+    ['read', `var tone = 'red.300'\nvar tone = 'blue.300'\nexport const A = css({ color: tone })`],
+    ['called', `var tone = () => 'red.300'\nvar tone = () => 'blue.300'\nexport const A = css({ color: tone() })`],
+  ])('a `var` declared again with a value, %s', (_, body) => {
+    expect(refusalOf(withImport(body))).toMatchObject({ kind: 'write', subject: 'tone', line: 3 })
+  })
+
   test('an array written into, then joined', () => {
     const refusal = refusalOf(
       withImport(`const parts = ['red', '300']\nparts.push('x')\nexport const A = css({ color: parts.join('.') })`),
@@ -512,6 +520,21 @@ describe('a recursion with no end the build can see', () => {
     })
   })
 
+  // `space` is called once a node and recurses as deep as `tree` at times, which makes the calls.
+  test.each([
+    ['before', (kids: string) => `{ gap: space(2), ${kids} }`],
+    ['after', (kids: string) => `{ ${kids}, gap: space(2) }`],
+  ])('past the calls, named for the branching one beside a small recursion called %s its branches', (_, node) => {
+    const kids = Array.from({ length: 3 }, (_, k) => `k${k}: tree(d - 1)`).join(', ')
+    const refusal = refusalOf(
+      withImport(
+        `const space = (n) => (n > 0 ? space(n - 1) + 4 : 0)\nconst tree = (d) => (d > 0 ? ${node(kids)} : {})\nexport const A = css(tree(12))`,
+      ),
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'calls', helper: 'tree' })
+  })
+
   test('branching within the depth, until the calls run out', () => {
     // A depth the build can read, and an end, but `2^15` calls to get there.
     const refusal = refusalOf(
@@ -652,6 +675,64 @@ describe('what an `export *` gives', () => {
 
     expect(result.folded).toEqual([])
     expect(result.skipped.map((entry) => entry.reason)).toEqual(['dynamic'])
+  })
+
+  // An `export * as` is a name of the barrel's, wherever it is written: not the star member's.
+  test.each([
+    ['a value', `export const colors = { primary: 'red.300' }\n`, '{ color: colors.primary }'],
+    ['a helper', `export const colors = () => ({ color: 'red.300' })\n`, 'colors()'],
+  ])('not %s of a star before the namespace of its name', (_, legacy, style) => {
+    const fixture = createFoldFixture()
+    fixture.addFiles({
+      'app/index.ts': `export * from './legacy'\nexport * as colors from './colors'\n`,
+      'app/legacy.ts': legacy,
+      'app/colors.ts': `export const primary = 'blue.300'\n`,
+    })
+    const result = fixture.fold(
+      `import { css } from 'styled-system/css'\nimport { colors } from './index'\nexport const A = css(${style})\n`,
+      'app/use.tsx',
+    )
+
+    expect(result.folded).toEqual([])
+    expect(result.skipped.map((entry) => entry.reason)).toEqual(['dynamic'])
+  })
+
+  // Its own, though neither is read: not the star member's.
+  test.each([
+    ['a namespace', `export namespace tone {\n  export const color = 'red.300'\n}\n`],
+    [
+      'an `export import`',
+      `namespace Inner {\n  export const tone = { color: 'red.300' }\n}\nexport import tone = Inner.tone\n`,
+    ],
+  ])('not over %s the barrel declares itself', (_, own) => {
+    const result = foldThrough(
+      {
+        'app/index.ts': `export * from './base'\n${own}`,
+        'app/base.ts': `export const tone = ${value(`'blue.300'`)}\n`,
+      },
+      'tone',
+    )
+
+    expect(result.folded).toEqual([])
+    expect(result.skipped.map((entry) => entry.reason)).toEqual(['dynamic'])
+  })
+
+  // TypeScript erases them, so the name is the star member's, or the function the signatures
+  // describe.
+  test.each([
+    ['a `declare const`', `export * from './base'\nexport declare const tone: (t: string) => any\n`],
+    ['a `declare class`', `export * from './base'\nexport declare class tone {}\n`],
+    [
+      "a function's overloads",
+      `export function tone(t: string): any\nexport function tone(t: number): any\nexport function tone(t: any) {\n  return { color: t }\n}\n`,
+    ],
+  ])('through %s', (_, index) => {
+    const result = foldThrough(
+      { 'app/index.ts': index, 'app/base.ts': `export const tone = ${helper('t')}\n` },
+      `tone('red.300')`,
+    )
+
+    expect(result.folded.map((entry) => entry.className)).toEqual(['c_red.300'])
   })
 
   // The value is read as the barrel's own; a helper held destructured is not followed to a call.
