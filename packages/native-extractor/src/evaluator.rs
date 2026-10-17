@@ -28,9 +28,14 @@ use oxc_syntax::{
 use crate::{NativeEntrypoint, NativePathMapping, NativeProjectOptions, NativeToken};
 
 /// How deeply helper calls may nest before the evaluator stops following them, so a recursion
-/// that does not end stops before the stack does. Each level is a dozen native frames: a release
-/// build fits 512 of them in a 4 MB worker's stack, a debug build 128 in the main thread's 8 MB.
-/// Real helpers nest a handful. See `FileEvaluator::enter_call`.
+/// that does not end stops before the stack does. Real helpers nest a handful.
+/// See `FileEvaluator::enter_call`.
+///
+/// Measured with a recursion only this limit stops, a level holding nested objects, arrays,
+/// ternaries and a template literal, in a worker given a fixed stack: a release build holds all 64
+/// levels in 0.5 MB; a debug build overflows 3 MB and holds them in 4 MB, Node's default for a
+/// worker, so it has no room to spare there. The main thread has 8 MB, on Windows too since
+/// Node 19 reserves that much (the packages require 22.12).
 const MAX_CALL_DEPTH: u32 = 64;
 
 /// How many helper calls one outermost call may make. Depth does not bound a recursion that
@@ -541,6 +546,37 @@ struct Abandoned {
     named: bool,
 }
 
+/// What a call re-entering an export finds of the call running it — see `call_export`.
+enum Site {
+    /// Being evaluated, or called and its function not found yet.
+    Pending,
+    /// Called, at its function: the refusal a call re-entering it gives, and whether one has.
+    At {
+        refusal: Arc<Refusal>,
+        reentered: bool,
+    },
+    /// Re-exported, `export { a } from './a'` or `export *`: the export it forwards to answers.
+    Forward(ExportKey),
+}
+
+/// The refusal a call re-entering the export at `key` gives, its function's, followed through the
+/// re-exports that forward to it — a barrel the helpers are imported through. The site is marked
+/// re-entered, so the call running it gives nothing either.
+fn reenter(stack: &mut HashMap<ExportKey, Site>, key: &ExportKey) -> Option<Arc<Refusal>> {
+    let mut key = key.clone();
+    for _ in 0..=stack.len() {
+        match stack.get_mut(&key)? {
+            Site::Pending => return None,
+            Site::At { refusal, reentered } => {
+                *reentered = true;
+                return Some(refusal.clone());
+            }
+            Site::Forward(target) => key = target.clone(),
+        }
+    }
+    None
+}
+
 /// One `evaluate_export` frame's reads, and whether it was cut short — see `cut_short`.
 #[derive(Default)]
 struct ExportFrame {
@@ -583,9 +619,9 @@ pub(crate) struct ProjectEvaluator<'a> {
     base_url: Option<PathBuf>,
     paths: Vec<(String, Vec<String>)>,
     tokens: HashMap<String, (Option<serde_json::Value>, Option<String>)>,
-    /// Exports being evaluated or called right now. A called one holds, once it is found, the
-    /// refusal a call re-entering it from another module gives — see `call_export`.
-    export_stack: RefCell<HashMap<ExportKey, Option<Arc<Refusal>>>>,
+    /// Exports being evaluated or called right now, and for a called one what a call re-entering
+    /// it from another module finds — see `Site` and `call_export`.
+    export_stack: RefCell<HashMap<ExportKey, Site>>,
     active_owner: RefCell<Option<String>>,
     dependencies: RefCell<HashMap<String, HashSet<String>>>,
     pending_candidates: RefCell<HashMap<String, HashSet<String>>>,
@@ -1093,6 +1129,18 @@ impl<'a> ProjectEvaluator<'a> {
         }
     }
 
+    /// As `cut_short`, for a limit on helper calls: it counts from the outermost call, so an export
+    /// evaluated outside any — a module's own initializer — is refused the same wherever it is
+    /// asked for from, and is kept, to be replayed only where its calls fit (`fits`). One asked for
+    /// from inside a call is not: how deep it went, and how many calls it made, are that call's.
+    fn cut_short_within_calls(&self) {
+        for frame in self.frames.borrow_mut().iter_mut() {
+            if frame.start_depth > 0 {
+                frame.cycle = true;
+            }
+        }
+    }
+
     /// Count a helper call in, one deeper than `depth`, against the call limits and the export
     /// being evaluated.
     fn count_call(&self, depth: u32) {
@@ -1135,7 +1183,7 @@ impl<'a> ProjectEvaluator<'a> {
                 self.cut_short();
                 return EvalResult::unknown();
             }
-            stack.insert(key.clone(), None);
+            stack.insert(key.clone(), Site::Pending);
         }
         let cache_key = (self.fingerprint(), key.file.clone(), key.name.clone());
         let cached = EXPORT_CACHE
@@ -1308,7 +1356,8 @@ impl<'a> ProjectEvaluator<'a> {
                     continue;
                 };
                 let result = self.evaluate_export(&target, name);
-                if result.value.is_some() || result.complete {
+                // Refused, it was found there: why is the answer, not the next member's silence.
+                if result.value.is_some() || result.complete || result.refusal.is_some() {
                     return result;
                 }
             }
@@ -1344,8 +1393,8 @@ impl<'a> ProjectEvaluator<'a> {
         };
         {
             let mut stack = self.export_stack.borrow_mut();
-            if let Some(site) = stack.get(&key) {
-                let refusal = site.clone();
+            if stack.contains_key(&key) {
+                let refusal = reenter(&mut stack, &key);
                 drop(stack);
                 self.cut_short();
                 return EvalResult {
@@ -1353,29 +1402,55 @@ impl<'a> ProjectEvaluator<'a> {
                     ..EvalResult::unknown()
                 };
             }
-            stack.insert(key.clone(), None);
+            stack.insert(key.clone(), Site::Pending);
         }
         let result = self.call_export_uncached(filename, name, arguments, &key);
-        self.export_stack.borrow_mut().remove(&key);
-        result
+        // Re-entered while it ran, the recursion gives nothing, as one refused within a module
+        // does (`FileEvaluator::enter_call`): what its levels had built is not what it returns.
+        match self.export_stack.borrow_mut().remove(&key) {
+            Some(Site::At {
+                refusal,
+                reentered: true,
+            }) => EvalResult {
+                refusal: Some(refusal),
+                ..EvalResult::unknown()
+            },
+            _ => result,
+        }
     }
 
-    /// Where a call re-entering the export at `key` is refused: at `at`, its function.
+    /// The export at `key` is re-exported from the one `target` exports as `name`, which answers
+    /// for it if a call re-enters it.
+    fn forward(&self, key: &ExportKey, target: &str, name: &str) {
+        if let Some(site) = self.export_stack.borrow_mut().get_mut(key) {
+            *site = Site::Forward(ExportKey {
+                file: normalize_path(target),
+                name: format!("{name}()"),
+            });
+        }
+    }
+
+    /// Where a call re-entering the export at `key` is refused: at `at`, its function, named
+    /// `name` there — which an export written `export { a as styled }` is not named outside.
     fn call_site(
         &self,
         key: &ExportKey,
         evaluator: &FileEvaluator<'_, '_, 'a>,
+        name: &str,
         at: oxc_span::Span,
     ) {
         let refusal = evaluator.refusal(
             "recursion",
             "module".to_string(),
-            Some(key.name.trim_end_matches("()").to_string()),
+            Some(name.to_string()),
             at,
             at,
         );
         if let Some(site) = self.export_stack.borrow_mut().get_mut(key) {
-            *site = Some(Arc::new(refusal));
+            *site = Site::At {
+                refusal: Arc::new(refusal),
+                reentered: false,
+            };
         }
     }
 
@@ -1413,7 +1488,7 @@ impl<'a> ProjectEvaluator<'a> {
                     Declaration::FunctionDeclaration(function)
                         if function.id.as_ref().is_some_and(|id| id.name == name) =>
                     {
-                        self.call_site(key, &evaluator, function.span);
+                        self.call_site(key, &evaluator, name, function.span);
                         return evaluator.with_helper(name, |evaluator| {
                             evaluator.call_function(function, arguments)
                         });
@@ -1426,7 +1501,7 @@ impl<'a> ProjectEvaluator<'a> {
                                 .is_some_and(|id| id.name == name)
                                 && let Some(expression) = &declarator.init
                             {
-                                self.call_site(key, &evaluator, expression.span());
+                                self.call_site(key, &evaluator, name, expression.span());
                                 return evaluator.with_helper(name, |evaluator| {
                                     evaluator.call_expression_value(expression, arguments)
                                 });
@@ -1458,7 +1533,7 @@ impl<'a> ProjectEvaluator<'a> {
                                     .map_or(declarator.span, GetSpan::span),
                                 declaration => declaration.span(),
                             };
-                            self.call_site(key, &evaluator, at);
+                            self.call_site(key, &evaluator, identifier.name.as_str(), at);
                             return evaluator.call_symbol(symbol, arguments);
                         }
                     }
@@ -1472,15 +1547,19 @@ impl<'a> ProjectEvaluator<'a> {
                         else {
                             return EvalResult::unknown();
                         };
-                        return self.call_export(&target, module_name(&specifier.local), arguments);
+                        let local = module_name(&specifier.local);
+                        self.forward(key, &target, local);
+                        return self.call_export(&target, local, arguments);
                     }
                 }
                 Statement::ExportAllDeclaration(export) => {
                     let Some(target) = self.resolve(filename, export.source.value.as_str()) else {
                         continue;
                     };
+                    self.forward(key, &target, name);
                     let result = self.call_export(&target, name, arguments.clone());
-                    if result.value.is_some() || result.complete {
+                    // Refused, it was found there: why is the answer, not the next member's silence.
+                    if result.value.is_some() || result.complete || result.refusal.is_some() {
                         return result;
                     }
                 }
@@ -1532,7 +1611,8 @@ struct ActiveCall<'a> {
     /// Where the function is, and its name when it has one, for a refusal to point at.
     at: oxc_span::Span,
     name: Option<Cow<'a, str>>,
-    arguments: Vec<EvalResult>,
+    /// What it was given, as the next call of the same function is compared with it — see `Given`.
+    arguments: Vec<Given>,
     /// `fingerprint` of the arguments, once a call of the same function is compared with them.
     fingerprint: std::cell::OnceCell<u64>,
     /// As it was before the call bound its parameters: what the body reads besides them, and
@@ -1540,6 +1620,25 @@ struct ActiveCall<'a> {
     environment: HashMap<SymbolId, EvalResult>,
     /// What the call returns instead, once a recursion through it is refused.
     refused: Option<EvalResult>,
+}
+
+/// An argument a running call was given. One bound as it is to a parameter — a name with no
+/// default, before any spread of unknown length — is read back from where it is bound, so a theme
+/// passed down is not copied beside each call it passes through; any other is held.
+enum Given {
+    Bound(SymbolId),
+    Held(EvalResult),
+}
+
+impl Given {
+    /// The argument, read back from `bound`, the environment its call's parameters are bound in,
+    /// where it is bound there.
+    fn read<'c>(&'c self, bound: &'c HashMap<SymbolId, EvalResult>) -> Option<&'c EvalResult> {
+        match self {
+            Self::Bound(symbol) => bound.get(symbol),
+            Self::Held(value) => Some(value),
+        }
+    }
 }
 
 /// What tells arguments apart without walking them all the way down: each one, and what an array
@@ -1550,7 +1649,7 @@ struct ActiveCall<'a> {
 /// passes something that changes beside it — a number, or a field of an object built for the
 /// next level, `{ depth: d - 1, theme }` — and comparing the theme at every level, against every
 /// call running, would be quadratic in the depth.
-fn fingerprint(arguments: &[EvalResult]) -> u64 {
+fn fingerprint<'r>(arguments: impl IntoIterator<Item = &'r EvalResult>) -> u64 {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     for argument in arguments {
         (
@@ -1613,16 +1712,40 @@ fn same_environment(
             .all(|(symbol, value)| next.get(symbol).is_some_and(|other| value.same_as(other)))
 }
 
-/// Where in `calls` the recursion running is entered: the outermost call whose function is
-/// running again further in — in a call after it, or as `innermost`, the function of a call
-/// inside them all.
-fn outermost_recursion(calls: &[ActiveCall<'_>], innermost: usize) -> Option<usize> {
-    calls.iter().enumerate().position(|(index, call)| {
-        call.function == innermost
-            || calls[index + 1..]
+/// The call a recursion is named for, an index into `calls`: the outermost call of the helper that
+/// recurs, given that `entered`, the function of a call inside them all, is being called or has
+/// returned.
+///
+/// Repeating its arguments (`looped`), the recursion is the cycle `entered` closes, every helper
+/// running from its outermost call of `entered` in: `walk(2)` calling `nest(p)`, which calls itself
+/// on what it was given, is `nest`'s, though `walk` recursed to reach it, and `a` calling `b`
+/// calling `a` is `a`'s, whichever of the two was found repeating. Past
+/// a limit it is the helper recursing innermost, a named one before one written in place — an
+/// arrow passed to `.map` runs once a level as surely as the helper calling it.
+fn recursion_at(calls: &[ActiveCall<'_>], entered: usize, looped: bool) -> Option<usize> {
+    if looped {
+        let start = calls.iter().position(|call| call.function == entered)?;
+        let cycle = |function: usize| {
+            function == entered || calls[start..].iter().any(|call| call.function == function)
+        };
+        return calls.iter().position(|call| cycle(call.function));
+    }
+    let recurs = |function: usize| {
+        function == entered
+            || calls
                 .iter()
-                .any(|later| later.function == call.function)
-    })
+                .filter(|call| call.function == function)
+                .count()
+                > 1
+    };
+    let innermost = calls
+        .iter()
+        .rev()
+        .find(|call| call.name.is_some() && recurs(call.function))
+        .or_else(|| calls.iter().rev().find(|call| recurs(call.function)))?;
+    calls
+        .iter()
+        .position(|call| call.function == innermost.function)
 }
 
 impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
@@ -3130,7 +3253,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             Err(refused) => return refused,
         };
         let environment = self.environment.clone();
-        self.bind_parameters(parameters, &arguments);
+        let arguments = self.bind_parameters(parameters, arguments);
         self.calls.push(ActiveCall {
             function,
             at,
@@ -3168,7 +3291,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         let Some(state) = abandoned.as_mut().filter(|state| !state.named) else {
             return;
         };
-        let Some(recursion) = outermost_recursion(&self.calls, function) else {
+        let Some(recursion) = recursion_at(&self.calls, function, false) else {
             return;
         };
         let subject = state
@@ -3219,7 +3342,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         if let Some(abandoned) = abandoned {
             // An export evaluated while the abandoned call unwinds — a property after the one
             // refused — is cut short by this, not by the limit, so it may not be cached either.
-            self.project.cut_short();
+            self.project.cut_short_within_calls();
             return Err(abandoned);
         }
         if let Some(refused) = self.calls.iter().find_map(|call| call.refused.clone()) {
@@ -3234,28 +3357,41 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         // tell it apart from that one but its arguments.
         let mut next = None;
         let repeated = self.calls.iter().enumerate().any(|(index, call)| {
-            call.function == function
-                && call
-                    .fingerprint
-                    .get_or_init(|| fingerprint(&call.arguments))
-                    == next.get_or_insert_with(|| fingerprint(arguments))
-                && call.arguments.len() == arguments.len()
+            if call.function != function || call.arguments.len() != arguments.len() {
+                return false;
+            }
+            // Where its parameters are bound: the environment the call inside it saved, or for the
+            // innermost, the one running.
+            let bound = self
+                .calls
+                .get(index + 1)
+                .map_or(&self.environment, |inner| &inner.environment);
+            if call
+                .arguments
+                .iter()
+                .any(|argument| argument.read(bound).is_none())
+            {
+                return false;
+            }
+            *call.fingerprint.get_or_init(|| {
+                fingerprint(
+                    call.arguments
+                        .iter()
+                        .filter_map(|argument| argument.read(bound)),
+                )
+            }) == *next.get_or_insert_with(|| fingerprint(arguments))
                 && call
                     .arguments
                     .iter()
+                    .filter_map(|argument| argument.read(bound))
                     .zip(arguments)
                     .all(|(running, next)| running.same_as(next))
-                && same_environment(
-                    self.calls
-                        .get(index + 1)
-                        .map_or(&self.environment, |inner| &inner.environment),
-                    &self.environment,
-                )
+                && same_environment(bound, &self.environment)
         });
         if repeated {
             // Found among this file's calls alone, so wherever the evaluation started, it stops
             // here: unlike the limits below, what it gives may be cached.
-            let recursion = outermost_recursion(&self.calls, function);
+            let recursion = recursion_at(&self.calls, function, true);
             let refused = self.recursion_refusal("loop", recursion, name, at);
             if let Some(index) = recursion {
                 self.calls[index].refused = Some(refused.clone());
@@ -3271,11 +3407,11 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             return Ok(depth);
         };
         // When this module's calls do not show the recursion, a module returned to will.
-        let recursion = outermost_recursion(&self.calls, function);
+        let recursion = recursion_at(&self.calls, function, false);
         let refused = self.recursion_refusal(subject, recursion, name, at);
-        // Depth and count depend on where the evaluation started, so no export enclosing this
+        // Depth and count are counted from the outermost call, so no export asked for inside one
         // may be cached with it.
-        self.project.cut_short();
+        self.project.cut_short_within_calls();
         *self.project.abandoned.borrow_mut() = Some(Abandoned {
             refusal: refused.clone(),
             named: recursion.is_some(),
@@ -3306,17 +3442,57 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         ))
     }
 
-    fn bind_parameters(&mut self, parameters: &'a FormalParameters<'a>, arguments: &[EvalResult]) {
+    /// Bind what a call was given to its parameters, and say how each argument is read back — see
+    /// `Given`.
+    fn bind_parameters(
+        &mut self,
+        parameters: &'a FormalParameters<'a>,
+        arguments: Vec<EvalResult>,
+    ) -> Vec<Given> {
         // From a spread of unknown length on, which argument a parameter is given is not known.
         let unplaced = arguments.iter().position(EvalResult::is_unplaced);
-        let placed = &arguments[..unplaced.unwrap_or(arguments.len())];
+        let placed = unplaced.unwrap_or(arguments.len());
+        let unplaced_refusal = unplaced.and_then(|index| arguments[index].refusal.clone());
         let not_placed = || EvalResult {
-            refusal: unplaced.and_then(|index| arguments[index].refusal.clone()),
+            refusal: unplaced_refusal.clone(),
             ..EvalResult::unknown()
         };
+        // A name with no default holds what it is given — but only the last of it, bound twice as
+        // sloppy code may, and only until a `var` of its name in the body binds it again.
+        let scoping = self.scoping;
+        let name = |parameter: &oxc_ast::ast::FormalParameter<'_>| match (
+            &parameter.pattern,
+            &parameter.initializer,
+        ) {
+            (BindingPattern::BindingIdentifier(identifier), None) => identifier
+                .symbol_id
+                .get()
+                .filter(|&symbol| scoping.symbol_redeclarations(symbol).is_empty()),
+            _ => None,
+        };
+        let once = |symbol: SymbolId| {
+            parameters
+                .items
+                .iter()
+                .filter(|parameter| name(parameter) == Some(symbol))
+                .count()
+                == 1
+        };
+        let mut given = Vec::with_capacity(arguments.len());
+        let mut arguments = arguments.into_iter();
         for (index, parameter) in parameters.items.iter().enumerate() {
-            let mut value = match placed.get(index) {
-                Some(value) => value.clone(),
+            let argument = (index < placed).then(|| arguments.next()).flatten();
+            let mut value = match argument {
+                Some(argument) => match name(parameter).filter(|&symbol| once(symbol)) {
+                    Some(symbol) => {
+                        given.push(Given::Bound(symbol));
+                        argument
+                    }
+                    None => {
+                        given.push(Given::Held(argument.clone()));
+                        argument
+                    }
+                },
                 None if unplaced.is_some() => not_placed(),
                 None => EvalResult::undefined(),
             };
@@ -3345,12 +3521,14 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             }
             self.bind_pattern(&parameter.pattern, value);
         }
+        // What no parameter was given, and from a spread of unknown length on, what none is: held.
+        let values: Vec<EvalResult> = arguments.collect();
         if let Some(rest) = &parameters.rest
             && unplaced.is_some()
         {
             self.bind_pattern(&rest.rest.argument, not_placed());
         } else if let Some(rest) = &parameters.rest {
-            let values = &placed[parameters.items.len().min(placed.len())..];
+            let values = &values[..];
             // An array holds its elements' undecided values under no index of theirs, so the rest
             // holds none of them, and an element with any is not known: spread on into another
             // call, it passed as exact what it had lost (`merge(...styles)`). The others still
@@ -3409,6 +3587,8 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 },
             );
         }
+        given.extend(values.into_iter().map(Given::Held));
+        given
     }
 
     fn bind_pattern(&mut self, pattern: &'a BindingPattern<'a>, value: EvalResult) {

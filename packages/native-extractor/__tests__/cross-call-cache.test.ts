@@ -152,6 +152,26 @@ describe('the cross-call export cache', () => {
   })
 
   /**
+   * A cached export is replayed only where evaluating it again would make every call it made. Asked
+   * for deeper in than it was evaluated, it could reach the depth limit there: a helper thirty calls
+   * in, reading a value fifty calls deep, is refused, however its first reading at the top was kept.
+   */
+  test('an export is evaluated again where its calls would not fit', () => {
+    const p = project({
+      'src/ui/deep.ts': `const nest = (d) => (d > 0 ? nest(d - 1) : 'red.300')\nexport const deep = nest(50)\n`,
+    })
+    const top = `import { css } from '../styled-system/css'\nimport { deep } from './ui/deep'\nexport const a = css({ color: deep })\n`
+    expect(dataOf(p.compile(top))).toEqual([[{ color: 'red.300' }]])
+
+    const nested =
+      `import { css } from '../styled-system/css'\nimport { deep } from './ui/deep'\n` +
+      `const wrap = (d) => (d > 0 ? wrap(d - 1) : deep)\nexport const a = css({ color: wrap(30) })\n`
+    const [call] = p.compile(nested).calls
+
+    expect(call).toMatchObject({ exact: false, refusal: { subject: 'depth', helper: 'nest' } })
+  })
+
+  /**
    * Finding which imports are recipes follows only the imports a module re-exports. Following
    * every one walked the importer's whole transitive graph — a component file's rest-of-the-app
    * — on every transform, which made one production build spend 25 minutes in it.

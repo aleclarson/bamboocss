@@ -311,8 +311,8 @@ export const describeRefusal = (refusal: FoldRefusal, root: string) => {
     const called = `${refusal.helper ? `\`${refusal.helper}\`` : 'a function'} at ${at}`
     if (refusal.subject === 'loop') {
       return (
-        `${called} calls itself with arguments the build cannot tell apart from the ones it is already running ` +
-        `with, so the compiler cannot see the recursion end`
+        `${called} is called again while it runs, with arguments the build cannot tell apart from the ones it is ` +
+        `already running with, so the compiler cannot see the recursion end`
       )
     }
     if (refusal.subject === 'module') {

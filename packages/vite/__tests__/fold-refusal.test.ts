@@ -229,6 +229,100 @@ describe('a recursion with no end the build can see', () => {
     expect(refusal).toMatchObject({ kind: 'recursion', subject: 'module', helper: 'a', line: 2, column: 11 })
   })
 
+  // `walk(2)` ends; `nest`, which it calls at the bottom, calls itself on what it was given.
+  test('named for the helper that repeats, not one that recursed to reach it', () => {
+    const refusal = refusalOf(
+      withImport(
+        `const nest = (d) => (d > 0 ? { '& > div': nest(d - 1) } : {})\n` +
+          `const walk = (n, p) => (n > 0 ? { '& > a': walk(n - 1, p) } : nest(p))\n` +
+          `export const f = (props) => css(walk(2, props.depth))`,
+      ),
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'loop', helper: 'nest', line: 2, column: 14 })
+  })
+
+  // Two helpers calling each other on what they were given are one recursion, named for the first
+  // of them it runs: either may be the one found repeating.
+  test('named for the first helper of a cycle a terminating one reaches', () => {
+    const refusal = refusalOf(
+      withImport(
+        `const a = (d) => ({ '& > div': b(d) })\nconst b = (d) => a(d)\n` +
+          `const walk = (n, p) => (n > 0 ? { '& > a': walk(n - 1, p) } : a(p))\n` +
+          `export const f = (props) => css(walk(2, props.depth))`,
+      ),
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'loop', helper: 'a', line: 2, column: 11 })
+  })
+
+  // Helpers are imported through a barrel more often than not; through one, the call that came
+  // back gave `dynamic` with no reason.
+  test.each([
+    [
+      'a barrel re-exporting each by name',
+      { 'app/index.ts': `export { a } from './a'\nexport { b } from './b'\n` },
+      'module',
+      'a',
+    ],
+    ['a star barrel', { 'app/index.ts': `export * from './a'\nexport * from './b'\n` }, 'module', 'a'],
+  ])('between modules, through %s', (_, barrel, subject, helper) => {
+    const refusal = refusalOf(
+      `import { css } from 'styled-system/css'\nimport { a } from './index'\nexport const f = (props) => css(a(props.depth))\n`,
+      'app/use.tsx',
+      {
+        ...barrel,
+        'app/a.ts': `import { b } from './index'\nexport const a = (d) => ({ '& > div': b(d - 1) })\n`,
+        'app/b.ts': `import { a } from './index'\nexport const b = (d) => a(d)\n`,
+      },
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject, helper })
+    expect(refusal?.filePath).toMatch(/app\/a\.ts$/)
+  })
+
+  // A star barrel kept a member's answer only when it was a value: a refusal was dropped, and
+  // the next member asked, which had none to give.
+  test.each([
+    ['a recursion', `export const nest = (d) => (d > 0 ? { '& > div': nest(d - 1) } : {})\n`, 'loop'],
+    ['a statement', `export const nest = (d) => { switch (d) { case 1: return {} }\n  return {} }\n`, 'switch'],
+  ])('through a star barrel, %s', (_, nest, subject) => {
+    const refusal = refusalOf(
+      `import { css } from 'styled-system/css'\nimport { nest } from './index'\nexport const f = (props) => css(nest(props.depth))\n`,
+      'app/use.tsx',
+      { 'app/index.ts': `export * from './other'\nexport * from './nest'\n`, 'app/other.ts': '', 'app/nest.ts': nest },
+    )
+
+    expect(refusal).toMatchObject({ subject, helper: 'nest' })
+  })
+
+  test('a value through a star barrel, refused for a statement', () => {
+    const refusal = refusalOf(
+      `import { css } from 'styled-system/css'\nimport { theme } from './index'\nexport const A = css(theme)\n`,
+      'app/use.tsx',
+      {
+        'app/index.ts': `export * from './theme'\n`,
+        'app/theme.ts': `const make = (t) => { switch (t) { case 1: return { color: 'red.300' } }\n  return {} }\nexport const theme = make(1)\n`,
+      },
+    )
+
+    expect(refusal).toMatchObject({ kind: 'statement', subject: 'switch', helper: 'make' })
+  })
+
+  // Called by its export's name elsewhere, it is named where it is declared.
+  test('between modules, named as declared', () => {
+    const refusal = refusalOf(
+      `import { css } from 'styled-system/css'\nimport { styled } from './a'\nexport const f = (props) => css(styled(props.depth))\n`,
+      'app/use.tsx',
+      {
+        'app/a.ts': `import { b } from './b'\nconst a = (d) => ({ '& > div': b(d - 1) })\nexport { a as styled }\n`,
+        'app/b.ts': `import { styled } from './a'\nexport const b = (d) => styled(d)\n`,
+      },
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'module', helper: 'a', line: 2, column: 11 })
+  })
+
   test('on arguments that change without ending, cut off at the depth', () => {
     const refusal = refusalOf(
       withImport(`const deeper = (d) => ({ '& > div': deeper(d + 1) })\nexport const A = css(deeper(0))`),
@@ -378,6 +472,12 @@ describe('a recursion with no end the build can see', () => {
     [
       'through a closure called the same way each time',
       `const f = (n) => {\n  const g = () => (n > 0 ? { '& > div': f(n - 1) } : { color: 'red.300' })\n  return g()\n}\nexport const A = css(f(3))`,
+    ],
+    // A `var` of a parameter's name binds the parameter again: what a call was given is compared,
+    // not what its body made of it.
+    [
+      'through a parameter a `var` declares again',
+      `const f = (d) => { var d = d + 1; return d > 3 ? { color: 'red.300' } : { '& > div': f(d) } }\nexport const A = css(f(0))`,
     ],
   ])('a recursion that ends still compiles: %s', (_, body) => {
     const result = createFoldFixture().fold(withImport(body))

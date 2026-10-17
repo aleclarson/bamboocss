@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { parseAndExtract } from './fixture'
+import { filePath, getFixtureProject, parseAndExtract, parseFile } from './fixture'
 
 /**
  * A recursive style helper the stylesheet pass cannot see the end of.
@@ -51,6 +51,23 @@ describe('a recursive helper', () => {
     )
 
     expect(result.css).toBe('')
+  })
+
+  // A call that comes back through another module is refused there, and the call it came back
+  // to gives nothing either: its levels used to reach the sheet.
+  test('between modules leaves nothing of the levels it went through', () => {
+    const ctx = getFixtureProject(
+      `import { css } from 'styled-system/css'\nimport { a } from './a'\nexport const f = (props) => css(a(props.depth))\n`,
+    )
+    ctx.project.addSourceFile(
+      'app/src/a.ts',
+      `import { b } from './b'\nexport const a = (d) => ({ color: 'red.300', '& > div': b(d - 1) })\n`,
+    )
+    ctx.project.addSourceFile('app/src/b.ts', `import { a } from './a'\nexport const b = (d) => a(d)\n`)
+    const encoder = ctx.encoder.clone()
+    parseFile(ctx, filePath, encoder)
+
+    expect(ctx.getParserCss(ctx.decoder.clone().collect(encoder))).toBe('')
   })
 
   test('leaves what is around it alone', () => {

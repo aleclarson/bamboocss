@@ -271,8 +271,8 @@ describe('a refusal, as the error says it', () => {
 
   test('a recursion on what it is already running with, at the helper', () => {
     expect(describeRefusal({ ...statement('loop', 'nest'), kind: 'recursion' }, root)).toBe(
-      '`nest` at src/theme.ts:4:3 calls itself with arguments the build cannot tell apart from the ones it is ' +
-        'already running with, so the compiler cannot see the recursion end',
+      '`nest` at src/theme.ts:4:3 is called again while it runs, with arguments the build cannot tell apart from ' +
+        'the ones it is already running with, so the compiler cannot see the recursion end',
     )
   })
 
