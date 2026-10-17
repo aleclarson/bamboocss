@@ -306,8 +306,9 @@ stylesheet emitted by an earlier one. Elements carrying them would render unstyl
   h_\[31\.3px\]
 ```
 
-Configure `builder` so the run announces itself, or set `pruneCss: false` to ship the whole extracted stylesheet. A run
-that declares an environment and never builds it is reported as the process exits.
+Write the in-memory build's output, or configure `builder` so the run announces itself, or set `pruneCss: false` to ship
+the whole extracted stylesheet. A run that declares an environment and never builds it is reported as the process exits:
+its sheet stays pruned against what the run knew.
 
 ### Seeing every diagnostic
 

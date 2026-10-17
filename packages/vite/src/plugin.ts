@@ -1134,14 +1134,15 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
   }
 
   /**
-   * Prune the sheets the run wrote whole, now that every environment has contributed.
+   * Prune again, from source, the sheets the run wrote pruned against what it knew, now that every
+   * environment has contributed.
    *
    * Reached from the output hook of whichever environment completes the run, before it writes:
    * the first point at which the union of every environment's reachability exists, with the
    * earlier environments' references to the sheet on disk and its own still in its bundle. Its
    * write hook reaches it too, should the output hook not have. A run that never completes — an
-   * environment declared and never built — leaves the sheets whole, and says so as the process
-   * exits.
+   * environment declared and never built — leaves the sheets as they were written, without a rule
+   * only that environment reaches, and says so as the process exits.
    */
   const finalizeDeferredSheetsIfComplete = async (
     /** An environment proving it completes the run from inside its own output hook. */
@@ -2078,9 +2079,10 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
       host.setWatch(config.command === 'build' && config.build.watch != null)
       defaultEmitAssets = config.build?.emitAssets ?? (!config.build?.ssr || config.build?.ssrEmitAssets === true)
 
-      // A sheet written whole for a run that never completes would otherwise ship unpruned in
-      // silence — the shape pruning used to go missing in. There is no whole-run hook to say it
-      // from: `buildApp` runs before the default environment loop, not after it.
+      // A sheet written for a run that never completes stays pruned against what the run knew,
+      // without a rule only the environments left would reach, and would ship so in silence.
+      // There is no whole-run hook to say it from: `buildApp` runs before the default
+      // environment loop, not after it.
       if (config.command === 'build' && !exitWarningInstalled) {
         exitWarningInstalled = true
         process.once('beforeExit', () => {
@@ -2385,13 +2387,15 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
                 lost.map((className) => `  ${className}`),
                 { unit: 'class', separator: '\n' },
               )}\n\n` +
-              `The stylesheet was pruned before this environment compiled. A run that announces its environments ` +
-              `— \`builder\` in the Vite config, which every framework building more than one sets — prunes the ` +
-              `sheet again once the last one has compiled, so this is a run that built environments one at a time without ` +
-              `saying so, or a rebuild of this environment alone after the sheet was finalized. These classes are ` +
+              `The stylesheet was pruned before this environment compiled, and nothing prunes it again. A run prunes ` +
+              `a sheet it wrote again once its last environment reaches its output, so this is an in-memory build ` +
+              `(\`build.write: false\`), which has no file to finalize; a run that built environments one at a time ` +
+              `without announcing them — \`builder\` in the Vite config, which every framework building more than ` +
+              `one sets; or a rebuild of this environment alone after the sheet was finalized. These classes are ` +
               `reached only from here, so no rule for them survived.\n\n` +
-              `Configure \`builder\` so the run announces its environments, rebuild every environment together, or ` +
-              `set \`bamboocss({ pruneCss: false })\` to ship the whole extracted stylesheet.`,
+              `Write the build's output, configure \`builder\` so the run announces its environments, rebuild every ` +
+              `environment together, or set \`bamboocss({ pruneCss: false })\` to ship the whole extracted ` +
+              `stylesheet.`,
           )
         }
 

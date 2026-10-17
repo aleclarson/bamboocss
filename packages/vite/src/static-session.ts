@@ -111,7 +111,7 @@ export interface StaticCompilationSession {
    * decides on; see `bare` there.
    */
   prunedClasses: Set<string>
-  /** Stylesheets written whole while environments remained, for the last one to finalize. */
+  /** Stylesheets written while environments remained, pruned against what the run knew, for the last to finalize. */
   deferredSheets: DeferredSheet[]
   /** Every output this run has written, in the order the bundler wrote them. */
   writtenOutputs: WrittenOutput[]
@@ -238,7 +238,7 @@ export const createStaticCompilationSession = (): StaticCompilationSession => {
  * Expected or observed environments whose current generation has not completed yet.
  *
  * Empty means everything the run will contribute has been contributed, which is the condition
- * every whole-run judgement here waits for: pruning the stylesheet against reachability, and
+ * every whole-run judgement here waits for: pruning again a stylesheet written before then, and
  * the two guards that ask whether the compiled modules and the extraction graph agree. Each of
  * those is false about a build in progress and true only about a finished one.
  *
@@ -250,8 +250,9 @@ export const createStaticCompilationSession = (): StaticCompilationSession => {
  * completing candidate — so that path is unchanged.
  *
  * An environment a run declares and then never builds leaves this permanently non-empty, and
- * those judgements are skipped for the run. Every one of them errs towards shipping more CSS
- * or asserting less, so that is the safe direction to be wrong in.
+ * those judgements are skipped for the run: the guards assert less, and a sheet written before
+ * then stays pruned against what the run knew, without a rule only that environment reaches,
+ * which the process says as it exits.
  */
 export const remainingEnvironments = (
   session: StaticCompilationSession,
