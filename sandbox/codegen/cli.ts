@@ -20,10 +20,11 @@ const isValidScenario = (scenario) => {
 const runCommand = (command: string, envVars = {}) => {
   return new Promise((resolve, reject) => {
     const [cmd, ...args] = command.split(' ')
-    const proc = spawn(cmd, args, {
-      env: { ...process.env, ...envVars },
-      stdio: 'inherit',
-    })
+    const options = { env: { ...process.env, ...envVars }, stdio: 'inherit' as const }
+    // On Windows `pnpm` is a `.cmd` shim, which only a shell finds: spawned directly it failed
+    // `pnpm install` there with `spawn pnpm ENOENT`. The commands are this file's own, so the
+    // shell is handed each one whole.
+    const proc = process.platform === 'win32' ? spawn(command, { ...options, shell: true }) : spawn(cmd, args, options)
 
     proc.on('error', (error) => reject(new Error(`\`${command}\` could not start: ${error.message}`)))
     proc.on('close', (code, signal) => {
