@@ -256,6 +256,49 @@ describe('a recursion with no end the build can see', () => {
     expect(refusal).toMatchObject({ kind: 'recursion', subject: 'loop', helper: 'a', line: 2, column: 11 })
   })
 
+  // `walk(2)` and `walk(1)` differ; `nest(1)` repeats, and it is what is named, not `walk`, which the
+  // cycle ran through on its way there.
+  test('named for the helper repeating, not one a recursion that ends ran through', () => {
+    const refusal = refusalOf(
+      withImport(
+        `const walk = (n, p) => (n > 0 ? { color: 'blue.300', '& > a': nest(n, p) } : {})\n` +
+          `const nest = (m, p) => (m > 1 ? { '& > b': walk(m - 1, p) } : { '& > div': nest(m, p) })\n` +
+          `export const f = (props) => css(walk(2, props.depth))`,
+      ),
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'loop', helper: 'nest', line: 3, column: 14 })
+  })
+
+  // A default calling the helper runs as the call binds what it was given; it is compared with
+  // the calls running as they were given theirs.
+  test('through a default calling the helper on what it was given', () => {
+    const refusal = refusalOf(
+      withImport(
+        `function f(a, b = f(a - 1, 0)) {\n  return b === 0 ? { '& > div': f(a + 1) } : b\n}\nexport const A = css(f(1, 0))`,
+      ),
+    )
+
+    expect(refusal).toMatchObject({ kind: 'recursion', subject: 'loop', helper: 'f' })
+  })
+
+  // A small helper called at each level, or a closure written there, is called no more often than
+  // once a level; the recursion is the one most calls are of.
+  test.each([
+    [
+      'a small helper called at each level',
+      `const space = (n) => (n > 1 ? space(n - 1) + 4 : 4)\nconst nest = (d) => (d > 0 ? { padding: space(2), '& > div': nest(d - 1) } : {})\nexport const A = css(nest(70))`,
+      'nest',
+    ],
+    [
+      'a closure written at each level',
+      `const f = (n) => {\n  const g = () => ({ '& > div': f(n + 1) })\n  return g()\n}\nexport const A = css(f(0))`,
+      'f',
+    ],
+  ])('past the depth, named beside %s', (_, body, helper) => {
+    expect(refusalOf(withImport(body))).toMatchObject({ kind: 'recursion', subject: 'depth', helper })
+  })
+
   // Helpers are imported through a barrel more often than not; through one, the call that came
   // back gave `dynamic` with no reason.
   test.each([
@@ -266,6 +309,12 @@ describe('a recursion with no end the build can see', () => {
       'a',
     ],
     ['a star barrel', { 'app/index.ts': `export * from './a'\nexport * from './b'\n` }, 'module', 'a'],
+    [
+      'a barrel importing each and exporting it again',
+      { 'app/index.ts': `import { a } from './a'\nimport { b } from './b'\nexport { a, b }\n` },
+      'module',
+      'a',
+    ],
   ])('between modules, through %s', (_, barrel, subject, helper) => {
     const refusal = refusalOf(
       `import { css } from 'styled-system/css'\nimport { a } from './index'\nexport const f = (props) => css(a(props.depth))\n`,
@@ -479,11 +528,41 @@ describe('a recursion with no end the build can see', () => {
       'through a parameter a `var` declares again',
       `const f = (d) => { var d = d + 1; return d > 3 ? { color: 'red.300' } : { '& > div': f(d) } }\nexport const A = css(f(0))`,
     ],
+    // A default calling the helper runs while the call binds: it is compared with the call running
+    // as that was given its arguments, not as this one has bound so far.
+    [
+      'through a default calling the helper',
+      `const scale = (n, base = UNIT) => (n > 1 ? scale(n - 1) * base : base)\nconst UNIT = scale(1, 4)\nexport const A = css({ width: scale(2, 4) })`,
+    ],
   ])('a recursion that ends still compiles: %s', (_, body) => {
     const result = createFoldFixture().fold(withImport(body))
 
     expect(result.skipped).toEqual([])
     expect(result.folded).toHaveLength(1)
+  })
+})
+
+// JavaScript takes the name a barrel exports by name over one an `export *` in it would give.
+describe('a helper a barrel exports by name', () => {
+  test.each([
+    [
+      'one refused there',
+      `export const tone = (t) => {\n  switch (t) {\n    default:\n      return { color: 'blue.300' }\n  }\n}\n`,
+    ],
+    ['one answering there', `export const tone = (t) => ({ color: 'blue.300' })\n`],
+  ])('is called over %s through `export *`', (_, base) => {
+    const fixture = createFoldFixture()
+    fixture.addFiles({
+      'app/index.ts': `export * from './base'\nexport { tone } from './custom'\n`,
+      'app/base.ts': base,
+      'app/custom.ts': `export const tone = (t) => ({ color: t })\n`,
+    })
+    const result = fixture.fold(
+      `import { css } from 'styled-system/css'\nimport { tone } from './index'\nexport const A = css(tone('red.300'))\n`,
+      'app/use.tsx',
+    )
+
+    expect(result.folded.map((entry) => entry.className)).toEqual(['c_red.300'])
   })
 })
 

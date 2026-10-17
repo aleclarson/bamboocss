@@ -10,10 +10,16 @@ native stack: the process exited with a segfault, taking the dev server with it,
 A helper called again while it runs, with arguments the build cannot tell apart from those it is already running with —
 `d - 1` is as unknown as `d` — is now refused at once, and the error names the helper and where it is: the first to run
 of those that repeat, not one that recursed to reach them. A recursion whose arguments change is still followed, so
-`nest(3)` compiles, up to 64 nested calls and 10,000 calls in all; past either, the whole call is refused. A refused
-recursion gives nothing: none of the levels it went through reaches the stylesheet.
+`nest(3)` compiles, up to 64 nested calls and 10,000 calls in all; past either, the whole call is refused, and the error
+names the helper most of the calls running are of, not a small one each level calls. A refused recursion gives nothing:
+none of the levels it went through reaches the stylesheet.
 
 A helper called again through another module while it runs was already not followed; the error now says so, and names it
 as it is declared, instead of reporting the call as dynamic with no reason, and as within a module none of the levels it
 went through reaches the stylesheet. That holds through a barrel the helpers are imported from, re-exporting them by
-name or with `export *`, and any reason a call was refused is no longer lost through an `export *` barrel.
+name, with `export *`, or importing them and exporting them again, and any reason a call was refused is no longer lost
+through an `export *` barrel.
+
+A helper a barrel exports by name is the one called, over one an `export *` there would give, as in JavaScript: the
+build took the first in the barrel's order, so `export * from './base'` before `export { tone } from './custom'`
+compiled `base`'s `tone`.

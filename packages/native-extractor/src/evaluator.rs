@@ -31,11 +31,12 @@ use crate::{NativeEntrypoint, NativePathMapping, NativeProjectOptions, NativeTok
 /// that does not end stops before the stack does. Real helpers nest a handful.
 /// See `FileEvaluator::enter_call`.
 ///
-/// Measured with a recursion only this limit stops, a level holding nested objects, arrays,
-/// ternaries and a template literal, in a worker given a fixed stack: a release build holds all 64
-/// levels in 0.5 MB; a debug build overflows 3 MB and holds them in 4 MB, Node's default for a
-/// worker, so it has no room to spare there. The main thread has 8 MB, on Windows too since
-/// Node 19 reserves that much (the packages require 22.12).
+/// Measured with a recursion only this limit stops, in a worker given a fixed stack: a release build
+/// holds all 64 levels in 0.5 MB where a level holds nested objects, arrays, ternaries and a
+/// template literal, and needs 0.75 MB where it nests an object in an array in a ternary in an
+/// object — a heavier level costs more; a debug build overflows 3 MB and holds the first in 4 MB,
+/// Node's default for a worker, so it has no room to spare there. The main thread has 8 MB, on
+/// Windows too since Node 19 reserves that much (the packages require 22.12).
 const MAX_CALL_DEPTH: u32 = 64;
 
 /// How many helper calls one outermost call may make. Depth does not bound a recursion that
@@ -1520,6 +1521,8 @@ impl<'a> ProjectEvaluator<'a> {
             }
         }
 
+        // A name exported by name answers before any `export *`, as in JavaScript: a barrel writing
+        // `export * from './base'` and then `export { tone } from './custom'` gives `custom`'s.
         for statement in &parsed.program.body {
             match statement {
                 Statement::ExportNamedDeclaration(export) => {
@@ -1532,6 +1535,15 @@ impl<'a> ProjectEvaluator<'a> {
                             && let Some(symbol) =
                                 evaluator.scoping.get_reference(reference).symbol_id()
                         {
+                            // Imported and exported again, `import { a } from './a'; export { a }`,
+                            // it is that module's export that answers, as for `export { a } from`.
+                            if let Some(binding) = evaluator.imports.get(&symbol)
+                                && let ImportedName::Named(imported) = &binding.imported
+                                && let Some(target) = self.resolve(filename, &binding.specifier)
+                            {
+                                self.forward(key, &target, imported);
+                                return self.call_export(&target, imported, arguments);
+                            }
                             // The function, as the other two spellings point at: not `a = …`.
                             let at = match evaluator.semantic.symbol_declaration(symbol).kind() {
                                 AstKind::VariableDeclarator(declarator) => declarator
@@ -1559,18 +1571,21 @@ impl<'a> ProjectEvaluator<'a> {
                         return self.call_export(&target, local, arguments);
                     }
                 }
-                Statement::ExportAllDeclaration(export) => {
-                    let Some(target) = self.resolve(filename, export.source.value.as_str()) else {
-                        continue;
-                    };
-                    self.forward(key, &target, name);
-                    let result = self.call_export(&target, name, arguments.clone());
-                    // Refused, it was found there: why is the answer, not the next member's silence.
-                    if result.value.is_some() || result.complete || result.refusal.is_some() {
-                        return result;
-                    }
-                }
                 _ => {}
+            }
+        }
+        for statement in &parsed.program.body {
+            let Statement::ExportAllDeclaration(export) = statement else {
+                continue;
+            };
+            let Some(target) = self.resolve(filename, export.source.value.as_str()) else {
+                continue;
+            };
+            self.forward(key, &target, name);
+            let result = self.call_export(&target, name, arguments.clone());
+            // Refused, it was found there: why is the answer, not the next member's silence.
+            if result.value.is_some() || result.complete || result.refusal.is_some() {
+                return result;
             }
         }
         EvalResult::unknown()
@@ -1723,36 +1738,46 @@ fn same_environment(
 /// recurs, given that `entered`, the function of a call inside them all, is being called or has
 /// returned.
 ///
-/// Repeating its arguments (`looped`), the recursion is the cycle `entered` closes, every helper
-/// running from its outermost call of `entered` in: `walk(2)` calling `nest(p)`, which calls itself
-/// on what it was given, is `nest`'s, though `walk` recursed to reach it, and `a` calling `b`
-/// calling `a` is `a`'s, whichever of the two was found repeating. Past
-/// a limit it is the helper recursing innermost, a named one before one written in place — an
-/// arrow passed to `.map` runs once a level as surely as the helper calling it.
-fn recursion_at(calls: &[ActiveCall<'_>], entered: usize, looped: bool) -> Option<usize> {
-    if looped {
-        let start = calls.iter().position(|call| call.function == entered)?;
+/// Repeating its arguments, at `repeating`, the call it is the same as, the recursion is the cycle
+/// that closes: every helper running from that call in, and `entered`. It is named for the first of
+/// them to run — `a` of `a → b → a`, whichever of the two was found repeating, and `nest` of
+/// `walk(2) → nest → walk(1) → nest`, where `nest` repeats and `walk` is not in it.
+///
+/// Past a limit it is the recurring helper most of the calls running are of, named before one
+/// written in place where as many, and the first to run where still level: a small helper called
+/// at each level, or a closure written there, is called no more often than once a level.
+fn recursion_at(
+    calls: &[ActiveCall<'_>],
+    entered: usize,
+    repeating: Option<usize>,
+) -> Option<usize> {
+    if let Some(repeating) = repeating {
         let cycle = |function: usize| {
-            function == entered || calls[start..].iter().any(|call| call.function == function)
+            function == entered
+                || calls[repeating..]
+                    .iter()
+                    .any(|call| call.function == function)
         };
         return calls.iter().position(|call| cycle(call.function));
     }
-    let recurs = |function: usize| {
-        function == entered
-            || calls
-                .iter()
-                .filter(|call| call.function == function)
-                .count()
-                > 1
+    let running = |function: usize| {
+        calls
+            .iter()
+            .filter(|call| call.function == function)
+            .count()
     };
-    let innermost = calls
-        .iter()
-        .rev()
-        .find(|call| call.name.is_some() && recurs(call.function))
-        .or_else(|| calls.iter().rev().find(|call| recurs(call.function)))?;
-    calls
-        .iter()
-        .position(|call| call.function == innermost.function)
+    let mut best: Option<(usize, bool, usize)> = None;
+    for (index, call) in calls.iter().enumerate() {
+        let count = running(call.function);
+        if count + usize::from(call.function == entered) < 2 {
+            continue;
+        }
+        let rank = (count, call.name.is_some());
+        if best.is_none_or(|(most, named, _)| rank > (most, named)) {
+            best = Some((rank.0, rank.1, index));
+        }
+    }
+    best.map(|(_, _, index)| index)
 }
 
 impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
@@ -3356,7 +3381,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         let Some(state) = abandoned.as_mut().filter(|state| !state.named) else {
             return;
         };
-        let Some(recursion) = recursion_at(&self.calls, function, false) else {
+        let Some(recursion) = recursion_at(&self.calls, function, None) else {
             return;
         };
         let subject = state
@@ -3421,7 +3446,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         // inside it: its parameters bound. Called by it directly, this call has nothing else to
         // tell it apart from that one but its arguments.
         let mut next = None;
-        let repeated = self.calls.iter().enumerate().any(|(index, call)| {
+        let repeating = self.calls.iter().enumerate().position(|(index, call)| {
             if call.function != function || call.arguments.len() != arguments.len() {
                 return false;
             }
@@ -3453,10 +3478,10 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                     .all(|(running, next)| running.same_as(next))
                 && same_environment(bound, &self.environment)
         });
-        if repeated {
+        if let Some(repeating) = repeating {
             // Found among this file's calls alone, so wherever the evaluation started, it stops
             // here: unlike the limits below, what it gives may be cached.
-            let recursion = recursion_at(&self.calls, function, true);
+            let recursion = recursion_at(&self.calls, function, Some(repeating));
             let refused = self.recursion_refusal("loop", recursion, name, at);
             if let Some(index) = recursion {
                 self.calls[index].refused = Some(refused.clone());
@@ -3472,7 +3497,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             return Ok(depth);
         };
         // When this module's calls do not show the recursion, a module returned to will.
-        let recursion = recursion_at(&self.calls, function, false);
+        let recursion = recursion_at(&self.calls, function, None);
         let refused = self.recursion_refusal(subject, recursion, name, at);
         // Depth and count are counted from the outermost call, so no export asked for inside one
         // may be cached with it.
@@ -3523,13 +3548,26 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             ..EvalResult::unknown()
         };
         // A name with no default holds what it is given — but only the last of it, bound twice as
-        // sloppy code may, and only until a `var` of its name in the body binds it again.
+        // sloppy code may, and only until a `var` of its name in the body binds it again. Nor where
+        // binding runs code, a default that does or a key it computes: that may call this helper
+        // again before the call is running, while the environment holds part of what this one
+        // binds, so what a running call is read back from would not be what it was given.
+        let runs_code = parameters.items.iter().any(|parameter| {
+            parameter
+                .initializer
+                .as_deref()
+                .is_some_and(|initializer| !runs_nothing(initializer))
+                || pattern_runs_code(&parameter.pattern)
+        }) || parameters
+            .rest
+            .as_ref()
+            .is_some_and(|rest| pattern_runs_code(&rest.rest.argument));
         let scoping = self.scoping;
         let name = |parameter: &oxc_ast::ast::FormalParameter<'_>| match (
             &parameter.pattern,
             &parameter.initializer,
         ) {
-            (BindingPattern::BindingIdentifier(identifier), None) => identifier
+            (BindingPattern::BindingIdentifier(identifier), None) if !runs_code => identifier
                 .symbol_id
                 .get()
                 .filter(|&symbol| scoping.symbol_redeclarations(symbol).is_empty()),
@@ -4173,6 +4211,34 @@ fn namespace_exports(namespace: &oxc_ast::ast::TSNamespaceDeclaration<'_>) -> Op
         }
     }
     Some(names)
+}
+
+/// Whether binding `pattern` may run code: a default that does (`runs_nothing`), or a key it
+/// computes, anywhere in it.
+fn pattern_runs_code(pattern: &BindingPattern<'_>) -> bool {
+    match pattern {
+        BindingPattern::BindingIdentifier(_) => false,
+        BindingPattern::AssignmentPattern(pattern) => {
+            !runs_nothing(&pattern.right) || pattern_runs_code(&pattern.left)
+        }
+        BindingPattern::ObjectPattern(pattern) => {
+            pattern
+                .properties
+                .iter()
+                .any(|property| property.computed || pattern_runs_code(&property.value))
+                || pattern
+                    .rest
+                    .as_ref()
+                    .is_some_and(|rest| pattern_runs_code(&rest.argument))
+        }
+        BindingPattern::ArrayPattern(pattern) => {
+            pattern.elements.iter().flatten().any(pattern_runs_code)
+                || pattern
+                    .rest
+                    .as_ref()
+                    .is_some_and(|rest| pattern_runs_code(&rest.argument))
+        }
+    }
 }
 
 /// Whether evaluating `expression` runs no code: a literal, or an array or object of them.
