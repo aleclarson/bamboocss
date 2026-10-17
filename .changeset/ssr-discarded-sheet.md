@@ -6,7 +6,13 @@ What pruning a stylesheet removes in an environment whose assets Vite discards â
 is no longer taken for lost: the sheet is never written. It is still pruned and renamed, as its name is how a server
 bundle links the client's sheet. A watch rebuild of such an environment that started using a class its first build did
 not failed with "already pruned out of a stylesheet", naming a class no written sheet had ever been without, and so did
-an SSR rebuild after a client-only edit in a run that announces its environments.
+an SSR rebuild after a client-only edit in a run that announces its environments, where the environment completing the
+run had also taken the others' losses for its own and kept them past the rebuild that restored the class. Vite 6 writes
+an SSR build's sheet all the same when `cssCodeSplit` is off, as it is for a library by default; what pruning that sheet
+removes still counts, so such a watch rebuild still fails there, though it writes the sheet again.
 
-The error that guard raises now says the classes are in use as an environment finishes, rather than compiled in it, and
-names a rebuild of every environment at once in a watch among its causes.
+The error that guard raises now says the classes are in use as an environment finishes, rather than compiled in it,
+names a rebuild of every environment at once in a watch among its causes, and offers writing the build's output,
+announcing the run's environments, restarting the watch, or `pruneCss: false`. The warning a run that never completes
+gives as the process exits now says the rules it lacks are those only an environment compiling after the sheet was
+written reaches.

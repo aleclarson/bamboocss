@@ -1416,6 +1416,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
           environment,
           currentState ? ownedClassesForState(currentState) : currentRequiredClasses(),
         ),
+        staged: false,
         restore() {},
       }
     }
@@ -1430,6 +1431,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     return {
       cssLoaded: generation.epoch.state.cssLoaded,
       requiredClasses,
+      staged: true,
       restore() {
         if (restored) return
         restored = true
@@ -2383,13 +2385,13 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
         if (lost.length) {
           throw new Error(
             `bamboocss: ${lost.length} class(es) in use as the ${JSON.stringify(environment)} environment finished ` +
-              `were already pruned out of a stylesheet emitted by an earlier one. Elements carrying them would render ` +
-              `unstyled.\n\n` +
+              `were already pruned out of a stylesheet emitted by an earlier one, and elements carrying them would ` +
+              `render unstyled with it.\n\n` +
               `${truncateList(
                 lost.map((className) => `  ${className}`),
                 { unit: 'class', separator: '\n' },
               )}\n\n` +
-              `The stylesheet written last was pruned without them, before this environment compiled them. A run ` +
+              `The stylesheet emitted last was pruned without them, before this environment compiled them. A run ` +
               `prunes a sheet it wrote again once its last environment reaches its output, and does not when its ` +
               `output is held in memory (\`build.write: false\`), which has no file to finalize; when it built ` +
               `environments one at a time without announcing them — \`builder\` in the Vite config, which every ` +

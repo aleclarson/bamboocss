@@ -1894,6 +1894,12 @@ const runClientFirstWatchRebuild = async (
   create: (config: Record<string, unknown>) => Promise<unknown>,
   label: string,
   widths: { ssr: string; client: string; edited: string },
+  /**
+   * Whether SSR imports the stylesheet too, so its own copy, which Vite discards, is pruned in the
+   * output hook where SSR completes the run: the stage it recorded took the client's losses for its
+   * own, and the SSR rebuild after the client's failed naming the class the client had restored.
+   */
+  ssrImportsSheet = false,
 ) => {
   const clientTrigger = join(cwd, `src/__client-first-client-${label}.txt`)
   const ssrTrigger = join(cwd, `src/__client-first-ssr-${label}.txt`)
@@ -1938,7 +1944,10 @@ const runClientFirstWatchRebuild = async (
   writeWatchTrigger(clientTrigger, 'first')
   writeWatchTrigger(ssrTrigger, 'first')
   writeFileSync(envClientEntry, `import 'virtual:bamboo.css'\nexport { className } from './__env-shared'\n`)
-  writeFileSync(envSsrEntry, `export { className } from './__env-shared'\n`)
+  writeFileSync(
+    envSsrEntry,
+    `${ssrImportsSheet ? `import 'virtual:bamboo.css'\n` : ''}export { className } from './__env-shared'\n`,
+  )
   writeIsolatedBambooConfig(configPath, ['./src/__env-shared.tsx', './src/__env-client.tsx', './src/__env-ssr.tsx'])
   // Before the watchers start, so a late event for one of these writes cannot start a rebuild.
   await settled()
@@ -1966,6 +1975,8 @@ const runClientFirstWatchRebuild = async (
         build: {
           ssr: true,
           outDir: ssrOutDir,
+          // Split, as an app's is, so the sheet SSR imports is in its bundle for the early pass.
+          ...(ssrImportsSheet ? { cssCodeSplit: true } : {}),
           lib: { entry: envSsrEntry, formats: ['es'], fileName: `client-first-ssr-${label}` },
         },
       },
@@ -3819,6 +3830,24 @@ export default defineConfig({
     )
   }, 180_000)
 
+  test('Vite 7 keeps no first pruning past a client-first rebuild where SSR imports the sheet', async () => {
+    await runClientFirstWatchRebuild(
+      (config) => createVite7Builder(config as Parameters<typeof createVite7Builder>[0]),
+      'vite7-sheet',
+      { ssr: '95.101px', client: '95.202px', edited: '95.303px' },
+      true,
+    )
+  }, 180_000)
+
+  test('Vite 8 keeps no first pruning past a client-first rebuild where SSR imports the sheet', async () => {
+    await runClientFirstWatchRebuild(
+      (config) => createBuilder(config as Parameters<typeof createBuilder>[0]),
+      'vite8-sheet',
+      { ssr: '96.101px', client: '96.202px', edited: '96.303px' },
+      true,
+    )
+  }, 180_000)
+
   test('Vite 7 does not publish a generation rejected during output', async () => {
     await runRejectedOutputWatchRebuild(
       (config) => createVite7Builder(config as Parameters<typeof createVite7Builder>[0]),
@@ -4121,44 +4150,62 @@ describe('the stylesheet URL', () => {
 
   // A server bundle links the client's sheet by the name pruning gives it, so the server's own copy,
   // which Vite does not write, is pruned and renamed as the client's is: left whole, the page linked
-  // a stylesheet nothing wrote. One entry for both, as an app's is, so both reach the same classes.
-  test('a server bundle links the sheet the client writes', async () => {
-    const app = join(cwd, 'src/__url-app.tsx')
-    const clientOut = join(cwd, '__url-client-out')
-    const ssrOut = join(cwd, '__url-ssr-out')
-    writeFileSync(
-      app,
-      `import href from 'virtual:bamboo.css?url'\nimport { css } from '../styled-system/css'\nexport const cls = css({ width: '[51.3px]' })\n;(globalThis as any).__bambooUrlApp = { href, cls }\n`,
-    )
-    try {
-      const builder = await createVite7Builder({
-        root: cwd,
-        configFile: false,
-        logLevel: 'silent',
-        css: { postcss: { plugins: [] } },
-        plugins: [bamboocss({ cwd, reportSummary: false })],
-        builder: {},
-        // One CSS target for both, so each environment's copy of the sheet holds the same bytes.
-        build: { emptyOutDir: true, minify: false, cssTarget: 'esnext', cssMinify: false },
-        environments: {
-          client: { build: { outDir: clientOut, rollupOptions: { input: { app } } } },
-          ssr: { build: { outDir: ssrOut, rollupOptions: { input: { app } } } },
-        },
-      })
-      await builder.buildApp()
+  // a stylesheet nothing wrote. One entry for both, as an app's is, so both reach the same classes,
+  // and a config of its own, so what else the sandbox holds does not reach either.
+  const linkCases: Array<[string, (config: Record<string, unknown>) => Promise<unknown>]> = [
+    ['Vite 7', (config) => createVite7Builder(config as Parameters<typeof createVite7Builder>[0])],
+    ['Vite 8', (config) => createBuilder(config as Parameters<typeof createBuilder>[0])],
+  ]
 
-      const linked = [...new Set(readOutputFiles(ssrOut, '.js').match(/\/assets\/[\w.-]+\.css/g) ?? [])]
-      expect(linked, 'the server bundle links no stylesheet').not.toEqual([])
-      const written = readdirSync(join(clientOut, 'assets')).filter((file) => file.endsWith('.css'))
-      for (const href of linked) {
-        expect(existsSync(join(clientOut, href)), `the client wrote no ${href}, but ${written.join(', ')}`).toBe(true)
+  test.each(linkCases)(
+    'on %s, a server bundle links the sheet the client writes',
+    async (label, create) => {
+      const tag = label.replace(/\W/g, '').toLowerCase()
+      const app = join(cwd, `src/__url-app-${tag}.tsx`)
+      const unused = join(cwd, `src/__url-unused-${tag}.tsx`)
+      const configPath = join(cwd, `__url-${tag}.bamboo.config.ts`)
+      const clientOut = join(cwd, `__url-client-${tag}-out`)
+      const ssrOut = join(cwd, `__url-ssr-${tag}-out`)
+      writeFileSync(
+        app,
+        `import href from 'virtual:bamboo.css?url'\nimport { css } from '../styled-system/css'\nexport const cls = css({ width: '[51.3px]' })\n;(globalThis as any).__bambooUrlApp = { href, cls }\n`,
+      )
+      // Extracted and reached by neither, so pruning removes it and the sheet is renamed.
+      writeFileSync(
+        unused,
+        `import { css } from '../styled-system/css'\nexport const unused = css({ width: '[51.4px]' })\n`,
+      )
+      writeIsolatedBambooConfig(configPath, [`./src/__url-app-${tag}.tsx`, `./src/__url-unused-${tag}.tsx`])
+      try {
+        const builder = (await create({
+          root: cwd,
+          configFile: false,
+          logLevel: 'silent',
+          css: { postcss: { plugins: [] } },
+          plugins: [bamboocss({ cwd, configPath, reportSummary: false })],
+          builder: {},
+          build: { emptyOutDir: true },
+          environments: {
+            client: { build: { outDir: clientOut, rollupOptions: { input: { app } } } },
+            ssr: { build: { outDir: ssrOut, rollupOptions: { input: { app } } } },
+          },
+        })) as { buildApp(): Promise<void> }
+        await builder.buildApp()
+
+        const linked = [...new Set(readOutputFiles(ssrOut, '.js').match(/\/assets\/[\w.-]+\.css/g) ?? [])]
+        expect(linked, 'the server bundle links no stylesheet').not.toEqual([])
+        const written = readdirSync(join(clientOut, 'assets')).filter((file) => file.endsWith('.css'))
+        for (const href of linked) {
+          expect(existsSync(join(clientOut, href)), `the client wrote no ${href}, but ${written.join(', ')}`).toBe(true)
+        }
+      } finally {
+        for (const file of [app, unused, configPath]) rmSync(file, { force: true })
+        rmSync(clientOut, { force: true, recursive: true })
+        rmSync(ssrOut, { force: true, recursive: true })
       }
-    } finally {
-      rmSync(app, { force: true })
-      rmSync(clientOut, { force: true, recursive: true })
-      rmSync(ssrOut, { force: true, recursive: true })
-    }
-  }, 180_000)
+    },
+    180_000,
+  )
 
   /**
    * The same import on a dev server, which leaves `?url` to Vite's asset plugin, and that plugin

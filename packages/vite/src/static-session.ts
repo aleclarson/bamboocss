@@ -8,6 +8,11 @@ export interface StaticOutputProjection {
   cssLoaded: boolean
   /** Compiler-owned atoms every JavaScript output represented by this projection can name. */
   requiredClasses: ReadonlySet<string>
+  /**
+   * Whether the loss history read and written during the projection is the candidate's own, set
+   * back by `restore`, rather than the committed one.
+   */
+  staged: boolean
   /** Restore the committed whole-build projection after the candidate CSS has been staged. */
   restore(): void
 }
@@ -200,7 +205,7 @@ export const createStaticCompilationSession = (): StaticCompilationSession => {
       const requiredClasses = new Set(
         [...session.usedClasses].filter((className) => prunable.has(className.replaceAll('\\', ''))),
       )
-      return { cssLoaded: session.cssLoaded, requiredClasses, restore() {} }
+      return { cssLoaded: session.cssLoaded, requiredClasses, staged: false, restore() {} }
     },
     markClassUsed(className) {
       // Split on whitespace. A folded call reports one entry per call
