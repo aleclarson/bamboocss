@@ -1,6 +1,9 @@
 ---
-'@bamboocss/preset-atlaskit': major
+'@bamboocss/preset-atlaskit': minor
 ---
+
+**Twelve Atlassian token names are removed in this release.** It ships as a minor, so nothing in the version signals it
+— the last item below is the warning.
 
 The preset is regenerated from `@atlaskit/tokens` 20.6.0 and `@atlaskit/motion` 9.4.0, the current Atlassian Design
 System.
