@@ -1999,6 +1999,21 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                             let value = self.evaluate(&spread.argument);
                             complete &= value.complete;
                             refusal = refusal.or(value.refusal.clone());
+                            // Not one object, a choice of objects whose source says their keys
+                            // writes those and nothing else.
+                            if !matches!(value.value, Some(serde_json::Value::Object(_)))
+                                && !writes_nothing(&value)
+                                && let Some(keys) = spread_keys(&spread.argument)
+                            {
+                                spread_keys_written(
+                                    &mut output,
+                                    &mut fragments,
+                                    &mut partial,
+                                    &keys,
+                                    value.conditions,
+                                );
+                                continue;
+                            }
                             spread_value(
                                 &mut output,
                                 &mut fragments,
@@ -2677,6 +2692,34 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         // `in` says for itself whether its answer is exact: it reads which keys an object has, not
         // what they hold. Any other reads all of each: `[c ? 'a' : 'b'] + 'x'` gave `x`.
         let mut complete = left.converts() && right.converts();
+        // But an object or an array that surely is one is no primitive, however little of it is
+        // known: `theme != null` is true of `{ color: 'red.300', shadow: compute() }`, and `===` of
+        // one and any primitive false. `==` converts it beside anything but `null`.
+        let primitive = |value: &EvalResult, loose: bool| {
+            value.converts()
+                && value.value.as_ref().is_some_and(|value| {
+                    if loose {
+                        value.is_null()
+                    } else {
+                        !value.is_object() && !value.is_array()
+                    }
+                })
+        };
+        let beside_primitive = |loose: bool| {
+            (left.surely_structured() && primitive(&right, loose))
+                || (right.surely_structured() && primitive(&left, loose))
+        };
+        match operator {
+            BinaryOperator::StrictEquality | BinaryOperator::StrictInequality
+                if beside_primitive(false) =>
+            {
+                complete = true;
+            }
+            BinaryOperator::Equality | BinaryOperator::Inequality if beside_primitive(true) => {
+                complete = true;
+            }
+            _ => {}
+        }
         // The left of `in` is converted to a key, as a value any other operator reads is.
         let (left_complete, right_complete) = (left.converts(), right.complete);
         let refusal = left.refusal.or(right.refusal);
@@ -2792,7 +2835,8 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                             });
                             (Some(index < array.len()), keyed || placed)
                         }
-                        _ if key == "length" => (Some(true), true),
+                        // Of an array it surely is: one a spread may have written over may not be.
+                        _ if key == "length" => (Some(true), right_complete || receiver.is_some()),
                         None if !may_be_inherited(&key) => (Some(false), keyed),
                         _ => (None, false),
                     },
@@ -2945,12 +2989,20 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                         && path.first().is_some_and(|name| name == "token")
                     {
                         let is_value = path.get(1).is_some_and(|name| name == "value");
+                        // A path the build only guessed, or could not wholly read, is not the one
+                        // the runtime looks up: `colors.${o.tone}.300` with `o` a default a spread
+                        // may write over compiled to the default's token, and a join over a part not
+                        // decided to none.
                         let Some(token_path) = arguments
                             .first()
+                            .filter(|value| value.decides() && !value.nullish)
                             .and_then(|value| value.value.as_ref())
                             .and_then(|value| value.as_str())
                         else {
-                            return EvalResult::unknown();
+                            return EvalResult {
+                                refusal: arguments.first().and_then(|value| value.refusal.clone()),
+                                ..EvalResult::unknown()
+                            };
                         };
                         return self
                             .project
@@ -3142,24 +3194,30 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             let Expression::ObjectExpression(object) = current.get_inner_expression() else {
                 return None;
             };
-            // The last property of that name wins, as in JavaScript.
-            current = object
-                .properties
-                .iter()
-                .rev()
-                .find_map(|property| match property {
-                    ObjectPropertyKind::ObjectProperty(property)
-                        if !property.computed
-                            && !property.shorthand
-                            && property
-                                .key
-                                .static_name()
-                                .is_some_and(|name| name == member.as_str()) =>
-                    {
-                        Some(&property.value)
+            // The last property of that name wins, as in JavaScript — unless something written after
+            // it may write it again: a spread, or a key the walk cannot name. Searching past them
+            // called `{ color: () => 'red.300', ...props }.color` whatever `props` held.
+            let mut found = None;
+            for property in object.properties.iter().rev() {
+                let ObjectPropertyKind::ObjectProperty(property) = property else {
+                    return None;
+                };
+                if property.computed {
+                    return None;
+                }
+                if property
+                    .key
+                    .static_name()
+                    .is_some_and(|name| name == member.as_str())
+                {
+                    if property.shorthand || property.kind != oxc_ast::ast::PropertyKind::Init {
+                        return None;
                     }
-                    _ => None,
-                })?;
+                    found = Some(&property.value);
+                    break;
+                }
+            }
+            current = found?;
         }
         Some(current)
     }
@@ -3982,7 +4040,6 @@ enum MemberKey<'a> {
     Computed(&'a Expression<'a>),
 }
 
-/// A value `?.` short-circuits on: known `null`, or known `undefined` (no value, complete).
 /// Whether `?.` stops at it: a `null` the build is sure of — a guessed one may be anything — or
 /// `undefined`.
 fn is_nullish(result: &EvalResult) -> bool {
@@ -4215,6 +4272,78 @@ pub(crate) fn write_property(
     }
 }
 
+/// Whether spreading `value` writes no key: `undefined`, `null`, a boolean or a number, decided.
+fn writes_nothing(value: &EvalResult) -> bool {
+    value.complete
+        && value.conditions.is_empty()
+        && value.value.as_ref().is_none_or(|value| {
+            matches!(
+                value,
+                serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::Number(_)
+            )
+        })
+}
+
+/// The keys a spread of `expression` may write, where its source says them all: an object literal
+/// with neither a spread nor a key it computes, or a value that writes none — `null`, `undefined`,
+/// a boolean, a number — or a choice between them, `c ? { size } : {}`, or `c && { size }`, whose
+/// left writes none when it is what the choice gives.
+fn spread_keys(expression: &Expression<'_>) -> Option<Vec<String>> {
+    match expression.get_inner_expression() {
+        Expression::ObjectExpression(object) => object
+            .properties
+            .iter()
+            .map(|property| match property {
+                ObjectPropertyKind::ObjectProperty(property) if !property.computed => {
+                    property.key.static_name().map(|name| name.into_owned())
+                }
+                _ => None,
+            })
+            .collect(),
+        Expression::NullLiteral(_)
+        | Expression::BooleanLiteral(_)
+        | Expression::NumericLiteral(_) => Some(Vec::new()),
+        Expression::Identifier(identifier) if identifier.name == "undefined" => Some(Vec::new()),
+        Expression::ConditionalExpression(conditional) => {
+            let mut keys = spread_keys(&conditional.consequent)?;
+            keys.extend(spread_keys(&conditional.alternate)?);
+            Some(keys)
+        }
+        Expression::LogicalExpression(logical) if logical.operator == LogicalOperator::And => {
+            spread_keys(&logical.right)
+        }
+        _ => None,
+    }
+}
+
+/// A spread of one of several objects whose keys its source says (`spread_keys`): each of `keys`
+/// may be written or not, so neither its value nor that it is there is known after it, and every
+/// other key is as known as it was — `{ variant: 'solid', ...(c ? { size } : {}) }` holds
+/// `variant` whichever it is. What each could be is kept for its rules.
+fn spread_keys_written(
+    output: &mut serde_json::Map<String, serde_json::Value>,
+    fragments: &mut Fragments,
+    partial: &mut Option<Partial>,
+    keys: &[String],
+    conditions: Vec<serde_json::Value>,
+) {
+    fragments.replace_all(keys);
+    output.retain(|key, _| !keys.contains(key));
+    let known = partial.get_or_insert_default();
+    for key in keys {
+        known.forget(key);
+    }
+    // Open after it, as after any spread whose keys it cannot be sure of, but holding what it
+    // held before of every key no branch writes (`Partial::inherit`).
+    known.inherit(output.keys().chain(&fragments.keys));
+    fragments.extend(
+        conditions
+            .into_iter()
+            .filter(serde_json::Value::is_object)
+            .collect(),
+    );
+}
+
 /// A value spread into an object, or a source of `Object.assign`: its properties written over what
 /// was there — its undecided ones and those it wrote as `undefined` too — and what it says of each
 /// recorded. One not wholly known may have written anything, so the object is open after it; what
@@ -4226,6 +4355,12 @@ pub(crate) fn spread_value(
     complete: &mut bool,
     value: EvalResult,
 ) {
+    // `undefined`, `null`, a boolean or a number, decided, writes no key: what the object held is
+    // as known as it was. Taken for anything, `{ dense: false, ...o.overrides }` of an option not
+    // passed left `dense` a guess.
+    if writes_nothing(&value) {
+        return;
+    }
     let Some(serde_json::Value::Object(values)) = value.value else {
         fragments.extend(value.conditions);
         *complete = false;

@@ -88,10 +88,17 @@ Read values in style expressions as JavaScript does, where the build used Rust's
   runtime's `join` does, where `undefined` dropped the property and `null` was written as `null`.
 - A choice is no longer made on a value the build only guessed: a property a spread it could not evaluate may have
   written over, as in `const options = { dense: false, ...props }`, or anything worked out from one.
-  `options.dense ? '2' : '4'` compiled to `p_4` whatever the caller passed; both arms' rules are written now, and the
-  call fails the compile as `dynamic`. The same holds for `||`, `??`, `&&`, `!`, `?.` and an `if`, and unary `+`, `-`,
-  `~` and `typeof` of such a value are guesses too. An object or array is truthy however much of it is known, but not
-  one read where a spread may have written over it, which may be `null` there.
+  `options.dense ? '2' : '4'` compiled to `p_4` whatever the caller passed; the call fails the compile as `dynamic` now.
+  The same holds for `||`, `??`, `&&`, `!`, `?.` and an `if`, and unary `+`, `-`, `~` and `typeof` of such a value are
+  guesses too. A spread the build evaluated that writes nothing — `undefined`, `null`, `false` — or one of several
+  objects whose keys it can read off the source, `...(c ? { size } : {})`, leaves every other key as known as it was. An
+  object or array is truthy however much of it is known, and not `null`, but not one read where a spread may have
+  written over it, which may be `null` there.
+- `token()` of a path the build only guessed, or could not wholly read, is not known: built from a default a spread may
+  write over, ``token(`colors.${o.tone}.300`)`` compiled to the default's variable whatever the caller passed, and a
+  path joined from a part not decided, `token(['colors', c, '500'].join('.'))`, to none.
+- A method of an object is not taken from a property a later spread may write over: `options.color()` of
+  `{ color: () => 'red.300', ...props }` compiled to red whatever `props` held.
 - `join` writes a `null` element as nothing, as it does a hole: `[1, null, 2].join('-')` is `1--2`, not `1-null-2`.
 - A property the prototype has is no longer read as `undefined`: `o.toString` and `[].map` are not known, and neither is
   `'toString' in o`. A string read by index gives its character, unless a space comes at or before it, which may have

@@ -456,6 +456,109 @@ describe('a choice on a value only guessed', () => {
   })
 })
 
+/**
+ * Beside a guess, what the build knows still decides. A spread it evaluated that writes nothing,
+ * or only keys its source says, left every other key a guess once a choice needed a decided value:
+ * `{ dense: false, ...o.overrides }` of an option not passed failed the build where 1.56.7 compiled
+ * it. And an object known in part is surely not `null`.
+ */
+describe('what the build knows beside a guess', () => {
+  const helper = (options: string, value: string) =>
+    `const box = (o = {}) => { const options = ${options}; return ${value} }\nexport const A = (p) => css(box(p))`
+
+  test.each([
+    [
+      'a spread of an option not passed',
+      "const box = (o = {}) => { const options = { dense: false, ...o.overrides }; return { padding: options.dense ? '2' : '4' } }\nexport const A = css(box())",
+      'p_4',
+    ],
+    [
+      'a spread of `null`',
+      "const extra = null\nconst box = () => { const options = { dense: false, ...extra }; return { padding: options.dense ? '2' : '4' } }\nexport const A = css(box())",
+      'p_4',
+    ],
+    [
+      'a spread of a guard that is false',
+      "const box = ({ compact = false } = {}) => { const options = { dense: false, ...(compact && { gap: '1' }) }; return { padding: options.dense ? '2' : '4' } }\nexport const A = css(box())",
+      'p_4',
+    ],
+    [
+      'a spread of a guard not decided',
+      helper("{ dense: false, ...(o.c && { gap: '1' }) }", "{ padding: options.dense ? '2' : '4' }"),
+      'p_4',
+    ],
+    [
+      'a spread of one of two objects',
+      helper("{ dense: false, ...(o.compact ? { size: 'sm' } : {}) }", "{ padding: options.dense ? '2' : '4' }"),
+      'p_4',
+    ],
+    [
+      'a spread of one of two objects, holding a value not known',
+      helper(
+        "{ variant: 'solid', ...(o.size ? { size: o.size } : {}) }",
+        "{ background: options.variant === 'solid' ? 'blue.500' : 'transparent' }",
+      ),
+      'bg_blue.500',
+    ],
+    [
+      '`!= null` of an object known in part',
+      "const options = { theme: { color: 'red.300', shadow: compute() } }\nconst f = () => (options.theme != null ? options.theme.color : 'blue.300')\nexport const A = css({ color: f() })",
+      'c_red.300',
+    ],
+    [
+      '`typeof` and `!== null` of an object known in part',
+      "const options = { theme: { color: 'red.300', shadow: compute() } }\nconst f = () => (typeof options.theme === 'object' && options.theme !== null ? options.theme.color : 'blue.300')\nexport const A = css({ color: f() })",
+      'c_red.300',
+    ],
+    // Written after the spread, the method is what the object holds.
+    [
+      'a method written after a spread',
+      "const box = (o) => { const options = { ...o, color: () => 'red.300' }; return { color: options.color() } }\nexport const A = (p) => css(box(p))",
+      'c_red.300',
+    ],
+  ])('%s', (_, body, className) => {
+    expect(foldOf(withImport(body))).toMatchObject({ classes: [className], skipped: [] })
+  })
+
+  // What a guess may hold decides nothing, wherever it is read.
+  test.each([
+    // A branch of the spread may write the key itself.
+    [
+      'a spread of one of two objects writing the key',
+      helper('{ dense: false, ...(o.c ? { dense: true } : {}) }', "{ padding: options.dense ? '2' : '4' }"),
+    ],
+    // `{ color: () => 'red.300', ...props }.color()` called the default whatever `props` held.
+    [
+      'a method a spread may replace',
+      "const box = (o) => { const options = { color: () => 'red.300', ...o }; return { color: options.color() } }\nexport const A = (p) => css(box(p))",
+    ],
+    // It may not be an array at all.
+    [
+      '`length` in an array a spread may replace',
+      helper('{ list: [], ...o }', "{ padding: 'length' in options.list ? '2' : '4' }"),
+    ],
+  ])('%s', (_, body) => {
+    expect(foldOf(withImport(body))).toMatchObject({ classes: [], skipped: ['dynamic'] })
+  })
+
+  // Not the path the runtime looks up: the default's token, or none at all.
+  test.each([
+    [
+      'a token path built from a default a spread may write over',
+      "const badge = (o) => { const options = { tone: 'red', ...o }; return { color: token(`colors.${options.tone}.300`) } }\nexport const A = (p) => css(badge(p))",
+    ],
+    [
+      'a token path joined from a part not decided',
+      "export const A = (p) => css({ color: token(['colors', p.c, '500'].join('.')) })",
+    ],
+  ])('%s', (_, body) => {
+    const { classes, skipped } = foldOf(`import { token } from 'styled-system/tokens'\n${withImport(body)}`)
+
+    expect(classes).toEqual([])
+    expect(skipped).toContain('dynamic')
+  })
+})
+
 // A recipe takes a `null` variant for an explicit miss and `undefined` for its default, so a hole
 // is never compiled as the one or the other: the selection is made where it runs.
 test('a hole selecting a recipe variant selects at runtime', () => {
@@ -481,6 +584,12 @@ describe('which keys an object has', () => {
     ['such a key after a spread the build cannot read', "'a' in o", 'const o = { ...x(), a: c ? 1 : 2 }', 'z_2'],
     ['such a key in a nested object', "'x' in o.a", 'const o = { a: { x: c ? 1 : 2 } }', 'z_2'],
     ['a key held before a spread the build cannot read', "'a' in o", 'const o = { a: 1, ...x() }', 'z_2'],
+    [
+      'a key held before a spread of one of two objects',
+      "'a' in o",
+      'const o = { a: 1, ...(c ? { b: 2 } : {}) }',
+      'z_2',
+    ],
     ['a key not held, with a `null` prototype', "'dark' in o", 'const o = { __proto__: null, zIndex: 1 }', 'z_1'],
     ['a key not held, with a number for a prototype', "'dark' in o", 'const o = { __proto__: 5, zIndex: 1 }', 'z_1'],
     // A spread writes over what the object holds and removes none of it, a guess's included.
