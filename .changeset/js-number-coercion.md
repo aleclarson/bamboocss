@@ -105,10 +105,12 @@ Read values in style expressions as JavaScript does, where the build used Rust's
 - A method of an object is not taken from a property a later spread may write over: `options.color()` of
   `{ color: () => 'red.300', ...props }` compiled to red whatever `props` held. The last property of its name is the one
   called, one a key computed to the name writes included, where 1.56.7 called the first of
-  `{ color: …, [KEYS.color]: … }`; one before a spread is called where the spread surely writes no such name — a
-  literal, an import or what a call returns that holds none, `null`, a binding declared without a value — and before a
-  key the build computes to another name, `[KEYS.size]`, ``[`size`]``, `[1]`. Past a spread or a key it cannot read, the
-  call fails the compile as `dynamic`, where 1.56.7 called the method before it.
+  `{ color: …, [KEYS.color]: … }`. One before a spread is called where the build knows the spread writes no such name —
+  a literal, an import or what a call returns holding none, a choice of them, `c && { … }`, `null`, a binding declared
+  without a value — known as any value it reads is, so a write it cannot see, from another module, through an alias or
+  by a function given the object, is not seen there either; and one before a key the build computes to another name,
+  `[KEYS.size]`, ``[`size`]``, `[1]`, unless the key holds whitespace, each run of which the build collapses. Past a
+  spread or a key it cannot read, the call fails the compile as `dynamic`, where 1.56.7 called the method before it.
 - A module's `var` declared again with a value is written there, as an assignment is: `var tone = a; var tone = b` was
   read as `a`, whether as a value, called or holding a method, and the call fails the compile as `dynamic` now — naming
   the write where `tone` is read or called. A function's body still reads such a `var` in the order it runs, but a

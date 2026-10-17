@@ -2155,7 +2155,11 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                             let value = self.evaluate(&property.value);
                             complete &= value.complete;
                             refusal = refusal.or(value.refusal.clone());
-                            unsure.retain(|written| *written != key);
+                            // Computed and holding whitespace, it may be another key than the one
+                            // read: the build collapses each run of it.
+                            if !(property.computed && key.contains(char::is_whitespace)) {
+                                unsure.retain(|written| *written != key);
+                            }
                             write_property(&mut output, &mut fragments, &mut partial, key, value);
                         }
                         ObjectPropertyKind::SpreadProperty(spread) => {
@@ -3395,7 +3399,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
     /// `const o = { a: { f: () => 1 } }` gives `() => 1` for `["a", "f"]`. Each step takes the last
     /// property of its name, as JavaScript does. Written after it, a spread or a computed key the
     /// walk cannot tell writes no such name ends the walk, and so does a shorthand, a getter or a
-    /// method of the name, or a step that is not an object literal: what is there is not written
+    /// setter of the name, or a step that is not an object literal: what is there is not written
     /// where the walk can see it.
     fn object_member_expression(
         &mut self,
@@ -3408,7 +3412,28 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         if !self.evaluating.insert(symbol) {
             return None;
         }
-        let found = self.member_expression_at(symbol, members);
+        // What it evaluates runs a level inside the call it resolves, under the limits a call is:
+        // a spread calling another object's method walks that one, and each walk evaluated every
+        // spread after the method again, so a chain of them took exponential time, or overflowed
+        // the stack. Walked at the top, it is a call of its own, which a limit gives up on whole.
+        let depth = self.project.call_depth.get();
+        let found = if depth >= MAX_CALL_DEPTH || self.project.abandoned.borrow().is_some() {
+            None
+        } else {
+            if depth == 0 {
+                self.project.call_count.set(0);
+                self.made.clear();
+            }
+            self.project.call_depth.set(depth + 1);
+            let found = self.member_expression_at(symbol, members);
+            self.project.call_depth.set(depth);
+            let abandoned = if depth == 0 {
+                self.project.abandoned.take().is_some()
+            } else {
+                self.project.abandoned.borrow().is_some()
+            };
+            found.filter(|_| !abandoned)
+        };
         self.evaluating.remove(&symbol);
         found
     }
@@ -3475,11 +3500,27 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             return property.key.static_name();
         }
         let expression = property.key.as_expression()?;
-        if let Expression::StringLiteral(literal) = expression.get_inner_expression() {
+        // As written: a string literal, or a binding of one nothing writes to.
+        let literal = match expression.get_inner_expression() {
+            Expression::StringLiteral(literal) => Some(literal),
+            Expression::Identifier(identifier) => identifier
+                .reference_id
+                .get()
+                .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+                .and_then(|symbol| self.unwritten_initializer(symbol))
+                .and_then(|initializer| match initializer.get_inner_expression() {
+                    Expression::StringLiteral(literal) => Some(literal),
+                    _ => None,
+                }),
+            _ => None,
+        };
+        if let Some(literal) = literal {
             return Some(Cow::Borrowed(literal.value.as_str()));
         }
-        let key = known_key(self.evaluate(expression))?;
-        Some(Cow::Owned(to_js_string(&key)))
+        // Evaluated, and holding whitespace, it may be another: the build collapses each run of it
+        // to one space.
+        let key = to_js_string(&known_key(self.evaluate(expression))?);
+        (!key.contains(char::is_whitespace)).then_some(Cow::Owned(key))
     }
 
     /// What `symbol` is bound to where nothing in the file writes to it after: its declarator's
@@ -3504,8 +3545,10 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
 
     /// Whether spreading `expression` surely writes no `member`: an object literal holding no such
     /// key, nor a spread or a key that could write it; `null`, `undefined`, a boolean or a number;
-    /// a binding of one of them nothing writes to; or anything else whose value the build knows
-    /// holds no such key among all it has (`surely_writes_no`) — an import, what a call returns.
+    /// a choice of them; a binding of one nothing writes to; or anything else whose value the build
+    /// knows holds no such key among all it has (`surely_writes_no`) — an import, what a call
+    /// returns. Known as any value is: a write the build cannot see, from another module, through
+    /// an alias or by a function the object is given, is not seen here either.
     fn spread_cannot_write(
         &mut self,
         expression: &'a Expression<'a>,
@@ -3530,6 +3573,16 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             | Expression::BooleanLiteral(_)
             | Expression::NumericLiteral(_) => true,
             Expression::Identifier(identifier) if identifier.name == "undefined" => true,
+            // Whichever branch: `c && { … }` spreads `c` where it is falsy, which writes nothing.
+            Expression::ConditionalExpression(conditional) => {
+                self.spread_cannot_write(&conditional.consequent, member, depth + 1)
+                    && self.spread_cannot_write(&conditional.alternate, member, depth + 1)
+            }
+            Expression::LogicalExpression(logical) => {
+                (logical.operator == LogicalOperator::And
+                    || self.spread_cannot_write(&logical.left, member, depth + 1))
+                    && self.spread_cannot_write(&logical.right, member, depth + 1)
+            }
             Expression::Identifier(identifier) => {
                 let initializer = identifier
                     .reference_id

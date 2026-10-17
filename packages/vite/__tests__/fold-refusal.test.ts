@@ -535,6 +535,28 @@ describe('a recursion with no end the build can see', () => {
     expect(refusal).toMatchObject({ kind: 'recursion', subject: 'calls', helper: 'tree' })
   })
 
+  // A method's walk evaluates the spreads after it, and a spread calling the next object's method
+  // walks that one: down a chain of them it took time doubling a level, or overflowed the stack.
+  // It is a call as far as the limits go.
+  const chain = (length: number, spreads: number) =>
+    [
+      `const a0 = { c: () => 'red.300', ${Array.from({ length: spreads }, () => '...a1.m()').join(', ')} }`,
+      ...Array.from({ length: length - 1 }, (_, index) => {
+        const next = index + 2 < length ? Array.from({ length: spreads }, () => `...a${index + 2}.m()`) : []
+        return `const a${index + 1} = { m: () => ({}), ${next.join(', ')} }`
+      }),
+      'export const A = css({ color: a0.c() })',
+    ].join('\n')
+  test.each([
+    ['branching', 22, 2],
+    ['deep', 6000, 1],
+  ])("down a %s chain of objects whose spreads call the next one's method, within the limits", (_, length, spreads) => {
+    const result = createFoldFixture().fold(withImport(chain(length, spreads)))
+
+    expect(result.folded).toEqual([])
+    expect(result.skipped.map((entry) => entry.reason)).toEqual(['dynamic'])
+  })
+
   test('branching within the depth, until the calls run out', () => {
     // A depth the build can read, and an end, but `2^15` calls to get there.
     const refusal = refusalOf(

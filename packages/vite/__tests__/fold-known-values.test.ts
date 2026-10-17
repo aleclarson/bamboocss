@@ -543,6 +543,28 @@ describe('what the build knows beside a guess', () => {
       "const KEYS = { size: 'size' }\nconst helpers = { color: () => 'red.300', [`size`]: 1, [1]: 2, [KEYS.size]: 3, ['si' + 'ze']: 4 }\nexport const A = css({ color: helpers.color() })",
       'c_red.300',
     ],
+    // A choice of objects, each without it, or a guard that is false where it gives no object.
+    [
+      'a method past a spread of one of two objects without it',
+      "const dark = { bg: () => '1' }\nconst light = { fg: () => '2' }\nconst f = (p) => { const helpers = { color: () => 'red.300', ...(p.dark ? dark : light) }; return helpers.color() }\nexport const A = (p) => css({ color: f(p) })",
+      'c_red.300',
+    ],
+    [
+      'a method past a guarded spread without it',
+      "const f = (p) => { const helpers = { color: () => 'red.300', ...(p.dense && { size: () => '2' }) }; return helpers.color() }\nexport const A = (p) => css({ color: f(p) })",
+      'c_red.300',
+    ],
+    // Keys as written: two spaces are two, in a literal or a binding of one.
+    [
+      'a method of a name holding whitespace, written again under a key bound to it',
+      "const k = 'a  b'\nconst helpers = { 'a  b': () => 'red.300', [k]: () => 'blue.300' }\nexport const A = css({ color: helpers['a  b']() })",
+      'c_blue.300',
+    ],
+    [
+      'a method past a key bound to a name holding other whitespace',
+      "const k = 'a  b'\nconst helpers = { 'a b': () => 'red.300', [k]: () => 'blue.300' }\nexport const A = css({ color: helpers['a b']() })",
+      'c_red.300',
+    ],
     // The last property of the name is the one called, as at runtime: 1.56.7 called the first.
     [
       'a method a later key computed to its name writes',
@@ -625,6 +647,20 @@ describe('what the build knows beside a guess', () => {
     [
       'a method past a spread calling one of an object whose own spread calls it',
       "const a = { color: () => 'red.300', ...b.more() }\nconst b = { more: () => ({}), ...a.color() }\nexport const A = css({ color: a.color() })",
+    ],
+    [
+      'a method past a guarded spread that may write it',
+      "const f = (p) => { const helpers = { color: () => 'red.300', ...(p.dark && { color: () => 'blue.300' }) }; return helpers.color() }\nexport const A = (p) => css({ color: f(p) })",
+    ],
+    // The build collapses each run of whitespace in a value, so a key it computes holding any may
+    // be another than it reads.
+    [
+      'a method past a key computed to a name holding whitespace',
+      "const helpers = { 'a b': () => 'red.300', [`a  b`]: () => 'blue.300' }\nexport const A = css({ color: helpers['a b']() })",
+    ],
+    [
+      'a spread of one of two objects, its key computed again holding whitespace',
+      "const box = (o) => ({ ...(o.c ? { '& span': { color: 'blue.300' } } : null), ['&  span']: { color: 'red.300' } })\nexport const A = (p) => css(box(p))",
     ],
     // Onto `null` or `undefined` it throws, whichever the choice gives.
     [
