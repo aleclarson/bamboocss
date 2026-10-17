@@ -1123,6 +1123,18 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     return required
   }
 
+  /** What the live outputs of every environment but `environment` pruned out of their sheets. */
+  const prunedOutside = (environment: string) => {
+    const pruned = new Set<string>()
+    for (const [other, slots] of liveOutputSlotsByEnvironment) {
+      if (other === environment) continue
+      for (const slot of slots.values()) {
+        for (const className of slot.prunedClasses ?? []) pruned.add(className)
+      }
+    }
+    return pruned
+  }
+
   /** Derive loss history from the stylesheet outputs which are still observable. */
   const rebuildLivePrunedClasses = () => {
     staticSession.prunedClasses.clear()
@@ -2330,6 +2342,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
         replayCachedTransformArtifacts(this)
 
         let currentWillEmitCss = false
+        let writesOwnSheet = false
         if (typeof this.getModuleIds === 'function') {
           // `load` writes the shared flag, but only the finished module graph can attribute it to
           // an environment. Keep that ownership so a later partial rebuild can preserve a client
@@ -2339,12 +2352,13 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
           // A sheet this environment is about to emit supersedes its previous generation. Old
           // prune history must not make a newly reachable class fail before generateBundle can
           // restore its rule. An SSR graph may load CSS while Vite deliberately suppresses its
-          // assets, so use Vite's resolved per-environment decision rather than the `ssr` flag —
-          // and what a previous build showed it writes all the same (`lateSheetEnvironments`).
-          currentWillEmitCss =
-            state.cssLoaded &&
-            ((this.environment?.config?.build?.emitAssets ?? defaultEmitAssets) ||
-              staticSession.lateSheetEnvironments.has(environment))
+          // assets, so use Vite's resolved per-environment decision rather than the `ssr` flag.
+          currentWillEmitCss = state.cssLoaded && (this.environment?.config?.build?.emitAssets ?? defaultEmitAssets)
+          // A sheet Vite writes all the same (`lateSheetEnvironments`) supersedes this
+          // environment's own, and no other: a class the client's sheet lost is still lost to the
+          // page that links it, whatever this one writes.
+          writesOwnSheet =
+            state.cssLoaded && !currentWillEmitCss && staticSession.lateSheetEnvironments.has(environment)
         }
 
         // This candidate is complete enough to judge, but is not published until every
@@ -2382,10 +2396,11 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
         // its output is what restores a rule this environment reached. The guard is for the runs that
         // have no finalization coming — an in-memory build, or one that never announced its
         // environments.
+        const pruned = writesOwnSheet ? prunedOutside(environment) : staticSession.prunedClasses
         const lost =
           currentWillEmitCss || staticSession.deferredSheets.length
             ? []
-            : [...staticSession.usedClasses].filter((className) => staticSession.prunedClasses.has(bare(className)))
+            : [...staticSession.usedClasses].filter((className) => pruned.has(bare(className)))
         if (lost.length) {
           throw new Error(
             `bamboocss: ${lost.length} class(es) in use as the ${JSON.stringify(environment)} environment finished ` +

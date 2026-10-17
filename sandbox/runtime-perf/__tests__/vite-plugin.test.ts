@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { logger } from '@bamboocss/logger'
 import { esc } from '@bamboocss/shared'
@@ -4875,6 +4875,100 @@ describe('an SSR bundle', () => {
 
     expect(css).toContain('--made-with-bamboo')
     expect(css).toContain('912.3px')
+  }, 120_000)
+})
+
+/**
+ * Before Vite 7.1.10, an SSR library writes its sheet after Vite's asset plugin has deleted what SSR
+ * does not emit. Vite 7 and 8 emit none, so a plugin stands in: it keeps the stylesheet module's CSS
+ * as Vite's CSS plugin leaves it, and emits it once the asset plugin has run, where the older Vite
+ * emits it. Unannounced builds sharing one plugin instance reach the guard without a watch.
+ */
+describe('a sheet Vite writes though SSR discards its assets', () => {
+  const lateSheet = (): VitePlugin => {
+    let sheet: string | undefined
+    return {
+      name: 'test:emit-sheet-late',
+      transform(code, id) {
+        if (id.split('?')[0] === '\0virtual:bamboo.css') sheet = code
+      },
+      generateBundle() {
+        if (sheet) this.emitFile({ type: 'asset', fileName: 'style.css', source: sheet })
+      },
+    }
+  }
+  const widths = { shared: '95.401px', later: '95.402px' }
+  const files = {
+    shared: join(cwd, 'src/__late-shared.tsx'),
+    later: join(cwd, 'src/__late-later.tsx'),
+    client: join(cwd, 'src/__late-client.tsx'),
+    first: join(cwd, 'src/__late-first.tsx'),
+    second: join(cwd, 'src/__late-second.tsx'),
+  }
+  const configPath = join(cwd, '__late.bamboo.config.ts')
+  const outDirs = { client: join(cwd, '__late-client-out'), ssr: join(cwd, '__late-ssr-out') }
+
+  beforeEach(() => {
+    const entry = (imports: string) => `import 'virtual:bamboo.css'\n${imports}`
+    writeFileSync(
+      files.shared,
+      `import { css } from '../styled-system/css'\nexport const shared = css({ width: '[${widths.shared}]' })\n`,
+    )
+    writeFileSync(
+      files.later,
+      `import { css } from '../styled-system/css'\nexport const later = css({ width: '[${widths.later}]' })\n`,
+    )
+    writeFileSync(files.client, entry(`export { shared } from './__late-shared'\n`))
+    writeFileSync(files.first, entry(`export { shared } from './__late-shared'\n`))
+    writeFileSync(
+      files.second,
+      entry(`export { shared } from './__late-shared'\nexport { later } from './__late-later'\n`),
+    )
+    writeIsolatedBambooConfig(
+      configPath,
+      Object.values(files).map((file) => `./src/${basename(file)}`),
+    )
+  })
+  afterEach(() => {
+    for (const file of [...Object.values(files), configPath]) rmSync(file, { force: true })
+    for (const directory of Object.values(outDirs)) rmSync(directory, { force: true, recursive: true })
+  })
+
+  const buildWith = (plugins: VitePlugin[], entry: string, ssr: boolean) =>
+    build({
+      root: cwd,
+      configFile: false,
+      logLevel: 'silent',
+      css: { postcss: { plugins: [] } },
+      plugins,
+      build: {
+        outDir: ssr ? outDirs.ssr : outDirs.client,
+        emptyOutDir: true,
+        ...(ssr ? { ssr: entry } : {}),
+        rollupOptions: { ...(ssr ? {} : { input: entry }), external: [/^react/] },
+      },
+    })
+
+  test('a rebuild is not refused for a class its own last sheet pruned', async () => {
+    const bamboo = bamboocss({ cwd, configPath, reportSummary: false })
+    await buildWith([...bamboo, lateSheet()], files.first, true)
+    expect(readOutputFiles(outDirs.ssr, '.css')).toContain(widths.shared)
+    expect(readOutputFiles(outDirs.ssr, '.css')).not.toContain(widths.later)
+
+    await buildWith([...bamboo, lateSheet()], files.second, true)
+    expect(readOutputFiles(outDirs.ssr, '.css')).toContain(widths.later)
+  }, 120_000)
+
+  // Whatever this environment writes, the page links the client's sheet, which does not hold it.
+  test('a rebuild is still refused for a class the client sheet pruned', async () => {
+    const bamboo = bamboocss({ cwd, configPath, reportSummary: false })
+    await buildWith([...bamboo], files.client, false)
+    await buildWith([...bamboo, lateSheet()], files.first, true)
+    expect(readOutputFiles(outDirs.ssr, '.css')).toContain(widths.shared)
+
+    await expect(buildWith([...bamboo, lateSheet()], files.second, true)).rejects.toThrow(
+      'already pruned out of a stylesheet emitted by an earlier one',
+    )
   }, 120_000)
 })
 
