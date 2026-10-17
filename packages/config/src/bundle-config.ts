@@ -180,46 +180,54 @@ function writableOf(value: any) {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return value
   if (writtenKeys(value).every((key) => assignable(value, key))) return value
   const copy = {}
+  const define = (key: PropertyKey, enumerable: boolean, enumerableWritten: boolean) =>
+    Object.defineProperty(copy, key, {
+      get: () => Reflect.get(value, key),
+      set: (next: unknown) =>
+        Object.defineProperty(copy, key, {
+          value: next,
+          writable: true,
+          enumerable: enumerableWritten,
+          configurable: true,
+        }),
+      enumerable,
+      configurable: true,
+    })
   const seen = new Set<PropertyKey>()
+  // Keys a proxy's `ownKeys` lists and gives no descriptor for: no property, so they hide none it
+  // inherits, nor does `for…in` read them, but a read by name asks its `get`, as for any key.
+  const listed = new Set<PropertyKey>()
   for (let from = value; from !== null && from !== Object.prototype; from = Object.getPrototypeOf(from)) {
     for (const key of Reflect.ownKeys(from)) {
       // One it holds hides one of the same name it inherits.
       if (seen.has(key)) continue
-      seen.add(key)
-      // A proxy may list a key it gives no descriptor for: nothing to copy.
       const descriptor = Object.getOwnPropertyDescriptor(from, key)
-      if (!descriptor) continue
-      const { enumerable } = descriptor
-      const accessor = Boolean(descriptor.get || descriptor.set)
-      Object.defineProperty(copy, key, {
-        get: () => Reflect.get(value, key),
-        set: (next: unknown) =>
-          Object.defineProperty(copy, key, {
-            value: next,
-            writable: true,
-            enumerable: accessor || enumerable,
-            configurable: true,
-          }),
-        enumerable,
-        configurable: true,
-      })
+      if (!descriptor) {
+        listed.add(key)
+        continue
+      }
+      seen.add(key)
+      define(key, Boolean(descriptor.enumerable), Boolean(descriptor.get || descriptor.set || descriptor.enumerable))
     }
   }
+  // Written, it is the property an assignment makes through the proxy's `set`, which `for…in` reads.
+  for (const key of listed) if (!seen.has(key)) define(key, false, true)
   return copy
 }
 
 /**
  * Write one of the loader's defaults into the config, failing where the config refuses it — a
- * `Proxy` whose `set` returns false — as an assignment does in an ES module. The CommonJS build the
- * CLI loads is not strict, where the refusal was dropped in silence and the config loaded without
- * the default.
+ * `Proxy` whose trap returns false, and does not hold the value after — as an assignment does in an
+ * ES module. The loader's CommonJS build is not strict, where the refusal was dropped in silence and
+ * the config loaded without the default. A trap that takes the write and returns nothing refuses
+ * nothing, though an assignment in an ES module throws for it.
  */
 export function writeDefault(config: Record<PropertyKey, any>, key: string, value: unknown) {
-  if (!Reflect.set(config, key, value)) {
+  if (!Reflect.set(config, key, value) && !Object.is(config[key], value)) {
     throw new BambooError(
       'CONFIG_ERROR',
-      `💥 The config refused \`${key}\`, which the loader writes into it: a \`Proxy\` whose \`set\` ` +
-        `returns false does. Let it take the write, or export a plain object.`,
+      `💥 The config refused \`${key}\`, which the loader writes into it: a \`Proxy\` whose trap ` +
+        `returns false for the write, without taking it, does. Let it take the write, or export a plain object.`,
     )
   }
 }

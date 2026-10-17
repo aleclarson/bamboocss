@@ -38,17 +38,22 @@ modules.
   module written in `presets`, `import('./preset')`, is read as the module, as one a config exports is.
 - A config the loader cannot write its defaults into — frozen, holding a key it writes as a getter, or inheriting one
   read-only, or bundled to CommonJS and exporting `presets` — is copied first, so it loads with them. Where the loader
-  runs as an ES module, as under the Vite plugin, such a config failed with a `TypeError`. The CLI loads the CommonJS
-  build, which is not strict, so there the writes were dropped in silence and the config loaded without its defaults —
-  `outdir`, `validation` and the default presets, `@bamboocss/preset-base` and `@bamboocss/preset-bamboo` — so what it
-  generates changes now that it has them. The copy holds every key the config has, its own and those it inherits, each
-  as enumerable as it was, and reads each only when the copy's key is read, as the config would: a getter's value, or
-  what a proxy's `get` answers for a key its `ownKeys` lists; one only its `get` answers is not held. A key a class
-  defines through a getter, such as `outdir`, is still left out where the merge reads keys with `for…in`, as it always
-  was. Any other config is read, and written into, as it was. A `Proxy` refusing one of those writes now fails the load
-  naming the key, under the CLI as under Vite, where the CLI went on without it; and a frozen token holding a `value`
-  beside tokens nested in it still fails, as the merge writes a `DEFAULT` into it. A preset is not copied for this, so a
-  hook is handed the object it exports.
+  runs as an ES module, as under Vite with a config Vite loads as one (`"type": "module"`, or a `vite.config.mts`), such
+  a config failed with a `TypeError`. As CommonJS, under the CLI and under Vite otherwise, the loader is not strict, and
+  each default it could not write was dropped in silence: a config that cannot be extended, such as a frozen one, loaded
+  without whichever of `outdir`, `validation` and the default presets, `@bamboocss/preset-base` and
+  `@bamboocss/preset-bamboo`, it did not hold, as did one whose getter, or read-only inherited key, read as nothing for
+  one of them, and what those generate changes now that they have the defaults. Any other kept what it held; only a
+  preset it names by its package now maps to the copy the loader bundles. The copy holds every key the config has, its
+  own and those it inherits, each as enumerable as it was, and reads each only when the copy's key is read, as the
+  config would: a getter's value, or what a proxy's `get` answers for a key its `ownKeys` lists, which with no
+  descriptor is a key `for…in` does not read and that hides none inherited; one only its `get` answers is not held. A
+  key a class defines through a getter, such as `outdir`, is still left out where the merge reads keys with `for…in`, as
+  it always was. Any other config is read, and written into, as it was. A `Proxy` refusing one of those writes, its trap
+  returning false without taking it, now fails the load naming the key under either build, where CommonJS went on
+  without it; one whose trap takes the write and returns nothing loads, where as an ES module it failed. A frozen token
+  holding a `value` beside tokens nested in it still fails, as the merge writes a `DEFAULT` into it, with an error that
+  does not name the token. A preset is not copied for this, so a hook is handed the object it exports.
 - An ES module's default export, or a promise it exports, holding a `default` key beside keys of its own is kept whole,
   where 1.56.7 read it as that key; one holding nothing but `default`, or nothing but getters beside it, is read as its
   `default`, as it was. A CommonJS module's `default` is read, as it was, and so is that of a package compiled from an

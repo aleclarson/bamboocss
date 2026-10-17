@@ -774,16 +774,55 @@ describe('load config', () => {
       expect(config.preflight).toBe(true)
     })
 
+    // Listed with no descriptor, a key is no property: it hides none the config inherits, and a read
+    // by name asks the proxy's `get`. The copy wrote `outdir`'s default over the inherited one, and
+    // lost what `get` answered for `preflight`.
+    test.each([
+      [
+        'an inherited one of its name',
+        `Object.assign(Object.create(Object.freeze({ presets: [], outdir: 'custom-out' })), { preflight: true })`,
+        `{ ownKeys: (target) => [...Reflect.ownKeys(target), 'outdir'] }`,
+        { outdir: 'custom-out', preflight: true },
+      ],
+      [
+        "what the proxy's `get` answers for it",
+        `Object.create(Object.freeze({ presets: [] }))`,
+        `{ ownKeys: (target) => [...Reflect.ownKeys(target), 'preflight'], get: (target, key, receiver) => (key === 'preflight' ? true : Reflect.get(target, key, receiver)) }`,
+        { outdir: 'styled-system', preflight: true },
+      ],
+    ])('a copied proxy listing a key it has no descriptor for keeps %s', async (_, target, handler, expected) => {
+      const root = project({ 'bamboo.config.ts': `export default new Proxy(${target}, ${handler})` })
+
+      const { config } = await loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })
+
+      expect(config).toMatchObject(expected)
+    })
+
     // A write it refuses fails the load, naming the key, wherever it runs: the CLI's CommonJS build
     // is not strict, and dropped the write in silence, so the config loaded without its presets.
-    test('a proxy refusing a write the loader makes fails the load, naming the key', async () => {
+    test.each([
+      ['its `set`', '{ set: () => false }'],
+      ['its `defineProperty`', '{ defineProperty: () => false }'],
+    ])('a proxy refusing a write the loader makes through %s fails the load, naming the key', async (_, handler) => {
       const root = project({
-        'bamboo.config.ts': `export default new Proxy({ outdir: 'styled-system', validation: 'warn', include: [] }, { set: () => false })`,
+        'bamboo.config.ts': `export default new Proxy({ outdir: 'styled-system', validation: 'warn', include: [] }, ${handler})`,
       })
 
       await expect(loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })).rejects.toThrow(
         'The config refused `presets`',
       )
+    })
+
+    // Its trap took the write: what it returns is not what the config holds.
+    test('a proxy taking the writes the loader makes and returning nothing loads with them', async () => {
+      const root = project({
+        'bamboo.config.ts': `export default new Proxy({ include: [] }, { set(target, key, value) { target[key] = value } })`,
+      })
+
+      const { config } = await loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })
+
+      expect(config).toMatchObject({ outdir: 'styled-system', validation: 'warn' })
+      expect(config.presets?.length).toBeGreaterThan(0)
     })
 
     test('a getter for `presets` is read, and written over', async () => {
