@@ -2053,6 +2053,9 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 let mut refusal = None;
                 // Started by the first write that is not known; until then every property is.
                 let mut partial: Option<Partial> = None;
+                // What a spread of one of several objects may have written, each until a later
+                // write says what it holds whichever branch it was (`spread_keys_written`).
+                let mut unsure: Vec<String> = Vec::new();
                 for property in &object.properties {
                     match property {
                         ObjectPropertyKind::ObjectProperty(property) => {
@@ -2111,12 +2114,29 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                             let value = self.evaluate(&property.value);
                             complete &= value.complete;
                             refusal = refusal.or(value.refusal.clone());
+                            unsure.retain(|written| *written != key);
                             write_property(&mut output, &mut fragments, &mut partial, key, value);
                         }
                         ObjectPropertyKind::SpreadProperty(spread) => {
                             let value = self.evaluate(&spread.argument);
                             complete &= value.complete;
                             refusal = refusal.or(value.refusal.clone());
+                            // Wholly known, it writes each of its keys, those it holds as
+                            // `undefined` or one of several values too, whatever an earlier
+                            // spread did.
+                            if value.complete
+                                && !unsure.is_empty()
+                                && let Some(serde_json::Value::Object(values)) = &value.value
+                            {
+                                let cleared = value.partial.as_ref().map(|known| &known.undefined);
+                                let undecided: HashSet<&String> =
+                                    condition_keys(&value.conditions).collect();
+                                unsure.retain(|written| {
+                                    !values.contains_key(written)
+                                        && !undecided.contains(written)
+                                        && cleared.is_none_or(|cleared| !cleared.contains(written))
+                                });
+                            }
                             // Not one object, a choice of objects whose source says their keys
                             // writes those and nothing else.
                             if !matches!(value.value, Some(serde_json::Value::Object(_)))
@@ -2127,10 +2147,14 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                                     &mut output,
                                     &mut fragments,
                                     &mut partial,
-                                    &mut complete,
                                     &keys,
                                     value.conditions,
                                 );
+                                for key in keys {
+                                    if !unsure.contains(&key) {
+                                        unsure.push(key);
+                                    }
+                                }
                                 continue;
                             }
                             spread_value(
@@ -2143,6 +2167,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                         }
                     }
                 }
+                complete &= unsure.is_empty();
                 EvalResult {
                     value: Some(output.into()),
                     conditions: fragments.list,
@@ -3217,11 +3242,15 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         if global_callee_path(&call.callee).as_deref()
             == Some(&["Object".to_string(), "assign".to_string()][..])
         {
-            // Onto `null` or `undefined` it throws, and the call gives nothing.
+            // Onto `null` or `undefined` it throws, and the call gives nothing — and so it may onto
+            // one of several values, any of which may be either where nothing says so: a branch
+            // giving `undefined` leaves no value of its own, and one giving `null` is skipped as a
+            // source that writes nothing is.
             if arguments.first().is_none_or(|target| {
                 target.nullish
                     || target.is_undefined()
                     || (target.complete && target.value == Some(serde_json::Value::Null))
+                    || (target.value.is_none() && !target.conditions.is_empty())
             }) {
                 return EvalResult::unknown();
             }
@@ -3293,11 +3322,29 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
 
     /// The source expression at `symbol.a.b`, following object-literal initializers only.
     ///
-    /// `const o = { a: { f: () => 1 } }` gives `() => 1` for `["a", "f"]`. A spread, a
-    /// computed key, a shorthand or a non-literal anywhere on the path ends the walk, since the
-    /// value there is no longer written in this file where the walk can see it.
+    /// `const o = { a: { f: () => 1 } }` gives `() => 1` for `["a", "f"]`. Each step takes the last
+    /// property of its name, as JavaScript does. Written after it, a spread or a computed key the
+    /// walk cannot tell writes no such name ends the walk, and so does a shorthand, a getter or a
+    /// method of the name, or a step that is not an object literal: what is there is not written
+    /// where the walk can see it.
     fn object_member_expression(
-        &self,
+        &mut self,
+        symbol: SymbolId,
+        members: &[String],
+    ) -> Option<&'a Expression<'a>> {
+        // Read while its initializer runs, it is not there yet. Nor is it to what the walk
+        // evaluates of a spread or a key, which runs as the initializer does, so one reading it
+        // back does not walk it again — `{ color, ...helpers.more() }` did, with no end.
+        if !self.evaluating.insert(symbol) {
+            return None;
+        }
+        let found = self.member_expression_at(symbol, members);
+        self.evaluating.remove(&symbol);
+        found
+    }
+
+    fn member_expression_at(
+        &mut self,
         symbol: SymbolId,
         members: &[String],
     ) -> Option<&'a Expression<'a>> {
@@ -3345,30 +3392,21 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         Some(current)
     }
 
-    /// The name a property is written under, where it can be read without running anything: its
-    /// own, or a key computed from a string literal or a binding of one nothing writes to.
+    /// The name a property is written under: its own, or a key it computes, where the build knows
+    /// it, converted as any key is — `[KEYS.size]`, `` [`size`] ``, `[1]`.
     fn property_name(
-        &self,
+        &mut self,
         property: &'a oxc_ast::ast::ObjectProperty<'a>,
     ) -> Option<Cow<'a, str>> {
         if !property.computed {
             return property.key.static_name();
         }
         let expression = property.key.as_expression()?;
-        match expression.get_inner_expression() {
-            Expression::StringLiteral(literal) => Some(Cow::Borrowed(literal.value.as_str())),
-            Expression::Identifier(identifier) => {
-                let reference = identifier.reference_id.get()?;
-                let symbol = self.scoping.get_reference(reference).symbol_id()?;
-                match self.unwritten_initializer(symbol)?.get_inner_expression() {
-                    Expression::StringLiteral(literal) => {
-                        Some(Cow::Borrowed(literal.value.as_str()))
-                    }
-                    _ => None,
-                }
-            }
-            _ => None,
+        if let Expression::StringLiteral(literal) = expression.get_inner_expression() {
+            return Some(Cow::Borrowed(literal.value.as_str()));
         }
+        let key = known_key(self.evaluate(expression))?;
+        Some(Cow::Owned(to_js_string(&key)))
     }
 
     /// What `symbol` is bound to where nothing in the file writes to it after: its declarator's
@@ -3393,8 +3431,14 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
 
     /// Whether spreading `expression` surely writes no `member`: an object literal holding no such
     /// key, nor a spread or a key that could write it; `null`, `undefined`, a boolean or a number;
-    /// or a binding of one of them nothing writes to.
-    fn spread_cannot_write(&self, expression: &'a Expression<'a>, member: &str, depth: u8) -> bool {
+    /// a binding of one of them nothing writes to; or anything else whose value the build knows
+    /// holds no such key among all it has (`surely_writes_no`) — an import, what a call returns.
+    fn spread_cannot_write(
+        &mut self,
+        expression: &'a Expression<'a>,
+        member: &str,
+        depth: u8,
+    ) -> bool {
         if depth > 8 {
             return false;
         }
@@ -3413,15 +3457,18 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             | Expression::BooleanLiteral(_)
             | Expression::NumericLiteral(_) => true,
             Expression::Identifier(identifier) if identifier.name == "undefined" => true,
-            Expression::Identifier(identifier) => identifier
-                .reference_id
-                .get()
-                .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
-                .and_then(|symbol| self.unwritten_initializer(symbol))
-                .is_some_and(|initializer| {
-                    self.spread_cannot_write(initializer, member, depth + 1)
-                }),
-            _ => false,
+            Expression::Identifier(identifier) => {
+                let initializer = identifier
+                    .reference_id
+                    .get()
+                    .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+                    .and_then(|symbol| self.unwritten_initializer(symbol));
+                match initializer {
+                    Some(initializer) => self.spread_cannot_write(initializer, member, depth + 1),
+                    None => surely_writes_no(&self.evaluate(expression), member),
+                }
+            }
+            _ => surely_writes_no(&self.evaluate(expression), member),
         }
     }
 
@@ -4530,6 +4577,28 @@ fn writes_nothing(value: &EvalResult) -> bool {
         && value.conditions.iter().all(nothing)
 }
 
+/// Whether a spread of `value` surely writes no `member`: nothing at all (`writes_nothing`), or an
+/// object whose every key the build knows, none of them `member` — not in its value, among the
+/// values it could not decide between, nor held with a value it could not read or as `undefined`.
+fn surely_writes_no(value: &EvalResult, member: &str) -> bool {
+    if value.refusal.is_some() {
+        return false;
+    }
+    if writes_nothing(value) {
+        return true;
+    }
+    let Some(serde_json::Value::Object(object)) = &value.value else {
+        return false;
+    };
+    let known = value.partial.as_deref();
+    (value.complete || known.is_some_and(|known| !known.open))
+        && !object.contains_key(member)
+        && !condition_keys(&value.conditions).any(|key| key == member)
+        && known.is_none_or(|known| {
+            !known.unsettled.contains(member) && !known.undefined.contains(member)
+        })
+}
+
 /// The keys a spread of `expression` may write, where its source says them all: an object literal
 /// with neither a spread nor a key it computes, or a value that writes none — `null`, `undefined`,
 /// a boolean, a number — or a choice between them, `c ? { size } : {}`, or `c && { size }`, whose
@@ -4567,22 +4636,21 @@ fn spread_keys(expression: &Expression<'_>) -> Option<Vec<String>> {
 /// other key is as known as it was — `{ variant: 'solid', ...(c ? { size } : {}) }` holds
 /// `variant` whichever it is.
 ///
-/// The object is not known as a whole after it: a branch may write `undefined`, which its value
-/// leaves out, or be one the build decided away, which it never evaluated, so its fragments do not
-/// say every key it writes, and the fold took the object for what remained. What a key held before
-/// stays one of what it may hold, beside what each branch writes, for the rules of both.
+/// The object is not known as a whole after it, until each of `keys` is written again: a branch
+/// may write `undefined`, which its value leaves out, or be one the build decided away, which it
+/// never evaluated, so its fragments do not say every key it writes, and the fold took the object
+/// for what remained. What a key held before stays one of what it may hold, beside what each branch
+/// writes, for the rules of both.
 fn spread_keys_written(
     output: &mut serde_json::Map<String, serde_json::Value>,
     fragments: &mut Fragments,
     partial: &mut Option<Partial>,
-    complete: &mut bool,
     keys: &[String],
     conditions: Vec<serde_json::Value>,
 ) {
     if keys.is_empty() {
         return;
     }
-    *complete = false;
     for key in keys {
         if let Some(value) = output.shift_remove(key) {
             fragments.push(key, value);

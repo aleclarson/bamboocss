@@ -527,14 +527,57 @@ describe('what the build knows beside a guess', () => {
       "const k = 'size'\nconst helpers = { color: () => 'red.300', [k]: 1 }\nexport const A = css({ color: helpers.color() })",
       'c_red.300',
     ],
+    // What the build reads off a spread's value, or a key's: they write no such name.
+    [
+      'a method past a spread of what a call returns without it',
+      "const make = () => ({ size: () => '4' })\nconst helpers = { color: () => 'red.300', ...make() }\nexport const A = css({ color: helpers.color() })",
+      'c_red.300',
+    ],
+    [
+      'a method past a spread of a binding declared without a value',
+      "let shared\nconst helpers = { color: () => 'red.300', ...shared }\nexport const A = css({ color: helpers.color() })",
+      'c_red.300',
+    ],
+    [
+      'a method past keys computed otherwise',
+      "const KEYS = { size: 'size' }\nconst helpers = { color: () => 'red.300', [`size`]: 1, [1]: 2, [KEYS.size]: 3, ['si' + 'ze']: 4 }\nexport const A = css({ color: helpers.color() })",
+      'c_red.300',
+    ],
+    // The last property of the name is the one called, as at runtime: 1.56.7 called the first.
+    [
+      'a method a later key computed to its name writes',
+      "const KEYS = { color: 'color' }\nconst helpers = { color: () => 'red.300', [KEYS.color]: () => 'blue.300' }\nexport const A = css({ color: helpers.color() })",
+      'c_blue.300',
+    ],
     // Whichever branch, nothing is written: `rtl` is false.
     [
       'a spread of one of two values neither writing a key',
       "const rtl = false\nconst tab = (o) => ({ borderLeft: '1px solid', ...(o.selected ? (rtl ? { borderLeft: 'none' } : null) : null) })\nexport const A = (p) => css(tab(p))",
       'bd-l_1px_solid',
     ],
+    // Every key the spread may write is written again: what it wrote is gone whichever it was.
+    [
+      'a spread of one of two objects, its key written again',
+      "const box = (o) => ({ ...(o.c ? { color: 'blue.300' } : null), color: 'red.300' })\nexport const A = (p) => css(box(p))",
+      'c_red.300',
+    ],
+    [
+      'a spread of one of two objects, its key spread over',
+      "const box = (o) => ({ ...(o.c ? { color: 'blue.300' } : null), ...{ color: 'red.300' } })\nexport const A = (p) => css(box(p))",
+      'c_red.300',
+    ],
   ])('%s', (_, body, className) => {
     expect(foldOf(withImport(body))).toMatchObject({ classes: [className], skipped: [] })
+  })
+
+  // An import's value says which keys it holds, as a literal's source does.
+  test.each([
+    ['without it', `export const shared = { size: () => '4' }\n`, ['c_red.300'], []],
+    ['holding it', `export const shared = { color: () => 'blue.300' }\n`, [], ['dynamic']],
+  ])('a method past a spread of an import %s', (_, shared, classes, skipped) => {
+    const body = `import { shared } from '../shared'\nconst helpers = { color: () => 'red.300', ...shared }\nexport const A = css({ color: helpers.color() })`
+
+    expect(foldOf(withImport(body), { 'app/shared.ts': shared })).toMatchObject({ classes, skipped })
   })
 
   // What a guess may hold decides nothing, wherever it is read.
@@ -560,9 +603,37 @@ describe('what the build knows beside a guess', () => {
       'a spread of one of two objects, one writing `undefined`',
       "const button = (o) => ({ bg: 'blue.500', ...(o.ghost ? { bg: undefined, borderWidth: '1px' } : null), borderWidth: '0' })\nexport const A = (p) => css(button(p))",
     ],
+    // `bg` is written again, and `zIndex` may be written in a branch the build decided away.
     [
       'a spread of one of two values, holding an object decided away',
-      'const F = false\nconst box = (o) => ({ zIndex: o.c ? 1 : 2, ...(o.x ? (F ? { zIndex: 3 } : null) : null) })\nexport const A = (p) => css(box(p))',
+      "const F = false\nconst box = (o) => ({ zIndex: o.c ? 1 : 2, ...(o.x ? (F ? { zIndex: 3 } : { bg: 'blue.500' }) : null), bg: 'red.500' })\nexport const A = (p) => css(box(p))",
+    ],
+    [
+      'a spread of one of two objects, a key of it not written again',
+      "const box = (o) => ({ ...(o.c ? { color: 'blue.300', bg: 'blue.500' } : null), color: 'red.300' })\nexport const A = (p) => css(box(p))",
+    ],
+    // Read in its own initializer, the object is not there yet, and the walk for the method
+    // evaluated the spread or key reading it again, and again, until the stack overflowed.
+    [
+      'a method past a spread its own initializer calls a method of',
+      "const helpers = { color: () => 'red.300', ...helpers.more() }\nexport const A = css({ color: helpers.color() })",
+    ],
+    [
+      'a method past a key its own initializer computes from a method of',
+      "const helpers = { color: () => 'red.300', [helpers.key()]: 1 }\nexport const A = css({ color: helpers.color() })",
+    ],
+    [
+      'a method past a spread calling one of an object whose own spread calls it',
+      "const a = { color: () => 'red.300', ...b.more() }\nconst b = { more: () => ({}), ...a.color() }\nexport const A = css({ color: a.color() })",
+    ],
+    // Onto `null` or `undefined` it throws, whichever the choice gives.
+    [
+      '`Object.assign` onto one of `null` and `undefined`',
+      "const f = (p) => Object.assign(p.x ? null : undefined, { color: 'red.300' })\nexport const A = (p) => css(f(p))",
+    ],
+    [
+      '`Object.assign` onto one of `null` and a number',
+      "const f = (p) => Object.assign(p.x ? null : 0, { color: 'red.300' })\nexport const A = (p) => css(f(p))",
     ],
     [
       'an object holding such a spread, spread again',
