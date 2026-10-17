@@ -145,8 +145,11 @@ export async function settle(value: any) {
   }
 }
 
-/** What the loader writes into a config: `outdir` and `validation` where it has none, and `presets`. */
-const WRITTEN_KEYS = ['outdir', 'validation', 'presets']
+/**
+ * What the loader writes into `config`: `outdir` and `validation` where it holds none, as read —
+ * through a getter, if it is one — and `presets`, always.
+ */
+const writtenKeys = (config: any) => [...['outdir', 'validation'].filter((key) => config[key] == null), 'presets']
 
 /**
  * Whether `object[key] = value` would succeed, as assignment decides it: through a setter, into a
@@ -167,12 +170,13 @@ function assignable(object: object, key: string) {
  * The config, as an object the loader can write its defaults into: itself, unless a key it writes
  * cannot be — the config frozen, the key a getter, or read-only where it is inherited — and then a
  * copy of every key it has, its own and those it inherits, each as enumerable as it was, so that
- * `for…in` reads the keys it did and a read by name the rest. A getter is read when the copy's key
- * is, as it would have been on the config, and a write replaces it.
+ * `for…in` reads the keys it did and a read by name the rest. Each is read as the config reads it,
+ * a getter when the copy's key is, and a write over a getter is the property an assignment would
+ * have made, which `for…in` reads: a class's `get outdir()` dropped the default written over it.
  */
 function writableOf(value: any) {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return value
-  if (WRITTEN_KEYS.every((key) => assignable(value, key))) return value
+  if (writtenKeys(value).every((key) => assignable(value, key))) return value
   const copy = {}
   const seen = new Set<PropertyKey>()
   for (let from = value; from !== null && from !== Object.prototype; from = Object.getPrototypeOf(from)) {
@@ -182,17 +186,22 @@ function writableOf(value: any) {
       seen.add(key)
       const descriptor = Object.getOwnPropertyDescriptor(from, key)!
       const { enumerable } = descriptor
-      const define = (next: unknown) =>
-        Object.defineProperty(copy, key, { value: next, writable: true, enumerable, configurable: true })
       if (descriptor.get || descriptor.set) {
         Object.defineProperty(copy, key, {
           get: () => Reflect.get(value, key),
-          set: define,
+          set: (next: unknown) =>
+            Object.defineProperty(copy, key, { value: next, writable: true, enumerable: true, configurable: true }),
           enumerable,
           configurable: true,
         })
       } else {
-        define(descriptor.value)
+        // Read as the config reads it, a proxy's `get` included.
+        Object.defineProperty(copy, key, {
+          value: Reflect.get(value, key),
+          writable: true,
+          enumerable,
+          configurable: true,
+        })
       }
     }
   }

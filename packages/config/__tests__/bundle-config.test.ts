@@ -576,6 +576,22 @@ describe('load config', () => {
     expect((globalThis as any).__bambooConfigObject.outdir).toBe('styled-system')
   })
 
+  // `outdir` held through a getter is not written, so nothing the loader writes needs a copy.
+  test('a config holding `outdir` through a getter is not copied for it', async () => {
+    const root = project({
+      'bamboo.config.ts': [
+        `const config: any = { presets: [], get outdir() { return 'out' } }`,
+        `;(globalThis as any).__bambooConfigObject = config`,
+        `export default config`,
+      ].join('\n'),
+    })
+
+    const { config } = await bundleConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })
+
+    expect(config).toBe((globalThis as any).__bambooConfigObject)
+    expect(config.outdir).toBe('out')
+  })
+
   // A function or `null` was spread into `{}` or `{ default: null }`, which passed for a config
   // with nothing in it.
   test.each([
@@ -680,6 +696,16 @@ describe('load config', () => {
           'bamboo.config.ts': `export default Object.freeze(new (class { presets = []; preflight = true; get legacy(): never { throw new Error('legacy getter read') } })())`,
         },
       ],
+      // Read as the config reads it, a proxy's `get` included, which the copy must keep.
+      [
+        'a proxy whose `get` answers for a key it holds, copied',
+        {
+          'bamboo.config.ts': [
+            `const held = Object.assign(Object.create(Object.freeze({ presets: [] })), { preflight: false })`,
+            `export default new Proxy(held, { get: (target, key, receiver) => (key === 'preflight' ? true : Reflect.get(target, key, receiver)) })`,
+          ].join('\n'),
+        },
+      ],
       [
         'plugins defined as not enumerable',
         {
@@ -708,6 +734,19 @@ describe('load config', () => {
 
       expect(config.preflight).toBe(true)
       expect(config).not.toHaveProperty('default')
+    })
+
+    // Written as an assignment would have written it, which the merge reads: a class's getter was
+    // written over by a key `for…in` passed over, and the resolved config had no `outdir`.
+    test('a getter for `outdir` or `validation` is written over with the default', async () => {
+      const root = project({
+        'bamboo.config.ts': `export default new (class { presets = []; get outdir() { return undefined }; get validation() { return undefined } })()`,
+      })
+
+      const { config } = await loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })
+
+      expect(config.outdir).toBe('styled-system')
+      expect(config.validation).toBe('warn')
     })
 
     test('a getter for `presets` is read, and written over', async () => {
@@ -850,6 +889,18 @@ describe('load config', () => {
 
     expect(seen).toEqual(['q'])
     expect(config.theme?.tokens?.colors).toBeUndefined()
+  })
+
+  // Refused as it is returned: a later hook spreading it kept a preset with nothing in it.
+  test('what a `preset:resolved` hook returns is refused before a later plugin is handed it', async () => {
+    const hooks = mergeHooks([
+      { name: 'broken', hooks: { 'preset:resolved': () => null as never } },
+      { name: 'spread', hooks: { 'preset:resolved': ({ preset }) => ({ ...preset, name: 'spread' }) as never } },
+    ])
+
+    await expect(getResolvedConfig({ presets: [{ name: 'p' }] }, tmpdir(), hooks)).rejects.toThrow(
+      'The `preset:resolved` hook must return an object, or nothing, for preset `p`',
+    )
   })
 
   // Nothing writes a preset's own keys, so it is not copied, whatever it holds.

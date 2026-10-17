@@ -1,4 +1,5 @@
 import { logger } from '@bamboocss/logger'
+import { BambooError } from '@bamboocss/shared'
 import type { AnyFunction, BambooHooks, BambooPlugin } from '@bamboocss/types'
 
 type HookEntry = [pluginName: string, cb: AnyFunction]
@@ -106,8 +107,15 @@ const reducers = {
     for (const hookFn of fns) {
       const result = await hookFn(Object.assign(args, { preset, original }))
       // `false` leaves the preset out, and no later hook is handed it: a hook reads a preset,
-      // which is an object.
+      // which is an object. Anything else not one is refused here, as it would be at the end of
+      // the chain, rather than handed on: a later hook spreading it kept a preset with nothing in it.
       if (result === false) return false
+      if (result !== undefined && (typeof result !== 'object' || result === null)) {
+        throw new BambooError(
+          'CONFIG_ERROR',
+          `💥 The \`preset:resolved\` hook must return an object, or nothing, for preset \`${args.name}\`.`,
+        )
+      }
       if (result !== undefined) {
         preset = result
       }

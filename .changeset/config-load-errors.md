@@ -31,7 +31,9 @@ modules.
 - A preset that is `false` — written so, a promise of it, or the default export of a module named in `presets` or
   written there as `import()` — is left out before any `preset:resolved` hook runs, and is not in the resolved
   `presets`. 1.56.7 handed it to the hooks as the preset, which their type does not allow, and kept it in the list. A
-  preset a hook leaves out is handed to no later plugin's hook either, where 1.56.7 handed that one `false`.
+  preset a hook leaves out is handed to no later plugin's hook either, nor kept in the resolved `presets`, where 1.56.7
+  handed that one `false` and kept it. Whatever else a hook returns that is not an object is refused as it is returned,
+  rather than handed to the next.
 - What a promise a config or a preset exports rejects with is reported as the module's error, with its location. A
   module written in `presets`, `import('./preset')`, is read as the module, as one a config exports is.
 - A config the loader cannot write its defaults into — frozen, holding a key it writes as a getter, or inheriting one
