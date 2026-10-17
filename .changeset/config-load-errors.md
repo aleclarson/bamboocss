@@ -38,20 +38,23 @@ modules.
   module written in `presets`, `import('./preset')`, is read as the module, as one a config exports is.
 - A config the loader cannot write its defaults into — frozen, holding a key it writes as a getter, or inheriting one
   read-only, or bundled to CommonJS and exporting `presets` — is copied first, so it loads with them. Where the loader
-  runs as an ES module, as under Vite with a config Vite loads as one (`"type": "module"`, or a `vite.config.mts`), such
-  a config failed with a `TypeError`. As CommonJS, under the CLI and under Vite otherwise, the loader is not strict, and
-  each default it could not write was dropped in silence: a config that cannot be extended, such as a frozen one, loaded
-  without whichever of `outdir`, `validation` and the default presets, `@bamboocss/preset-base` and
+  runs as an ES module — under the ESLint plugin, and under Vite where Vite loads its own config as one — such a config
+  failed with a `TypeError`. As CommonJS — under the CLI and the MCP server, and under Vite otherwise — the loader is
+  not strict, and each default it could not write was dropped in silence: a config that cannot be extended, such as a
+  frozen one, loaded without whichever of `outdir`, `validation` and the default presets, `@bamboocss/preset-base` and
   `@bamboocss/preset-bamboo`, it did not hold, as did one whose getter, or read-only inherited key, read as nothing for
-  one of them, and what those generate changes now that they have the defaults. Any other kept what it held; only a
-  preset it names by its package now maps to the copy the loader bundles. The copy holds every key the config has, its
-  own and those it inherits, each as enumerable as it was, and reads each only when the copy's key is read, as the
-  config would: a getter's value, or what a proxy's `get` answers for a key its `ownKeys` lists, which with no
-  descriptor is a key `for…in` does not read and that hides none inherited; one only its `get` answers is not held. A
-  key a class defines through a getter, such as `outdir`, is still left out where the merge reads keys with `for…in`, as
-  it always was. Any other config is read, and written into, as it was. A `Proxy` refusing one of those writes, its trap
-  returning false without taking it, now fails the load naming the key under either build, where CommonJS went on
-  without it; one whose trap takes the write and returns nothing loads, where as an ES module it failed. A frozen token
+  one of them, and what those generate changes now that they have the defaults. Any other kept what it held; now a
+  preset it names by its package maps to the copy the loader bundles, and one it lists twice is merged once. The copy
+  holds every key the config has, its own and those it inherits, each as enumerable as it was, and reads each only when
+  the copy's key is read, as the config would: a getter's value, or what a proxy's `get` answers for a key its `ownKeys`
+  lists. One it lists with no descriptor hides none it inherits, and `for…in` reads an inherited one of its name however
+  enumerable, as V8 does; with none to inherit, it is read by name alone. A key only a proxy's `get` answers is not
+  held, so one the merge reads by name, as it does `preflight`, is lost where 1.56.7 read it. A key a class defines
+  through a getter, such as `outdir`, is still left out where the merge reads keys with `for…in`, as it always was. Any
+  other config is read, and written into, as it was. A `Proxy` refusing one of those writes — its trap returning false,
+  and the key not holding what was written after, the same list for `presets` — now fails the load naming the key under
+  either build, where CommonJS went on without it; one whose trap took the write, a copy of the list included, and
+  returned nothing, or that already held what was written, loads, where as an ES module it failed. A frozen token
   holding a `value` beside tokens nested in it still fails, as the merge writes a `DEFAULT` into it, with an error that
   does not name the token. A preset is not copied for this, so a hook is handed the object it exports.
 - An ES module's default export, or a promise it exports, holding a `default` key beside keys of its own is kept whole,

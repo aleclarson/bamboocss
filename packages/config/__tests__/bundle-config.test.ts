@@ -784,6 +784,19 @@ describe('load config', () => {
         `{ ownKeys: (target) => [...Reflect.ownKeys(target), 'outdir'] }`,
         { outdir: 'custom-out', preflight: true },
       ],
+      // V8's `for…in` reads an inherited one of a listed name however enumerable, as the merge does.
+      [
+        'an inherited getter of its name',
+        `new (class { get presets() { return [] }; get outdir() { return 'out' } })()`,
+        `{ ownKeys: (target) => [...Reflect.ownKeys(target), 'outdir'] }`,
+        { outdir: 'out' },
+      ],
+      [
+        'an inherited value of its name that is not enumerable',
+        `Object.create(Object.freeze(Object.create(null, { include: { value: ['src'] }, presets: { value: [] } })))`,
+        `{ ownKeys: (target) => [...Reflect.ownKeys(target), 'include'] }`,
+        { include: ['src'] },
+      ],
       [
         "what the proxy's `get` answers for it",
         `Object.create(Object.freeze({ presets: [] }))`,
@@ -813,16 +826,40 @@ describe('load config', () => {
       )
     })
 
-    // Its trap took the write: what it returns is not what the config holds.
-    test('a proxy taking the writes the loader makes and returning nothing loads with them', async () => {
+    // Its trap took the write — the list as given, or a copy of it: what it returns is not what the
+    // config holds.
+    test.each([
+      ['as given', 'target[key] = value'],
+      ['copied', 'target[key] = Array.isArray(value) ? [...value] : value'],
+    ])('a proxy taking the writes the loader makes, %s, and returning nothing loads with them', async (_, store) => {
       const root = project({
-        'bamboo.config.ts': `export default new Proxy({ include: [] }, { set(target, key, value) { target[key] = value } })`,
+        'bamboo.config.ts': `export default new Proxy({ include: [] }, { set(target, key, value) { ${store} } })`,
       })
 
       const { config } = await loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })
 
       expect(config).toMatchObject({ outdir: 'styled-system', validation: 'warn' })
       expect(config.presets?.length).toBeGreaterThan(0)
+    })
+
+    // Nothing written is lost: it holds the presets the loader writes, an empty list.
+    test('a proxy refusing a write of what it holds loads', async () => {
+      const root = project({
+        'bamboo.config.ts': `export default new Proxy({ outdir: 'out', validation: 'warn', presets: [], preflight: true }, { set: () => false })`,
+      })
+
+      const { config } = await loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })
+
+      expect(config).toMatchObject({ outdir: 'out', presets: [], preflight: true })
+    })
+
+    // The walk for what it inherits went round the cycle for good, and the load never returned.
+    test('a proxy whose prototype is itself fails the load', async () => {
+      const root = project({
+        'bamboo.config.ts': `const p: any = new Proxy({ presets: [], preflight: true }, { getPrototypeOf: () => p })\nexport default p`,
+      })
+
+      await expect(loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })).rejects.toThrow()
     })
 
     test('a getter for `presets` is read, and written over', async () => {

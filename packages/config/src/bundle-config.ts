@@ -153,10 +153,13 @@ const writtenKeys = (config: any) => [...['outdir', 'validation'].filter((key) =
 
 /**
  * Whether `object[key] = value` would succeed, as assignment decides it: through a setter, into a
- * writable property, or by adding one to an object that takes one. A proxy's `set` trap is not seen.
+ * writable property, or by adding one to an object that takes one. A proxy's `set` trap is not seen,
+ * and a prototype chain a proxy's `getPrototypeOf` makes a cycle of is walked once around.
  */
 function assignable(object: object, key: string) {
-  for (let from: object | null = object; from !== null; from = Object.getPrototypeOf(from)) {
+  const walked = new Set<object>()
+  for (let from: object | null = object; from !== null && !walked.has(from); from = Object.getPrototypeOf(from)) {
+    walked.add(from)
     const descriptor = Object.getOwnPropertyDescriptor(from, key)
     if (!descriptor) continue
     if (descriptor.get || descriptor.set) return descriptor.set !== undefined
@@ -195,9 +198,16 @@ function writableOf(value: any) {
     })
   const seen = new Set<PropertyKey>()
   // Keys a proxy's `ownKeys` lists and gives no descriptor for: no property, so they hide none it
-  // inherits, nor does `for…in` read them, but a read by name asks its `get`, as for any key.
+  // inherits — and V8's `for…in` reads one it inherits however enumerable — and with none, a read by
+  // name asks its `get`, as for any key, where `for…in` reads nothing.
   const listed = new Set<PropertyKey>()
-  for (let from = value; from !== null && from !== Object.prototype; from = Object.getPrototypeOf(from)) {
+  const walked = new Set<object>()
+  for (
+    let from = value;
+    from !== null && from !== Object.prototype && !walked.has(from);
+    from = Object.getPrototypeOf(from)
+  ) {
+    walked.add(from)
     for (const key of Reflect.ownKeys(from)) {
       // One it holds hides one of the same name it inherits.
       if (seen.has(key)) continue
@@ -207,7 +217,8 @@ function writableOf(value: any) {
         continue
       }
       seen.add(key)
-      define(key, Boolean(descriptor.enumerable), Boolean(descriptor.get || descriptor.set || descriptor.enumerable))
+      const enumerable = listed.has(key) || Boolean(descriptor.enumerable)
+      define(key, enumerable, Boolean(descriptor.get || descriptor.set || enumerable))
     }
   }
   // Written, it is the property an assignment makes through the proxy's `set`, which `for…in` reads.
@@ -215,19 +226,31 @@ function writableOf(value: any) {
   return copy
 }
 
+/** Whether `read`, what the config holds after a write of `value`, is it: or for a list, its items. */
+function holds(read: unknown, value: unknown) {
+  if (Object.is(read, value)) return true
+  return (
+    Array.isArray(value) &&
+    Array.isArray(read) &&
+    read.length === value.length &&
+    value.every((item, index) => Object.is(read[index], item))
+  )
+}
+
 /**
  * Write one of the loader's defaults into the config, failing where the config refuses it — a
- * `Proxy` whose trap returns false, and does not hold the value after — as an assignment does in an
- * ES module. The loader's CommonJS build is not strict, where the refusal was dropped in silence and
- * the config loaded without the default. A trap that takes the write and returns nothing refuses
- * nothing, though an assignment in an ES module throws for it.
+ * `Proxy` whose trap returns false, and does not hold the value after (`holds`) — as an assignment
+ * does in an ES module. The loader's CommonJS build is not strict, where the refusal was dropped in
+ * silence and the config loaded without the default. A trap that takes the write, a copy of the list
+ * included, and returns nothing refuses nothing, though an assignment in an ES module throws for it,
+ * and nor does one already holding what is written.
  */
 export function writeDefault(config: Record<PropertyKey, any>, key: string, value: unknown) {
-  if (!Reflect.set(config, key, value) && !Object.is(config[key], value)) {
+  if (!Reflect.set(config, key, value) && !holds(config[key], value)) {
     throw new BambooError(
       'CONFIG_ERROR',
-      `💥 The config refused \`${key}\`, which the loader writes into it: a \`Proxy\` whose trap ` +
-        `returns false for the write, without taking it, does. Let it take the write, or export a plain object.`,
+      `💥 The config refused \`${key}\`, which the loader writes into it: a \`Proxy\` whose trap returns ` +
+        `false for the write does. Have the trap take the write and return \`true\`, or export a plain object.`,
     )
   }
 }
