@@ -104,7 +104,9 @@ describe('configs', () => {
 // The flat configs carry the plugin itself, so each build has to hand out the same one.
 test('each build gives the same plugin', async () => {
   const cjs = createRequire(import.meta.url)('../dist/index.cjs')
-  const { default: esm } = await import('../dist/index.mjs')
+  // Not a literal to the type check, which CI runs after `build-fast` writes no declarations; the
+  // assertion is stripped before Vitest reads the import.
+  const { default: esm } = await import('../dist/index.mjs' as string)
 
   expect(cjs.default ?? cjs).toBe(esm)
   expect(esm).toBe(bamboo)
