@@ -47,7 +47,8 @@ Read values in style expressions as JavaScript does, where the build used Rust's
 - An element of a rest parameter holding a value the call could not decide between is not known as a whole, where it was
   read without what it could be: `(...xs) => xs[0]` given `{ color: c ? 'a' : 'b' }` compiled with no color. What is
   known of it still is — its other keys, and that it holds `color` — and so are the rest's other elements and how many
-  there are.
+  there are. An `undefined` it is given is held as one, as an array literal holds it: `(...ys) => ys.join('-')` given
+  `undefined` and `'4'` compiles to `-4`, where the call failed the compile.
 - `css.raw` of more than one style object was read as the first of them, so `css()` of it compiled without the others.
   Extraction now writes the rules of each, and such a `css()` fails the compile as `dynamic`. What `css.raw` leaves out
   at runtime — `undefined`, `null`, `false`, an object with nothing defined in it — is left out, so

@@ -823,6 +823,33 @@ describe('what a call is given', () => {
       "const both = (a, b) => [a, b].join(' ')\nexport const A = (p) => { const space = [p.compact ? '1' : '2', '4', '8']; return css({ padding: both(space[1], space[2]) }) }",
       'p_4_8',
     ],
+    // An object read off an array carries a sibling's choice of a value that is no object as it is.
+    [
+      'an object read off an array beside a choice of an object or `null`, given to a rest parameter',
+      "const first = (...xs) => xs[0]\nexport const A = (p) => { const m = [p.x ? { color: 'blue.300' } : null, { color: 'red.300' }]; return css(first(m[1])) }",
+      'c_red.300',
+    ],
+    // Past the end, an element is `undefined` whatever its siblings could be.
+    [
+      'an element past the end of an array holding a choice, joined',
+      "const pad = (...ys) => ys.join('-')\nexport const A = (p) => { const xs = [p.x ? '1' : '2', '4']; return css({ padding: pad(xs[2], xs[1]) }) }",
+      'p_-4',
+    ],
+    [
+      'a default for an element past the end of an array holding a choice',
+      "const f = (xs) => { const [size, variant = 'red.300'] = xs; return { color: variant } }\nexport const A = (p) => css(f([p.c ? 'sm' : 'md']))",
+      'c_red.300',
+    ],
+    [
+      'an element past the end of an array holding a choice, read with `??`',
+      "const f = (xs) => xs[2] ?? '7'\nexport const A = (p) => css({ padding: f([p.x ? '1' : '2', '4']) })",
+      'p_7',
+    ],
+    [
+      '`undefined` given to a rest parameter, joined',
+      "const pad = (...ys) => ys.join('-')\nexport const A = css({ padding: pad(undefined, '4') })",
+      'p_-4',
+    ],
     [
       'decided elements spread into a call',
       "const pad = (a, b) => a + ' ' + b\nexport const A = (p) => { const space = [p.compact ? '1' : '2', '4', '8']; return css({ padding: pad(...[space[1], space[2]]) }) }",
@@ -1301,6 +1328,13 @@ describe('`fallback()`', () => {
   // It was taken for `undefined`, and the property dropped.
   test('of a value the build cannot evaluate is not known', () => {
     const code = withFallback("export const A = (p) => css({ height: fallback(p.h, '100vh') })")
+
+    expect(foldOf(code)).toMatchObject({ classes: [], skipped: ['dynamic'] })
+  })
+
+  // Written as nothing, one of several values gave `fallback(, 100vh)`.
+  test('of one of several values is not known', () => {
+    const code = withFallback("export const A = (p) => css({ height: fallback(p.t ? '50vh' : '25vh', '100vh') })")
 
     expect(foldOf(code)).toMatchObject({ classes: [], skipped: ['dynamic'] })
   })

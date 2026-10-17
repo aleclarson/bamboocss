@@ -428,12 +428,19 @@ impl EvalResult {
     }
 
     /// Whether it holds a value the build could not decide between: it is one of several, with none
-    /// of its own, or an object with such a property, held beside it (`conditions`). Anything else
-    /// with `conditions` was read off an array and carries its siblings' choices, for their rules:
-    /// it is one value all the same, where it is whole (`converts`).
+    /// of its own, or an object with such a property, held beside it as a `{ key: value }` fragment
+    /// (`conditions`). Anything else with `conditions` was read off an array and carries its
+    /// siblings' choices as they are, for their rules — an object too, whose read keeps no
+    /// fragment of theirs — and is one value all the same, where it is whole (`converts`).
     fn is_undecided(&self) -> bool {
         !self.conditions.is_empty()
-            && !(self.value.as_ref().is_some_and(|value| !value.is_object()) && self.converts())
+            && match &self.value {
+                Some(serde_json::Value::Object(_)) => {
+                    !self.converts() || self.conditions.iter().any(serde_json::Value::is_object)
+                }
+                Some(_) => !self.converts(),
+                None => true,
+            }
     }
 
     fn undefined() -> Self {
@@ -3590,10 +3597,10 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             // An array holds its elements' undecided values under no index of theirs, so the rest
             // holds none of them, and an element with any is not known: spread on into another
             // call, it passed as exact what it had lost (`merge(...styles)`). The others still
-            // are, and so is how many there are.
-            let complete = values.iter().all(|value| {
-                value.complete && (value.value.is_some() || !value.conditions.is_empty())
-            });
+            // are, and so is how many there are — `undefined` among them, held as an array literal
+            // holds it, as a `null` that may be `undefined`: `(...ys) => ys.join('-')` given it
+            // and `'4'` writes `-4`, where the rest was not known at all.
+            let complete = values.iter().all(|value| value.complete);
             // An undecided element is held as what is known of it (`undecided_record`), its
             // undecided keys not known: as what it holds without them it was read for what it is —
             // `'size' in args[0]` false. One of which nothing is known is held as `null`, as one
@@ -3629,7 +3636,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 if value.is_undecided() {
                     decided = false;
                     partial.write(&index.to_string(), false, record);
-                } else if value.nullish || value.partial.is_some() {
+                } else if value.nullish || value.partial.is_some() || value.is_undefined() {
                     partial.write_value(&index.to_string(), value);
                 }
             }
@@ -4611,12 +4618,15 @@ fn member_value(mut result: EvalResult, property: &str) -> EvalResult {
     // or a sibling's: `[{ k: 1 }, { 0: { z: c ? 1 : 2 } }][0]` kept `z`'s choices. Such a read is
     // not known, and keeps them only for the rules they may be.
     let mut misattributable = false;
+    // Whether any of its conditions are its own: what a fragment held under `property`.
+    let mut own = false;
     if result.conditions.iter().any(serde_json::Value::is_object) {
         result.conditions = std::mem::take(&mut result.conditions)
             .into_iter()
             .filter_map(|condition| match condition {
                 serde_json::Value::Object(mut fragment) => {
                     let kept = fragment.shift_remove(property);
+                    own |= kept.is_some();
                     misattributable |= is_array && kept.is_some();
                     kept
                 }
@@ -4687,6 +4697,12 @@ fn member_value(mut result: EvalResult, property: &str) -> EvalResult {
     result.value = value.filter(|value| !(placeholder && value.is_null()));
     if result.value.is_none() && !(absent && object_was_known) {
         result.complete = false;
+    }
+    // Surely not there, it is `undefined`, whatever its siblings could be: carried along, their
+    // choices made it one of several, so `xs[2]` past the end of `[c ? '1' : '2', '4']` was no
+    // `undefined` to a default.
+    if result.value.is_none() && result.complete && !own {
+        result.conditions.clear();
     }
     // What may be `null` or `undefined` is held as `null`, as every other such value is.
     if result.nullish && result.value.is_none() {
