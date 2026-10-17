@@ -2041,6 +2041,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                                     &mut output,
                                     &mut fragments,
                                     &mut partial,
+                                    &mut complete,
                                     &keys,
                                     value.conditions,
                                 );
@@ -3228,30 +3229,114 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             };
             // The last property of that name wins, as in JavaScript — unless something written after
             // it may write it again: a spread, or a key the walk cannot name. Searching past them
-            // called `{ color: () => 'red.300', ...props }.color` whatever `props` held.
+            // called `{ color: () => 'red.300', ...props }.color` whatever `props` held; one that
+            // surely writes no such key, `...shared` of a literal without it, leaves it as it is.
             let mut found = None;
             for property in object.properties.iter().rev() {
-                let ObjectPropertyKind::ObjectProperty(property) = property else {
-                    return None;
-                };
-                if property.computed {
-                    return None;
-                }
-                if property
-                    .key
-                    .static_name()
-                    .is_some_and(|name| name == member.as_str())
-                {
-                    if property.shorthand || property.kind != oxc_ast::ast::PropertyKind::Init {
+                let property = match property {
+                    ObjectPropertyKind::ObjectProperty(property) => property,
+                    ObjectPropertyKind::SpreadProperty(spread) => {
+                        if self.spread_cannot_write(&spread.argument, member, 0) {
+                            continue;
+                        }
                         return None;
                     }
-                    found = Some(&property.value);
-                    break;
+                };
+                match self.property_name(property) {
+                    Some(name) if name == member.as_str() => {
+                        if property.shorthand || property.kind != oxc_ast::ast::PropertyKind::Init {
+                            return None;
+                        }
+                        found = Some(&property.value);
+                        break;
+                    }
+                    Some(_) => {}
+                    None => return None,
                 }
             }
             current = found?;
         }
         Some(current)
+    }
+
+    /// The name a property is written under, where it can be read without running anything: its
+    /// own, or a key computed from a string literal or a binding of one nothing writes to.
+    fn property_name(
+        &self,
+        property: &'a oxc_ast::ast::ObjectProperty<'a>,
+    ) -> Option<Cow<'a, str>> {
+        if !property.computed {
+            return property.key.static_name();
+        }
+        let expression = property.key.as_expression()?;
+        match expression.get_inner_expression() {
+            Expression::StringLiteral(literal) => Some(Cow::Borrowed(literal.value.as_str())),
+            Expression::Identifier(identifier) => {
+                let reference = identifier.reference_id.get()?;
+                let symbol = self.scoping.get_reference(reference).symbol_id()?;
+                match self.unwritten_initializer(symbol)?.get_inner_expression() {
+                    Expression::StringLiteral(literal) => {
+                        Some(Cow::Borrowed(literal.value.as_str()))
+                    }
+                    _ => None,
+                }
+            }
+            _ => None,
+        }
+    }
+
+    /// What `symbol` is bound to where nothing in the file writes to it after: its declarator's
+    /// initializer.
+    fn unwritten_initializer(&self, symbol: SymbolId) -> Option<&'a Expression<'a>> {
+        let AstKind::VariableDeclarator(declarator) =
+            self.semantic.symbol_declaration(symbol).kind()
+        else {
+            return None;
+        };
+        declarator.id.get_binding_identifier()?;
+        let nodes = self.semantic.nodes();
+        if self
+            .scoping
+            .get_resolved_references(symbol)
+            .any(|reference| reference.is_write() || mutates_through(nodes, reference.node_id()))
+        {
+            return None;
+        }
+        declarator.init.as_ref()
+    }
+
+    /// Whether spreading `expression` surely writes no `member`: an object literal holding no such
+    /// key, nor a spread or a key that could write it; `null`, `undefined`, a boolean or a number;
+    /// or a binding of one of them nothing writes to.
+    fn spread_cannot_write(&self, expression: &'a Expression<'a>, member: &str, depth: u8) -> bool {
+        if depth > 8 {
+            return false;
+        }
+        match expression.get_inner_expression() {
+            Expression::ObjectExpression(object) => {
+                object.properties.iter().all(|property| match property {
+                    ObjectPropertyKind::ObjectProperty(property) => self
+                        .property_name(property)
+                        .is_some_and(|name| name != member),
+                    ObjectPropertyKind::SpreadProperty(spread) => {
+                        self.spread_cannot_write(&spread.argument, member, depth + 1)
+                    }
+                })
+            }
+            Expression::NullLiteral(_)
+            | Expression::BooleanLiteral(_)
+            | Expression::NumericLiteral(_) => true,
+            Expression::Identifier(identifier) if identifier.name == "undefined" => true,
+            Expression::Identifier(identifier) => identifier
+                .reference_id
+                .get()
+                .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
+                .and_then(|symbol| self.unwritten_initializer(symbol))
+                .is_some_and(|initializer| {
+                    self.spread_cannot_write(initializer, member, depth + 1)
+                }),
+            _ => false,
+        }
     }
 
     pub fn call_expression_value(
@@ -4345,16 +4430,18 @@ pub(crate) fn write_property(
     }
 }
 
-/// Whether spreading `value` writes no key: `undefined`, `null`, a boolean or a number, decided.
+/// Whether spreading `value` writes no key: `undefined`, `null`, a boolean or a number, decided, or
+/// one of several of them — `c ? (rtl ? { … } : null) : null` with `rtl` false.
 fn writes_nothing(value: &EvalResult) -> bool {
+    let nothing = |value: &serde_json::Value| {
+        matches!(
+            value,
+            serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::Number(_)
+        )
+    };
     value.complete
-        && value.conditions.is_empty()
-        && value.value.as_ref().is_none_or(|value| {
-            matches!(
-                value,
-                serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::Number(_)
-            )
-        })
+        && value.value.as_ref().is_none_or(nothing)
+        && value.conditions.iter().all(nothing)
 }
 
 /// The keys a spread of `expression` may write, where its source says them all: an object literal
@@ -4392,16 +4479,29 @@ fn spread_keys(expression: &Expression<'_>) -> Option<Vec<String>> {
 /// A spread of one of several objects whose keys its source says (`spread_keys`): each of `keys`
 /// may be written or not, so neither its value nor that it is there is known after it, and every
 /// other key is as known as it was — `{ variant: 'solid', ...(c ? { size } : {}) }` holds
-/// `variant` whichever it is. What each could be is kept for its rules.
+/// `variant` whichever it is.
+///
+/// The object is not known as a whole after it: a branch may write `undefined`, which its value
+/// leaves out, or be one the build decided away, which it never evaluated, so its fragments do not
+/// say every key it writes, and the fold took the object for what remained. What a key held before
+/// stays one of what it may hold, beside what each branch writes, for the rules of both.
 fn spread_keys_written(
     output: &mut serde_json::Map<String, serde_json::Value>,
     fragments: &mut Fragments,
     partial: &mut Option<Partial>,
+    complete: &mut bool,
     keys: &[String],
     conditions: Vec<serde_json::Value>,
 ) {
-    fragments.replace_all(keys);
-    output.retain(|key, _| !keys.contains(key));
+    if keys.is_empty() {
+        return;
+    }
+    *complete = false;
+    for key in keys {
+        if let Some(value) = output.shift_remove(key) {
+            fragments.push(key, value);
+        }
+    }
     let known = partial.get_or_insert_default();
     for key in keys {
         known.forget(key);
@@ -4409,6 +4509,7 @@ fn spread_keys_written(
     // Open after it, as after any spread whose keys it cannot be sure of, but holding what it
     // held before of every key no branch writes (`Partial::inherit`).
     known.inherit(output.keys().chain(&fragments.keys));
+    known.settled.retain(|key| !keys.contains(key));
     fragments.extend(
         conditions
             .into_iter()

@@ -73,6 +73,8 @@ Read values in style expressions as JavaScript does, where the build used Rust's
   What is known of it still is, as of a rest parameter's element. One read where any element, that one included, holds a
   value the build could not decide between under a key that is its index is not known at all, as what the array holds
   under that key may be another element's.
+- An element read past the end of an array, or a key an object read off one surely lacks, is `undefined` whatever its
+  siblings could be: `(xs) => xs[2] ?? '7'` given `[c ? '1' : '2', '4']` failed the compile as `dynamic`.
 - Converting an array holding an element the build could not decide between — `join`, `+`, a template literal — is not
   known, where 1.56.7 wrote that element as `null`: `[c ? 'a' : 'b', 'x'].join('-')` compiled to `null-x`.
 - `==` converts its operands as JavaScript does — `'0' == 0` is true — and `===` of two objects or arrays is not known,

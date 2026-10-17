@@ -516,6 +516,23 @@ describe('what the build knows beside a guess', () => {
       "const box = (o) => { const options = { ...o, color: () => 'red.300' }; return { color: options.color() } }\nexport const A = (p) => css(box(p))",
       'c_red.300',
     ],
+    // A spread that surely writes no such key leaves the method as it is.
+    [
+      'a method past a spread of a literal without it',
+      "const shared = { size: () => '4' }\nconst helpers = { color: () => 'red.300', ...shared }\nexport const A = css({ color: helpers.color() })",
+      'c_red.300',
+    ],
+    [
+      'a method past a key computed from a string',
+      "const k = 'size'\nconst helpers = { color: () => 'red.300', [k]: 1 }\nexport const A = css({ color: helpers.color() })",
+      'c_red.300',
+    ],
+    // Whichever branch, nothing is written: `rtl` is false.
+    [
+      'a spread of one of two values neither writing a key',
+      "const rtl = false\nconst tab = (o) => ({ borderLeft: '1px solid', ...(o.selected ? (rtl ? { borderLeft: 'none' } : null) : null) })\nexport const A = (p) => css(tab(p))",
+      'bd-l_1px_solid',
+    ],
   ])('%s', (_, body, className) => {
     expect(foldOf(withImport(body))).toMatchObject({ classes: [className], skipped: [] })
   })
@@ -536,6 +553,20 @@ describe('what the build knows beside a guess', () => {
     [
       '`length` in an array a spread may replace',
       helper('{ list: [], ...o }', "{ padding: 'length' in options.list ? '2' : '4' }"),
+    ],
+    // A branch's value leaves out a key it writes as `undefined`, and the build does not see a
+    // branch it decided away, so what a spread of one of several writes is never known as a whole.
+    [
+      'a spread of one of two objects, one writing `undefined`',
+      "const button = (o) => ({ bg: 'blue.500', ...(o.ghost ? { bg: undefined, borderWidth: '1px' } : null), borderWidth: '0' })\nexport const A = (p) => css(button(p))",
+    ],
+    [
+      'a spread of one of two values, holding an object decided away',
+      'const F = false\nconst box = (o) => ({ zIndex: o.c ? 1 : 2, ...(o.x ? (F ? { zIndex: 3 } : null) : null) })\nexport const A = (p) => css(box(p))',
+    ],
+    [
+      'an object holding such a spread, spread again',
+      "const s = (o) => ({ ...(o.reset ? { color: undefined, padding: '2' } : null), padding: '4' })\nconst box = (o) => ({ color: 'red.300', ...s(o) })\nexport const A = (p) => css(box(p))",
     ],
   ])('%s', (_, body) => {
     expect(foldOf(withImport(body))).toMatchObject({ classes: [], skipped: ['dynamic'] })
