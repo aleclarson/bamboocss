@@ -186,7 +186,9 @@ function writableOf(value: any) {
       // One it holds hides one of the same name it inherits.
       if (seen.has(key)) continue
       seen.add(key)
-      const descriptor = Object.getOwnPropertyDescriptor(from, key)!
+      // A proxy may list a key it gives no descriptor for: nothing to copy.
+      const descriptor = Object.getOwnPropertyDescriptor(from, key)
+      if (!descriptor) continue
       const { enumerable } = descriptor
       const accessor = Boolean(descriptor.get || descriptor.set)
       Object.defineProperty(copy, key, {
@@ -204,6 +206,22 @@ function writableOf(value: any) {
     }
   }
   return copy
+}
+
+/**
+ * Write one of the loader's defaults into the config, failing where the config refuses it — a
+ * `Proxy` whose `set` returns false — as an assignment does in an ES module. The CommonJS build the
+ * CLI loads is not strict, where the refusal was dropped in silence and the config loaded without
+ * the default.
+ */
+export function writeDefault(config: Record<PropertyKey, any>, key: string, value: unknown) {
+  if (!Reflect.set(config, key, value)) {
+    throw new BambooError(
+      'CONFIG_ERROR',
+      `💥 The config refused \`${key}\`, which the loader writes into it: a \`Proxy\` whose \`set\` ` +
+        `returns false does. Let it take the write, or export a plain object.`,
+    )
+  }
 }
 
 /** Whether Node would load `file` as an ES module. */
@@ -581,8 +599,8 @@ export async function bundleConfig(options: ConfigFileOptions): Promise<BundleCo
     throw new BambooError('CONFIG_ERROR', `💥 Config must export or return an object.`)
   }
 
-  result.config.outdir ??= 'styled-system'
-  result.config.validation ??= 'warn'
+  if (result.config.outdir == null) writeDefault(result.config, 'outdir', 'styled-system')
+  if (result.config.validation == null) writeDefault(result.config, 'validation', 'warn')
 
   return {
     ...result,

@@ -1,6 +1,7 @@
 import { logger } from '@bamboocss/logger'
 import { BAMBOO_CONFIG_NAME, omit, parseJson, pick, stringifyJson, traverse } from '@bamboocss/shared'
 import type { LoadConfigResult, Preset, UserConfig } from '@bamboocss/types'
+import { writeDefault } from './bundle-config'
 import { defaultPresets, getBundledPreset } from './bundled-preset'
 import { getResolvedConfig } from './get-resolved-config'
 import { mergeHooks } from './merge-hooks'
@@ -56,9 +57,11 @@ function warnIfBaseDropped(listed: unknown[] | undefined, resolved: Preset[]) {
 export async function resolveConfig(result: BundleConfigResult, cwd: string): Promise<LoadConfigResult> {
   const listed = result.config.presets
 
-  result.config.presets = listed
-    ? Array.from(new Set(listed.map((preset: any) => getBundledPreset(preset) ?? preset)))
-    : [...defaultPresets]
+  writeDefault(
+    result.config,
+    'presets',
+    listed ? Array.from(new Set(listed.map((preset: any) => getBundledPreset(preset) ?? preset))) : [...defaultPresets],
+  )
 
   warnIfBaseDropped(listed, result.config.presets as Preset[])
 

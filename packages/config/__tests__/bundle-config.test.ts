@@ -759,6 +759,33 @@ describe('load config', () => {
       expect(config.validation).toBe('warn')
     })
 
+    // A proxy may list a key it gives no descriptor for, and the copy has nothing to hold for it:
+    // reading one failed the load on an internal destructuring error.
+    test('a copied proxy listing a key it has no descriptor for loads', async () => {
+      const root = project({
+        'bamboo.config.ts': [
+          `const held = Object.assign(Object.create(Object.freeze({ presets: [] })), { preflight: true })`,
+          `export default new Proxy(held, { ownKeys: (target) => [...Reflect.ownKeys(target), 'phantom'] })`,
+        ].join('\n'),
+      })
+
+      const { config } = await loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })
+
+      expect(config.preflight).toBe(true)
+    })
+
+    // A write it refuses fails the load, naming the key, wherever it runs: the CLI's CommonJS build
+    // is not strict, and dropped the write in silence, so the config loaded without its presets.
+    test('a proxy refusing a write the loader makes fails the load, naming the key', async () => {
+      const root = project({
+        'bamboo.config.ts': `export default new Proxy({ outdir: 'styled-system', validation: 'warn', include: [] }, { set: () => false })`,
+      })
+
+      await expect(loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })).rejects.toThrow(
+        'The config refused `presets`',
+      )
+    })
+
     test('a getter for `presets` is read, and written over', async () => {
       const root = project({
         'bamboo.config.ts': `export default new (class { preflight = true; get presets() { return [] } })()`,
