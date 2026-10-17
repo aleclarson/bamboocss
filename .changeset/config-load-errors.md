@@ -39,9 +39,11 @@ modules.
 - A config the loader cannot write its defaults into — frozen, holding a key it writes as a getter, or inheriting one
   read-only — or the exports of a config bundled to CommonJS, is copied first, so it loads: it failed with a
   `TypeError`. The copy holds every key the config has, its own and those it inherits, each as enumerable as it was, and
-  reads a getter when the copy's key is read. Any other config is read, and written into, as it was; a `Proxy` refusing
-  a write still fails, and so does a config whose token objects are frozen, which the merge writes into. A preset is not
-  copied for this, so a hook is handed the object it exports.
+  reads each key only when the copy's key is read, through a getter or a proxy's `get` as the config would. A key a
+  class defines through a getter, such as `outdir`, is still left out where the merge reads keys with `for…in`, as it
+  always was. Any other config is read, and written into, as it was; a `Proxy` refusing a write still fails, and so does
+  a config whose token objects are frozen, which the merge writes into. A preset is not copied for this, so a hook is
+  handed the object it exports.
 - An ES module's default export, or a promise it exports, holding a `default` key beside keys of its own is kept whole,
   where 1.56.7 read it as that key; one holding nothing but `default`, or nothing but getters beside it, is read as its
   `default`, as it was. A CommonJS module's `default` is read, as it was, and so is that of a package compiled from an

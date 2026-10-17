@@ -171,8 +171,10 @@ function assignable(object: object, key: string) {
  * cannot be — the config frozen, the key a getter, or read-only where it is inherited — and then a
  * copy of every key it has, its own and those it inherits, each as enumerable as it was, so that
  * `for…in` reads the keys it did and a read by name the rest. Each is read as the config reads it,
- * a getter when the copy's key is, and a write over a getter is the property an assignment would
- * have made, which `for…in` reads: a class's `get outdir()` dropped the default written over it.
+ * and only when the copy's key is: a getter, or a proxy's `get`, that nothing reads is not run. A
+ * write over a getter is the property an assignment would have made, which `for…in` reads — a
+ * class's `get outdir()` dropped the default written over it — and one over a value keeps it as
+ * enumerable as it was.
  */
 function writableOf(value: any) {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return value
@@ -186,23 +188,19 @@ function writableOf(value: any) {
       seen.add(key)
       const descriptor = Object.getOwnPropertyDescriptor(from, key)!
       const { enumerable } = descriptor
-      if (descriptor.get || descriptor.set) {
-        Object.defineProperty(copy, key, {
-          get: () => Reflect.get(value, key),
-          set: (next: unknown) =>
-            Object.defineProperty(copy, key, { value: next, writable: true, enumerable: true, configurable: true }),
-          enumerable,
-          configurable: true,
-        })
-      } else {
-        // Read as the config reads it, a proxy's `get` included.
-        Object.defineProperty(copy, key, {
-          value: Reflect.get(value, key),
-          writable: true,
-          enumerable,
-          configurable: true,
-        })
-      }
+      const accessor = Boolean(descriptor.get || descriptor.set)
+      Object.defineProperty(copy, key, {
+        get: () => Reflect.get(value, key),
+        set: (next: unknown) =>
+          Object.defineProperty(copy, key, {
+            value: next,
+            writable: true,
+            enumerable: accessor || enumerable,
+            configurable: true,
+          }),
+        enumerable,
+        configurable: true,
+      })
     }
   }
   return copy

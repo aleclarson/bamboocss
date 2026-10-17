@@ -706,6 +706,16 @@ describe('load config', () => {
           ].join('\n'),
         },
       ],
+      // Read only when read: a proxy's `get` for a key nothing reads is not run.
+      [
+        'a frozen proxy whose `get` throws for a key nothing reads',
+        {
+          'bamboo.config.ts': [
+            `const held = Object.freeze(Object.defineProperty({ presets: [], preflight: true }, 'legacy', { value: 1 }))`,
+            `export default new Proxy(held, { get(target, key, receiver) { if (key === 'legacy') throw new Error('legacy read'); return Reflect.get(target, key, receiver) } })`,
+          ].join('\n'),
+        },
+      ],
       [
         'plugins defined as not enumerable',
         {
