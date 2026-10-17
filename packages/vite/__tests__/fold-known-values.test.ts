@@ -568,6 +568,43 @@ describe('what a call is given', () => {
     expect(foldOf(withImport(body))).toMatchObject({ classes: [className], skipped: [] })
   })
 
+  // Read off an array, a value is what it is, whatever its siblings could be; and `==` converts.
+  test.each([
+    [
+      'the length of an array holding an undecided element',
+      "export const A = (p) => { const cols = [p.wide ? '1fr' : 'auto', '1fr']; return css({ zIndex: cols.length + 1 }) }",
+      'z_3',
+    ],
+    [
+      'a decided element beside an undecided one, converted',
+      "export const A = (p) => { const sizes = [p.dense ? '1' : '2', '4']; return css({ padding: sizes[1] + 'px' }) }",
+      'p_4px',
+    ],
+    [
+      '`==` of a string and a number',
+      "const gap = (n) => (n == 0 ? '0' : '4')\nexport const A = css({ padding: gap('0') })",
+      'p_0',
+    ],
+    [
+      'a key of a numeric enum it does not hold',
+      "enum E { A = 1 }\nexport const A = css({ zIndex: ('B' in E) + 1 })",
+      'z_1',
+    ],
+    [
+      'a key of the reverse mapping',
+      'enum Tone { zIndex = 1 }\nconst g = () => (1 in Tone) + 1\nexport const A = css({ zIndex: g() })',
+      'z_2',
+    ],
+    // `null` that may be `undefined` is held as `null`, and is an argument like any other.
+    [
+      'a nullish read passed to a helper',
+      "const { ...r } = [, 1]\nconst f = (a, b) => b\nexport const A = css({ color: f(r[0], 'red.300') })",
+      'c_red.300',
+    ],
+  ])('%s', (_, body, className) => {
+    expect(foldOf(withImport(body))).toMatchObject({ classes: [className], skipped: [] })
+  })
+
   // A namespace holding values adds the names it exports, and the enum's own members are known.
   test.each([
     [
@@ -835,10 +872,6 @@ describe('what is still not known', () => {
       "enum Area { main = 1 }\nexport const A = css({ color: 'red.300', gridArea: Area[Area.main] })",
     ],
     [
-      'a key of the reverse mapping',
-      'enum Tone { zIndex = 1 }\nconst g = () => (1 in Tone) + 1\nexport const A = css({ zIndex: g() })',
-    ],
-    [
       'a reverse read of an enum merged with a namespace of types',
       "enum Tone { zIndex = 1 }\nnamespace Tone { export type K = keyof typeof Tone }\nexport const A = css({ color: 'red.300', gridArea: Tone[Tone.zIndex] })",
     ],
@@ -856,7 +889,26 @@ describe('what is still not known', () => {
       '`+` on an array holding an undecided element',
       "export const A = (p) => css({ gridArea: [p.on ? 'a' : 'b'] + 'x' })",
     ],
-    ['a template literal of one', "export const A = (p) => css({ gridArea: `${[p.on ? 'a' : 'b']}x` })"],
+    [
+      'a template literal of one, in a helper',
+      "const t = (xs) => `${xs}x`\nexport const A = (p) => css({ gridArea: t([p.on ? 'a' : 'b']) })",
+    ],
+    // Converted as any value is, a key the build could not wholly read is not known.
+    [
+      'a computed key joined from an undecided part',
+      "const sizes = { 'lg-x': '4', 'sm-x': '2' }\nconst sizeOf = (...parts) => sizes[parts.join('-')]\nexport const A = (p) => css({ padding: sizeOf(p.big ? 'lg' : 'sm', 'x') })",
+    ],
+    [
+      'the key of `in`, an array holding an undecided element',
+      "export const A = (p) => css({ zIndex: ([p.on ? 'a' : 'b'] in { a: 1, b: 2 }) + 1 })",
+    ],
+    // Two objects are the same only as one object, which the build does not say.
+    ['`===` of two arrays', 'export const A = css({ zIndex: ([1] === [1]) + 1 })'],
+    // A fragment an array holds under the index read may be a sibling's, under a key that is it.
+    [
+      'a key of an element read where a sibling holds a key that is its index',
+      "const c = Math.random() > 0.5\nconst arr2 = [{ k: 1 }, { 0: { z: c ? 1 : 2 } }]\nconst x = [arr2[0]]\nexport const A = css({ zIndex: ('z' in x[0]) + 1 })",
+    ],
     // A default stands in for `undefined`, not for one of several values.
     [
       'a parameter default given one of two values',
@@ -922,6 +974,25 @@ describe('what is still not known', () => {
     expect(classes).toEqual([])
     expect(skipped).toContain('dynamic')
     expect(css).toContain('green\\.300')
+  })
+
+  test("a destructuring default given one of several values writes the default's rules", () => {
+    const body =
+      "const g = (a) => { const { color = 'green.300' } = a; return { color } }\nexport const A = (p) => css(g({ color: p.on ? undefined : 'red.300' }))"
+    const { classes, css } = foldOf(withImport(body))
+
+    expect(classes).toEqual([])
+    expect(css).toContain('green\\.300')
+  })
+
+  // A default that runs code is not run for this: a call the runtime never makes here could cut the
+  // whole call short, and the given values' rules with it.
+  test("a default that calls a helper leaves the given values' rules", () => {
+    const body = "const f = (x = f()) => x\nexport const A = (p) => css({ color: f(p.on ? 'red.300' : 'blue.300') })"
+    const { css } = foldOf(withImport(body))
+
+    expect(css).toContain('red\\.300')
+    expect(css).toContain('blue\\.300')
   })
 
   // It throws there.

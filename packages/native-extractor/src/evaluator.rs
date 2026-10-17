@@ -380,16 +380,20 @@ impl EvalResult {
     }
 
     fn is_unplaced(&self) -> bool {
-        self.nullish && self.value.is_none() && !self.complete
+        self.nullish
+            && self.value.is_none()
+            && !self.complete
+            && self.conditions.is_empty()
+            && self.partial.is_none()
     }
 
-    /// Whether converting the value — to a string, a number, an answer to `==` — reads only what
-    /// the build knows of it: complete, one value and not several, and with no part of it not
-    /// known. A complete array may still hold an element it could not decide between.
+    /// Whether converting the value — to a string, a number, a key — reads only what the build
+    /// knows of it: complete, with no part of it not known. A complete array may still hold an
+    /// element it could not decide between, which its record says; what a value read off an array
+    /// carries of its siblings' choices, the array's `conditions`, is not the value, and an object
+    /// converts to `[object Object]` whatever it holds.
     fn converts(&self) -> bool {
-        self.complete
-            && self.conditions.is_empty()
-            && self.partial.as_deref().is_none_or(Partial::read_whole)
+        self.complete && self.partial.as_deref().is_none_or(Partial::read_whole)
     }
 
     fn undefined() -> Self {
@@ -2251,10 +2255,8 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         }
         let mut object = serde_json::Map::with_capacity(declaration.body.members.len());
         let mut complete = true;
-        // What is known of its members, kept once one is not. Open, as a numeric member gives the
-        // object a key for its value too, which is not held here: only a member written is known.
+        // What is known of its members, kept once one is not.
         let mut known = Partial::default();
-        known.open();
         let mut next: Option<f64> = Some(0.0);
         for member in &declaration.body.members {
             let name = match &member.id {
@@ -2266,7 +2268,6 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                         Some(value) => value.to_string(),
                         None => {
                             complete = false;
-                            known.open();
                             continue;
                         }
                     }
@@ -2300,17 +2301,41 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 }
             }
         }
+        // A numeric member gives the object a key for its value too, its reverse mapping, which is
+        // not held here: there, as each such value names it, though what it holds is not known.
+        // Where a member is not known — its value, or its name — nor are the keys its value gives,
+        // and the object is open, as it is where another declaration adds members.
+        let reverse: Vec<String> = object
+            .values()
+            .filter_map(serde_json::Value::as_f64)
+            .map(js_number_string)
+            .collect();
+        let mut record = if complete && !merge.open {
+            for key in &reverse {
+                known.write(key, false, None);
+            }
+            known
+        } else {
+            let mut record = Partial::default();
+            record.open();
+            for name in object.keys() {
+                record.write(name, !known.unsettled.contains(name), None);
+            }
+            for name in &known.unsettled {
+                record.write(name, false, None);
+            }
+            record
+        };
         for name in &merge.written {
-            known.write(name, false, None);
+            record.write(name, false, None);
         }
-        let numeric = object.values().any(serde_json::Value::is_number);
-        let whole = complete && !merge.open && !numeric;
+        let whole = complete && !merge.open && reverse.is_empty();
         EvalResult {
             value: Some(object.into()),
             conditions: Vec::new(),
             complete: whole,
             refusal: None,
-            partial: (!whole).then(|| Arc::new(known)),
+            partial: (!whole).then(|| Arc::new(record)),
             nullish: false,
         }
     }
@@ -2483,7 +2508,8 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         // `in` says for itself whether its answer is exact: it reads which keys an object has, not
         // what they hold. Any other reads all of each: `[c ? 'a' : 'b'] + 'x'` gave `x`.
         let mut complete = left.converts() && right.converts();
-        let (left_complete, right_complete) = (left.complete, right.complete);
+        // The left of `in` is converted to a key, as a value any other operator reads is.
+        let (left_complete, right_complete) = (left.converts(), right.complete);
         let refusal = left.refusal.or(right.refusal);
         let receiver = right.partial;
         let right_conditions = right.conditions;
@@ -2500,12 +2526,12 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             BinaryOperator::Division => numeric_binary(&left, &right, |a, b| a / b),
             BinaryOperator::Remainder => numeric_binary(&left, &right, |a, b| a % b),
             BinaryOperator::Exponential => numeric_binary(&left, &right, f64::powf),
-            BinaryOperator::Equality | BinaryOperator::StrictEquality => {
-                Some((left == right).into())
+            BinaryOperator::StrictEquality => strict_equals(&left, &right).map(Into::into),
+            BinaryOperator::StrictInequality => {
+                strict_equals(&left, &right).map(|equal| (!equal).into())
             }
-            BinaryOperator::Inequality | BinaryOperator::StrictInequality => {
-                Some((left != right).into())
-            }
+            BinaryOperator::Equality => loose_equals(&left, &right).map(Into::into),
+            BinaryOperator::Inequality => loose_equals(&left, &right).map(|equal| (!equal).into()),
             BinaryOperator::LessThan => compare_binary(&left, &right, |a, b| a < b),
             BinaryOperator::LessEqualThan => compare_binary(&left, &right, |a, b| a <= b),
             BinaryOperator::GreaterThan => compare_binary(&left, &right, |a, b| a > b),
@@ -2588,12 +2614,13 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                     serde_json::Value::Array(ref array) => match array_index(&key) {
                         Some(index)
                             if receiver.as_ref().is_none_or(|known| {
-                                (known.knows(&key) || !known.open) && !known.nullish.contains(&key)
+                                (known.knows(&key) || !known.open || index < known.known_prefix)
+                                    && !known.nullish.contains(&key)
                             }) =>
                         {
-                            let placed = receiver
-                                .as_ref()
-                                .is_some_and(|known| known.knows(&key) || !known.open);
+                            let placed = receiver.as_ref().is_some_and(|known| {
+                                known.knows(&key) || !known.open || index < known.known_prefix
+                            });
                             (Some(index < array.len()), keyed || placed)
                         }
                         _ if key == "length" => (Some(true), true),
@@ -3254,10 +3281,14 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                         refusal: value.refusal,
                         ..EvalResult::unknown()
                     };
-                } else if value.value.is_none() && !value.conditions.is_empty() {
+                } else if value.value.is_none()
+                    && !value.conditions.is_empty()
+                    && runs_nothing(initializer)
+                {
                     // One of several values, `undefined` perhaps among them — a choice keeps no
                     // branch that is — so the default may stand in for one: its rules are
-                    // written too, and nothing is decided.
+                    // written too, and nothing is decided. Only a default that runs no code: a
+                    // call the runtime never makes here could cut the whole call short.
                     let default = self.evaluate(initializer);
                     value.conditions.extend(default.data());
                 }
@@ -3344,7 +3375,10 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                         refusal: value.refusal,
                         ..EvalResult::unknown()
                     }
-                } else if value.value.is_none() && !value.conditions.is_empty() {
+                } else if value.value.is_none()
+                    && !value.conditions.is_empty()
+                    && runs_nothing(&pattern.right)
+                {
                     // One of several values, `undefined` perhaps among them (`bind_parameters`).
                     let default = self.evaluate(&pattern.right);
                     let mut value = value;
@@ -3842,6 +3876,37 @@ fn namespace_exports(namespace: &oxc_ast::ast::TSNamespaceDeclaration<'_>) -> Op
     Some(names)
 }
 
+/// Whether evaluating `expression` runs no code: a literal, or an array or object of them.
+fn runs_nothing(expression: &Expression<'_>) -> bool {
+    match expression.get_inner_expression() {
+        Expression::StringLiteral(_)
+        | Expression::NumericLiteral(_)
+        | Expression::BooleanLiteral(_)
+        | Expression::NullLiteral(_) => true,
+        Expression::TemplateLiteral(template) => template.expressions.is_empty(),
+        Expression::UnaryExpression(unary) => {
+            unary.operator == UnaryOperator::UnaryNegation
+                && matches!(
+                    unary.argument.get_inner_expression(),
+                    Expression::NumericLiteral(_)
+                )
+        }
+        Expression::ArrayExpression(array) => array
+            .elements
+            .iter()
+            .all(|element| element.as_expression().is_some_and(runs_nothing)),
+        Expression::ObjectExpression(object) => {
+            object.properties.iter().all(|property| match property {
+                ObjectPropertyKind::ObjectProperty(property) => {
+                    !property.computed && !property.method && runs_nothing(&property.value)
+                }
+                ObjectPropertyKind::SpreadProperty(_) => false,
+            })
+        }
+        _ => false,
+    }
+}
+
 /// What is known of an element holding values the build could not decide between, which its array
 /// holds under no index of the element's (`conditions`): what its own record says, with each key
 /// those values are under not known. Of one not surely an object or an array — a scalar, a guess,
@@ -4170,11 +4235,21 @@ fn member_value(mut result: EvalResult, property: &str) -> EvalResult {
     // fragments, so a read of one property keeps its own and none of its siblings'. `theme.w`
     // beside `px: dense ? '2' : '4'` used to carry `px`'s choices along: their rules were
     // emitted, and the read was undecided although `w` is not.
+    //
+    // An array holds its elements' fragments under no index of theirs, so one it holds under the
+    // index read is a fragment some element holds under a key that is that index — that element's,
+    // or a sibling's: `[{ k: 1 }, { 0: { z: c ? 1 : 2 } }][0]` kept `z`'s choices. Such a read is
+    // not known, and keeps them only for the rules they may be.
+    let mut misattributable = false;
     if result.conditions.iter().any(serde_json::Value::is_object) {
         result.conditions = std::mem::take(&mut result.conditions)
             .into_iter()
             .filter_map(|condition| match condition {
-                serde_json::Value::Object(mut fragment) => fragment.shift_remove(property),
+                serde_json::Value::Object(mut fragment) => {
+                    let kept = fragment.shift_remove(property);
+                    misattributable |= is_array && kept.is_some();
+                    kept
+                }
                 other => Some(other),
             })
             .collect();
@@ -4243,6 +4318,14 @@ fn member_value(mut result: EvalResult, property: &str) -> EvalResult {
     if result.value.is_none() && !(absent && object_was_known) {
         result.complete = false;
     }
+    // What may be `null` or `undefined` is held as `null`, as every other such value is.
+    if result.nullish && result.value.is_none() {
+        result.value = Some(serde_json::Value::Null);
+    }
+    if misattributable {
+        result.complete = false;
+        result.partial = None;
+    }
     result
 }
 
@@ -4274,7 +4357,13 @@ fn may_be_inherited(property: &str) -> bool {
 
 /// A computed key's value, unless it is a `null` that may be `undefined`, whose name is not known.
 fn known_key(key: EvalResult) -> Option<serde_json::Value> {
-    if key.nullish { None } else { key.value }
+    // Converted to a string as any key is: not where any of it is not known — `parts.join('-')`
+    // of an undecided part picked a property as if it were the one.
+    if key.nullish || !key.converts() {
+        None
+    } else {
+        key.value
+    }
 }
 
 fn module_name<'a>(name: &'a ModuleExportName<'a>) -> &'a str {
@@ -4591,6 +4680,55 @@ fn shift_count(count: i32) -> u32 {
 }
 /// A relational comparison: two strings by their UTF-16 code units, as JavaScript compares them,
 /// and anything else as numbers. `'10' < '9'` is true.
+/// `===` as JavaScript answers it, where the build can: two objects or arrays are the same only as
+/// one object, which nothing here says, and two strings holding whitespace may not be the strings
+/// their literals were, collapsed as they are read. Values of two types are never the same.
+fn strict_equals(left: &serde_json::Value, right: &serde_json::Value) -> Option<bool> {
+    use serde_json::Value;
+    match (left, right) {
+        (Value::Object(_) | Value::Array(_), Value::Object(_) | Value::Array(_)) => None,
+        (Value::String(a), Value::String(b)) if a.contains(' ') || b.contains(' ') => None,
+        (Value::Number(a), Value::Number(b)) => Some(a.as_f64() == b.as_f64()),
+        _ => Some(left == right),
+    }
+}
+
+/// `==`: as `===` for two values of one type, and otherwise each converted as JavaScript converts
+/// it — a boolean to a number, a string beside a number to one, an object or array beside anything
+/// else to the string it converts to. It compared JSON, so `'0' == 0` was false.
+fn loose_equals(left: &serde_json::Value, right: &serde_json::Value) -> Option<bool> {
+    use serde_json::Value;
+    match (left, right) {
+        (Value::Null, Value::Null) => Some(true),
+        (Value::Null, _) | (_, Value::Null) => Some(false),
+        (Value::Object(_) | Value::Array(_), Value::Object(_) | Value::Array(_)) => None,
+        (Value::Object(_) | Value::Array(_), other)
+        | (other, Value::Object(_) | Value::Array(_)) => {
+            let structured = if matches!(left, Value::Object(_) | Value::Array(_)) {
+                left
+            } else {
+                right
+            };
+            loose_equals(&Value::String(to_js_string(structured)), other)
+        }
+        (Value::Bool(_), _) | (_, Value::Bool(_))
+            if std::mem::discriminant(left) != std::mem::discriminant(right) =>
+        {
+            let number = |value: &Value| {
+                serde_json::Number::from_f64(number_value(value)?).map(Value::Number)
+            };
+            loose_equals(&number(left)?, &number(right)?)
+        }
+        (Value::Number(_), Value::String(text)) | (Value::String(text), Value::Number(_)) => {
+            if text.contains(' ') {
+                return None;
+            }
+            Some(number_value(left)? == number_value(right)?)
+        }
+        _ => strict_equals(left, right),
+    }
+}
+
 fn compare_binary(
     left: &serde_json::Value,
     right: &serde_json::Value,
