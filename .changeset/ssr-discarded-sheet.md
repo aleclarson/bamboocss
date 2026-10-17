@@ -10,7 +10,9 @@ an SSR rebuild after a client-only edit in a run that announces its environments
 run had also taken the others' losses for its own and kept them past the rebuild that restored the class. Before Vite
 7.1.10, an SSR build with `cssCodeSplit` off, a library's default, writes its sheet all the same, and such a rebuild
 failed there too, though it writes that sheet again with the class's rule: what that sheet pruned no longer counts
-against it, while what the client's pruned still does.
+against it, while what the client's pruned still does. And where Vite hands the plugin no output to observe — Vite 6
+outside a watch — what a build pruned is no longer forgotten once the next environment finishes, so the guard answers
+for a sheet pruned two builds earlier, where it let the build through.
 
 The error that guard raises now says the classes are in use as an environment finishes, rather than compiled in it,
 names a rebuild of every environment at once in a watch among its causes, and offers writing the build's output,

@@ -613,6 +613,63 @@ describe('compiler', () => {
   }, 60_000)
 
   /**
+   * Outside a watch, Vite 6 gives `options` no output, so each build prunes its sheet straight into
+   * the loss history. What a build pruned is kept on its environment's output too, so a late-sheet
+   * SSR rebuild, which reads past its own losses, still answers for the client's: rebuilding the
+   * history as the SSR environment finished dropped them, and the rebuild passed.
+   */
+  test("a rebuild reading past its own late sheet still answers for the client's", async () => {
+    const entry = join(cwd, 'src/__late-client-sheet.tsx')
+    const widths = { shared: '94.301px', later: '94.302px' }
+    const source = (...used: string[]) =>
+      `import { css } from 'styled-system/css'\n` +
+      used.map((width, index) => `export const c${index} = css({ width: '[${width}]' })\n`).join('')
+    const { css, fold: compiler } = plugins({ cwd, reportSummary: false })
+    const resolvedCss = hookOf(css.resolveId)!.call({} as never, VIRTUAL_CSS_ID, undefined, {} as never) as string
+    const environments = {
+      client: { name: 'client', config: { build: { sourcemap: false, emitAssets: true } } },
+      ssr: { name: 'ssr', config: { build: { sourcemap: false, ssr: true, cssCodeSplit: false, emitAssets: false } } },
+    }
+
+    writeFileSync(
+      entry,
+      `import 'virtual:bamboo.css'\n` +
+        `import { css } from 'styled-system/css'\n` +
+        `export const inventory = [css({ width: '[${widths.shared}]' }), css({ width: '[${widths.later}]' })]\n`,
+    )
+    try {
+      const config = { command: 'build', root: cwd, build: { sourcemap: false } }
+      await hookOf(css.configResolved)?.call({} as never, config as never)
+      await hookOf(compiler.configResolved)?.call({} as never, config as never)
+      const run = async (environment: (typeof environments)[keyof typeof environments], ...used: string[]) => {
+        const context = {
+          addWatchFile() {},
+          environment,
+          getModuleIds: () => [entry, resolvedCss].values(),
+          getModuleInfo: () => null,
+        }
+        await hookOf(css.buildStart)?.call(context as never, {} as never)
+        await hookOf(compiler.buildStart)?.call(context as never, {} as never)
+        const stylesheet = await hookOf(css.load)?.call(context as never, resolvedCss, {} as never)
+        await hookOf(compiler.transform)!.call(context as never, source(...used), entry, {} as never)
+        await hookOf(compiler.buildEnd)?.call(context as never, undefined as never)
+        const bundle = {
+          'style.css': { type: 'asset', fileName: 'style.css', names: [], originalFileNames: [], source: stylesheet },
+        }
+        await hookOf(css.generateBundle)?.call({ environment } as never, {} as never, bundle as never, false)
+      }
+
+      await run(environments.client, widths.shared)
+      await run(environments.ssr, widths.shared)
+      await expect(run(environments.ssr, widths.shared, widths.later)).rejects.toThrow(
+        'already pruned out of a stylesheet emitted by an earlier one',
+      )
+    } finally {
+      rmSync(entry, { force: true })
+    }
+  }, 60_000)
+
+  /**
    * No foreign recipe config outlives the edit that changed it, in any environment.
    *
    * The config of an imported recipe is parsed once per declaring module and cached, and both

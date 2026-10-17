@@ -111,7 +111,8 @@ export interface StaticCompilationSession {
   /**
    * Environments whose sheet survives Vite deleting the assets they do not emit, as it is emitted
    * after: an SSR build's with `cssCodeSplit` off, before Vite 7.1.10. Seen in the late pass, they
-   * write it again on a rebuild, and the guard reads them as emitting one.
+   * write it again on a rebuild, so the guard reads past what their own last sheet pruned — and
+   * no other environment's, which a page may link.
    */
   lateSheetEnvironments: Set<string>
   /**

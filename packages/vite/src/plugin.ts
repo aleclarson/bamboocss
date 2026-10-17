@@ -1422,14 +1422,36 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     const generation = preparedGenerations.get(environment)
     if (!generation || transformStateByEnvironment.get(environment) !== generation.state) {
       const currentState = transformStateByEnvironment.get(environment)
+      // Unstaged — a hook harness, or a Vite 6 build outside a watch, whose `options` is given no
+      // output — what this output prunes is kept on the environment's live output, as a staged
+      // output's stage is once written, so the guard can tell it from another environment's
+      // (`prunedOutside`) and rebuilding the history from those outputs keeps it. It was written
+      // to the history alone, which the next environment to finish rebuilt without it.
+      const committed = staticSession.prunedClasses
+      const own = replacesGeneratedStylesheet ? new Set<string>() : undefined
+      if (own) staticSession.prunedClasses = own
+      let restored = false
       return {
         cssLoaded: currentState?.cssLoaded ?? staticSession.cssLoaded,
         requiredClasses: requiredClassesForProjection(
           environment,
           currentState ? ownedClassesForState(currentState) : currentRequiredClasses(),
         ),
-        staged: false,
-        restore() {},
+        staged: own !== undefined,
+        restore() {
+          if (restored || !own) return
+          restored = true
+          staticSession.prunedClasses = committed
+          const slots = liveOutputSlotsByEnvironment.get(environment)
+          if (!slots?.size) {
+            for (const className of own) committed.add(className)
+            return
+          }
+          for (const slot of slots.values()) {
+            slot.prunedClasses = new Set([...(slot.prunedClasses ?? []), ...own])
+          }
+          rebuildLivePrunedClasses()
+        },
       }
     }
 
