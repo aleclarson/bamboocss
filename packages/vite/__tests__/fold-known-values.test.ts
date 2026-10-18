@@ -713,6 +713,49 @@ describe('what the build knows beside a guess', () => {
   })
 })
 
+/**
+ * A choice spread before a method of the name, decided, is the branch it takes, as evaluated. Read
+ * from its branches alone, 1.57.0 failed the call wherever a branch wrote the name, though 1.56.7
+ * compiled it, and evaluated the branch not taken: `big ? heavy() : {}` failed for a recursion in
+ * `heavy`, where `big` is `false`.
+ */
+describe('a spread of a choice the build decides', () => {
+  test.each([
+    [
+      'a variant compared',
+      "const button = (variant) => { const tone = { color: () => 'red.300', ...(variant === 'ghost' ? { color: () => 'gray.300' } : {}) }; return tone.color() }\nexport const A = css({ color: button('solid') })",
+      'c_red.300',
+    ],
+    [
+      'a default the call leaves',
+      "const styles = (variant = 'solid') => { const tone = { bg: () => 'blue.500', ...(variant === 'outline' ? { bg: () => 'transparent' } : {}) }; return { bg: tone.bg() } }\nexport const A = css(styles())",
+      'bg_blue.500',
+    ],
+    [
+      '`&&` on `false`',
+      "const f = (dense) => { const helpers = { color: () => 'red.300', ...(dense && { color: () => 'blue.300' }) }; return helpers.color() }\nexport const A = css({ color: f(false) })",
+      'c_red.300',
+    ],
+    [
+      '`??` on an object',
+      "const theme = { bg: 'x' }\nconst helpers = { color: () => 'red.300', ...(theme ?? { color: () => 'blue.300' }) }\nexport const A = css({ color: helpers.color() })",
+      'c_red.300',
+    ],
+    [
+      'bound to a name',
+      "const dark = false\nconst extra = dark ? { color: () => 'blue.300' } : {}\nconst helpers = { color: () => 'red.300', ...extra }\nexport const A = css({ color: helpers.color() })",
+      'c_red.300',
+    ],
+    [
+      'whose branch not taken would be refused',
+      "const fib = (n) => n < 2 ? 1 : fib(n - 1) + fib(n - 2)\nconst heavy = () => ({ size: fib(40) })\nconst f = (big) => { const helpers = { color: () => 'red.300', ...(big ? heavy() : {}) }; return helpers.color() }\nexport const A = css({ color: f(false) })",
+      'c_red.300',
+    ],
+  ])('%s is the branch it takes', (_, body, className) => {
+    expect(foldOf(withImport(body)).classes).toEqual([className])
+  })
+})
+
 // A recipe takes a `null` variant for an explicit miss and `undefined` for its default, so a hole
 // is never compiled as the one or the other: the selection is made where it runs.
 test('a hole selecting a recipe variant selects at runtime', () => {

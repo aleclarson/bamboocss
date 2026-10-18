@@ -19,7 +19,7 @@ use oxc_ast::{
 };
 use oxc_parser::Parser;
 use oxc_semantic::{AstNodes, NodeId, Scoping, Semantic, SemanticBuilder};
-use oxc_span::{GetSpan, SourceType};
+use oxc_span::{GetSpan, SourceType, Span};
 use oxc_syntax::{
     operator::{BinaryOperator, LogicalOperator, UnaryOperator},
     symbol::{SymbolFlags, SymbolId},
@@ -1547,9 +1547,14 @@ impl<'a> ProjectEvaluator<'a> {
                         if function.id.as_ref().is_some_and(|id| id.name == name) =>
                     {
                         self.call_site(key, &evaluator, name, function.span);
-                        return evaluator.with_helper(name, |evaluator| {
-                            evaluator.call_function(function, arguments)
-                        });
+                        // Through its symbol, as within the module: once the module writes to it,
+                        // `tone = …`, what is called may not be what was declared, and it was.
+                        return match function.id.as_ref().and_then(|id| id.symbol_id.get()) {
+                            Some(symbol) => evaluator.call_symbol(symbol, arguments, None),
+                            None => evaluator.with_helper(name, |evaluator| {
+                                evaluator.call_function(function, arguments)
+                            }),
+                        };
                     }
                     Declaration::VariableDeclaration(declaration) => {
                         for declarator in &declaration.declarations {
@@ -1563,7 +1568,7 @@ impl<'a> ProjectEvaluator<'a> {
                                 && let Some(symbol) = identifier.symbol_id.get()
                             {
                                 self.call_site(key, &evaluator, name, expression.span());
-                                return evaluator.call_symbol(symbol, arguments);
+                                return evaluator.call_symbol(symbol, arguments, None);
                             }
                             // Destructured, it is the module's own all the same, not a star
                             // member's, and what it holds is not followed to a call.
@@ -1632,7 +1637,7 @@ impl<'a> ProjectEvaluator<'a> {
                                 declaration => declaration.span(),
                             };
                             self.call_site(key, &evaluator, identifier.name.as_str(), at);
-                            return evaluator.call_symbol(symbol, arguments);
+                            return evaluator.call_symbol(symbol, arguments, None);
                         }
                     }
                 }
@@ -2298,7 +2303,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 let Some(symbol) = self.scoping.get_reference(reference).symbol_id() else {
                     return EvalResult::unknown();
                 };
-                self.evaluate_symbol(symbol)
+                self.evaluate_symbol_at(symbol, Some(identifier.span))
             }
             Expression::StaticMemberExpression(member) => {
                 let object = self.evaluate(&member.object);
@@ -2489,7 +2494,14 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             .map_or_else(EvalResult::undefined, |value| self.evaluate(value))
     }
 
+    /// What `symbol` holds, read from no site in particular: from another module, as an export.
     pub fn evaluate_symbol(&mut self, symbol: SymbolId) -> EvalResult {
+        self.evaluate_symbol_at(symbol, None)
+    }
+
+    /// What `symbol` holds where `site` reads it, which decides whether a `var` declared in a block
+    /// has run there (`unrun_at`).
+    fn evaluate_symbol_at(&mut self, symbol: SymbolId, site: Option<Span>) -> EvalResult {
         if let Some(write) = self.mutation(symbol) {
             return EvalResult::refused(self.write_refusal(symbol, write));
         }
@@ -2502,7 +2514,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         if let Some(write) = self.declared_write(symbol) {
             return EvalResult::refused(self.write_refusal(symbol, write));
         }
-        if self.var_in_statement(symbol) {
+        if self.unrun_at(symbol, site) {
             return EvalResult::unknown();
         }
         if !self.evaluating.insert(symbol) {
@@ -2531,10 +2543,21 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                     // initializer. Binding every sibling at once also mirrors JavaScript's
                     // defaults and avoids re-evaluating the same static initializer.
                     self.bind_pattern(&declarator.id, value);
-                    self.environment
+                    let value = self
+                        .environment
                         .get(&symbol)
                         .cloned()
-                        .unwrap_or_else(EvalResult::unknown)
+                        .unwrap_or_else(EvalResult::unknown);
+                    // Not kept: declared in a block, it holds that only where the block has run,
+                    // and a read outside it would find what one inside bound.
+                    if self.var_block(symbol).is_some() {
+                        for bound in declarator.id.get_binding_identifiers() {
+                            if let Some(bound) = bound.symbol_id.get() {
+                                self.environment.remove(&bound);
+                            }
+                        }
+                    }
+                    value
                 }
                 AstKind::TSEnumDeclaration(declaration) => {
                     self.evaluate_merged_enum(symbol, declaration)
@@ -2623,30 +2646,80 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             })
     }
 
-    /// Whether `symbol` is a `var` declared where it may not run — in a block, a branch, a loop — so
-    /// that read from its declaration it may be `undefined`, or another value.
-    fn var_in_statement(&self, symbol: SymbolId) -> bool {
+    /// Where a `var` `symbol` declares is declared in a statement that may not run — a block, a
+    /// branch, a case, a loop's body — that statement's span. A `for` head's runs whenever the loop
+    /// does, a labelled statement and a block standing as a statement of its own whenever they are
+    /// reached, so each is placed where that statement is: not a labelled block, which a `break`
+    /// leaves. None where it always runs: in a program's, a function's or a static block's body, or
+    /// a namespace's.
+    fn var_block(&self, symbol: SymbolId) -> Option<Span> {
         if !self
             .scoping
             .symbol_flags(symbol)
             .contains(SymbolFlags::FunctionScopedVariable)
         {
+            return None;
+        }
+        let nodes = self.semantic.nodes();
+        let declaration = nodes.parent_id(self.scoping.symbol_declaration(symbol));
+        let AstKind::VariableDeclaration(variables) = nodes.kind(declaration) else {
+            return None;
+        };
+        if !variables.kind.is_var() {
+            return None;
+        }
+        let mut statement = declaration;
+        loop {
+            let parent = nodes.parent_id(statement);
+            let runs_with_parent = match nodes.kind(parent) {
+                AstKind::ForStatement(head) => head
+                    .init
+                    .as_ref()
+                    .is_some_and(|init| init.span() == nodes.kind(statement).span()),
+                AstKind::LabeledStatement(_) => true,
+                AstKind::BlockStatement(_) => matches!(
+                    nodes.parent_kind(parent),
+                    AstKind::Program(_)
+                        | AstKind::FunctionBody(_)
+                        | AstKind::BlockStatement(_)
+                        | AstKind::StaticBlock(_)
+                        | AstKind::TSModuleBlock(_)
+                        | AstKind::SwitchCase(_)
+                ),
+                AstKind::Program(_)
+                | AstKind::FunctionBody(_)
+                | AstKind::ExportDeclaration(_)
+                | AstKind::TSModuleBlock(_)
+                | AstKind::StaticBlock(_) => return None,
+                _ => false,
+            };
+            if !runs_with_parent {
+                return Some(nodes.kind(parent).span());
+            }
+            statement = parent;
+        }
+    }
+
+    /// Whether the `var` `symbol` declares in a block may not have run where `site` reads it: read
+    /// anywhere but in that block, after the declaration — or from another module, with no `site` —
+    /// it is `undefined` where the block did not run. A body the evaluator runs binds it only once
+    /// the declaration runs, so bound, it ran. 1.57.1 took every read of one for unknown, in its
+    /// block too, and called one as if the block had run wherever it was called.
+    fn unrun_at(&self, symbol: SymbolId, site: Option<Span>) -> bool {
+        if self.environment.contains_key(&symbol) {
             return false;
         }
-        let declarator = self.scoping.symbol_declaration(symbol);
-        let nodes = self.semantic.nodes();
-        let declaration = nodes.parent_id(declarator);
-        let AstKind::VariableDeclaration(variables) = nodes.kind(declaration) else {
+        let Some(block) = self.var_block(symbol) else {
             return false;
         };
-        variables.kind.is_var()
-            && !matches!(
-                nodes.parent_kind(declaration),
-                AstKind::Program(_)
-                    | AstKind::FunctionBody(_)
-                    | AstKind::ExportDeclaration(_)
-                    | AstKind::TSModuleBlock(_)
-            )
+        let declared = self
+            .semantic
+            .nodes()
+            .kind(self.scoping.symbol_declaration(symbol))
+            .span();
+        !site.is_some_and(|site| {
+            site.start >= declared.end && block.start <= site.start && site.end <= block.end
+        })
     }
 
     /// `symbol` is written at `reference`: by the statement there, read as written.
@@ -3195,22 +3268,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
 
     fn evaluate_logical(&mut self, expression: &'a LogicalExpression<'a>) -> EvalResult {
         let left = self.evaluate(&expression.left);
-        // `undefined` decides a choice as surely as a value does: it is falsy, and nullish.
-        // `o.display ?? 'block'` on an option nobody passed used to stay undecided.
-        // As a test decides (`truthiness`): not on a value the build only guessed.
-        let select_right = match &left.value {
-            Some(_) if left.surely_structured() => {
-                Some(expression.operator == LogicalOperator::And)
-            }
-            Some(value) if left.decides() => Some(match expression.operator {
-                LogicalOperator::Or => !truthy(value),
-                LogicalOperator::And => truthy(value),
-                LogicalOperator::Coalesce => value.is_null(),
-            }),
-            None if left.is_undefined() => Some(expression.operator != LogicalOperator::And),
-            _ => None,
-        };
-        if let Some(select_right) = select_right {
+        if let Some(select_right) = selects_right(&left, expression.operator) {
             return if select_right {
                 self.evaluate(&expression.right)
             } else {
@@ -3395,7 +3453,11 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 }
             }
             if members.is_empty() {
-                return self.call_symbol(symbol, positional(arguments, positioned));
+                return self.call_symbol(
+                    symbol,
+                    positional(arguments, positioned),
+                    Some(call.callee.span()),
+                );
             }
             // `helpers.size('sm')` on a local object literal. Values evaluate to JSON, which
             // cannot hold a function, so the callee is found in the source instead: walk the
@@ -3403,7 +3465,8 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             // call that. Anything the walk cannot follow is unknown, as before.
             if !self.imports.contains_key(&symbol)
                 && !self.is_mutated(symbol)
-                && let Some(callee) = self.object_member_expression(symbol, &members)
+                && let Some(callee) =
+                    self.object_member_expression(symbol, &members, call.callee.span())
             {
                 let name = format!("{}.{}", self.scoping.symbol_name(symbol), members.join("."));
                 let arguments = positional(arguments, positioned);
@@ -3474,7 +3537,14 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         }
     }
 
-    pub fn call_symbol(&mut self, symbol: SymbolId, arguments: Vec<EvalResult>) -> EvalResult {
+    /// Call the function `symbol` holds where `site` calls it, or from another module, with no
+    /// `site`.
+    pub fn call_symbol(
+        &mut self,
+        symbol: SymbolId,
+        arguments: Vec<EvalResult>,
+        site: Option<Span>,
+    ) -> EvalResult {
         // Reassigned, the function called may not be the one declared. A property written onto
         // it, like `displayName`, does not change what calling it returns.
         if self.scoping.symbol_is_mutated(symbol)
@@ -3488,6 +3558,11 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         }
         if let Some(write) = self.declared_write(symbol) {
             return EvalResult::refused(self.write_refusal(symbol, write));
+        }
+        // Declared in a block, it may hold no function where it is called: `extra?.()` past an
+        // `if` that did not run is nothing, and was called.
+        if self.unrun_at(symbol, site) {
+            return EvalResult::unknown();
         }
         if let Some(binding) = self.imports.get(&symbol).cloned() {
             return self
@@ -3539,6 +3614,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         &mut self,
         symbol: SymbolId,
         members: &[String],
+        site: Span,
     ) -> Option<&'a Expression<'a>> {
         // Read while its initializer runs, it is not there yet. Nor is it to what the walk
         // evaluates of a spread or a key, which runs as the initializer does, so one reading it
@@ -3552,6 +3628,9 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         // the stack. Walked at the top, it is a call of its own, which a limit gives up on whole.
         let depth = self.project.call_depth.get();
         let found = if depth >= MAX_CALL_DEPTH || self.project.abandoned.borrow().is_some() {
+            // Refused for where it was asked from, as a call is (`enter_call`): an export evaluated
+            // now was cached as unknown, and failed every module reading it from then on.
+            self.project.cut_short_within_calls();
             None
         } else {
             if depth == 0 {
@@ -3559,7 +3638,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 self.made.clear();
             }
             self.project.call_depth.set(depth + 1);
-            let found = self.member_expression_at(symbol, members);
+            let found = self.member_expression_at(symbol, members, site);
             self.project.call_depth.set(depth);
             let abandoned = if depth == 0 {
                 self.project.abandoned.take().is_some()
@@ -3576,8 +3655,9 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         &mut self,
         symbol: SymbolId,
         members: &[String],
+        site: Span,
     ) -> Option<&'a Expression<'a>> {
-        if self.declared_write(symbol).is_some() {
+        if self.declared_write(symbol).is_some() || self.unrun_at(symbol, Some(site)) {
             return None;
         }
         let AstKind::VariableDeclarator(declarator) =
@@ -3641,7 +3721,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 .reference_id
                 .get()
                 .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
-                .and_then(|symbol| self.unwritten_initializer(symbol))
+                .and_then(|symbol| self.unwritten_initializer(symbol, identifier.span))
                 .and_then(|initializer| match initializer.get_inner_expression() {
                     Expression::StringLiteral(literal) => Some(literal),
                     _ => None,
@@ -3658,8 +3738,11 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
     }
 
     /// What `symbol` is bound to where nothing in the file writes to it after: its declarator's
-    /// initializer.
-    fn unwritten_initializer(&self, symbol: SymbolId) -> Option<&'a Expression<'a>> {
+    /// initializer, where `site` reads it and the declaration has run (`unrun_at`).
+    fn unwritten_initializer(&self, symbol: SymbolId, site: Span) -> Option<&'a Expression<'a>> {
+        if self.unrun_at(symbol, Some(site)) {
+            return None;
+        }
         let AstKind::VariableDeclarator(declarator) =
             self.semantic.symbol_declaration(symbol).kind()
         else {
@@ -3708,22 +3791,43 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
             | Expression::BooleanLiteral(_)
             | Expression::NumericLiteral(_) => true,
             Expression::Identifier(identifier) if identifier.name == "undefined" => true,
-            // Whichever branch: `c && { … }` spreads `c` where it is falsy, which writes nothing.
+            // A choice the build decides is the branch it takes, as evaluated: read from its
+            // branches alone, a decided one failed the call where 1.56.7 compiled it, and the one
+            // that does not run was evaluated, `big ? heavy() : {}` failing on `heavy()`.
+            // Undecided, whichever branch: `c && { … }` spreads `c` where it is falsy, which
+            // writes nothing.
             Expression::ConditionalExpression(conditional) => {
-                self.spread_cannot_write(&conditional.consequent, member, depth + 1)
-                    && self.spread_cannot_write(&conditional.alternate, member, depth + 1)
+                match self.evaluate(&conditional.test).truthiness() {
+                    Some(true) => {
+                        self.spread_cannot_write(&conditional.consequent, member, depth + 1)
+                    }
+                    Some(false) => {
+                        self.spread_cannot_write(&conditional.alternate, member, depth + 1)
+                    }
+                    None => {
+                        self.spread_cannot_write(&conditional.consequent, member, depth + 1)
+                            && self.spread_cannot_write(&conditional.alternate, member, depth + 1)
+                    }
+                }
             }
             Expression::LogicalExpression(logical) => {
-                (logical.operator == LogicalOperator::And
-                    || self.spread_cannot_write(&logical.left, member, depth + 1))
-                    && self.spread_cannot_write(&logical.right, member, depth + 1)
+                let left = self.evaluate(&logical.left);
+                match selects_right(&left, logical.operator) {
+                    Some(true) => self.spread_cannot_write(&logical.right, member, depth + 1),
+                    Some(false) => surely_writes_no(&left, member),
+                    None => {
+                        (logical.operator == LogicalOperator::And
+                            || self.spread_cannot_write(&logical.left, member, depth + 1))
+                            && self.spread_cannot_write(&logical.right, member, depth + 1)
+                    }
+                }
             }
             Expression::Identifier(identifier) => {
                 let initializer = identifier
                     .reference_id
                     .get()
                     .and_then(|reference| self.scoping.get_reference(reference).symbol_id())
-                    .and_then(|symbol| self.unwritten_initializer(symbol));
+                    .and_then(|symbol| self.unwritten_initializer(symbol, identifier.span));
                 match initializer {
                     Some(initializer) => self.spread_cannot_write(initializer, member, depth + 1),
                     None => surely_writes_no(&self.evaluate(expression), member),
@@ -3748,7 +3852,7 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 let Some(symbol) = self.scoping.get_reference(reference).symbol_id() else {
                     return EvalResult::unknown();
                 };
-                self.call_symbol(symbol, arguments)
+                self.call_symbol(symbol, arguments, Some(identifier.span))
             }
             Expression::ParenthesizedExpression(value) => {
                 self.call_expression_value(&value.expression, arguments)
@@ -4855,6 +4959,23 @@ fn writes_nothing(value: &EvalResult) -> bool {
         && value.conditions.iter().all(nothing)
 }
 
+/// Which side of `left <operator> right` is its value, where `left` decides it: the right
+/// (`Some(true)`) or the left (`Some(false)`). `undefined` decides a choice as surely as a value
+/// does: it is falsy, and nullish — `o.display ?? 'block'` on an option nobody passed used to stay
+/// undecided. As a test decides (`truthiness`): not on a value the build only guessed.
+fn selects_right(left: &EvalResult, operator: LogicalOperator) -> Option<bool> {
+    match &left.value {
+        Some(_) if left.surely_structured() => Some(operator == LogicalOperator::And),
+        Some(value) if left.decides() => Some(match operator {
+            LogicalOperator::Or => !truthy(value),
+            LogicalOperator::And => truthy(value),
+            LogicalOperator::Coalesce => value.is_null(),
+        }),
+        None if left.is_undefined() => Some(operator != LogicalOperator::And),
+        _ => None,
+    }
+}
+
 /// Whether a spread of `value` surely writes no `member`: nothing at all (`writes_nothing`), or an
 /// object whose every key the build knows, none of them `member` — not in its value, among the
 /// values it could not decide between, nor held with a value it could not read or as `undefined`.
@@ -5480,8 +5601,9 @@ fn wildcard_match<'a>(pattern: &str, specifier: &'a str) -> Option<&'a str> {
 fn path_candidates(base: &Path) -> Vec<PathBuf> {
     // A declaration file after the code it describes: it holds no value, and read in place of the
     // `.js` beside it, `export const tone: string` was `undefined`, and its `export declare
-    // function` gave the name to an `export *` the `.js` overrides.
-    const EXTENSIONS: &[&str] = &["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs", "d.ts"];
+    // function` gave the name to an `export *` the `.js` overrides. After a directory's index too:
+    // `lib.d.ts` beside `lib/index.ts` describes it, and was read in its place.
+    const EXTENSIONS: &[&str] = &["ts", "tsx", "mts", "cts", "js", "jsx", "mjs", "cjs"];
     let mut output = vec![base.to_path_buf()];
     let text = base.to_string_lossy();
     let emitted = [
@@ -5506,6 +5628,8 @@ fn path_candidates(base: &Path) -> Vec<PathBuf> {
         for extension in EXTENSIONS {
             output.push(base.join(format!("index.{extension}")));
         }
+        output.push(PathBuf::from(format!("{text}.d.ts")));
+        output.push(base.join("index.d.ts"));
     }
     output
 }

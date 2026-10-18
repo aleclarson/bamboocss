@@ -122,6 +122,32 @@ describe('a refused call says why', () => {
     expect(refusal).toMatchObject({ kind: 'write', subject: 'tone' })
   })
 
+  // A function declaration exported is called through its symbol, as within its module: the
+  // function a write after it puts there is the one called, and 1.57.1 called the declared one.
+  test.each([
+    [
+      'from its own module',
+      { 'app/h.js': `export function tone(t) {\n  return { color: t }\n}\ntone = (t) => ({ color: 'blue.300' })\n` },
+      './h.js',
+    ],
+    [
+      'through an `export *`',
+      {
+        'app/h.js': `export function tone(t) {\n  return { color: t }\n}\ntone = (t) => ({ color: 'blue.300' })\n`,
+        'app/index.js': `export * from './h.js'\n`,
+      },
+      './index.js',
+    ],
+  ])('an exported function declaration assigned, called %s', (_, files, specifier) => {
+    const refusal = refusalOf(
+      `import { css } from 'styled-system/css'\nimport { tone } from '${specifier}'\nexport const A = css(tone('red.300'))\n`,
+      'app/use.tsx',
+      files,
+    )
+
+    expect(refusal).toMatchObject({ kind: 'write', subject: 'tone' })
+  })
+
   // It runs only where the block does.
   test('a `var` declared in a block, read outside it', () => {
     const result = createFoldFixture().fold(
@@ -130,6 +156,68 @@ describe('a refused call says why', () => {
 
     expect(result.folded).toEqual([])
     expect(result.skipped.map((entry) => entry.reason)).toEqual(['dynamic'])
+  })
+
+  // Read in its block, after it, it has run: 1.57.1 took every read of one for unknown, so a
+  // component returning `css({ color: tone })` from the `if` declaring `tone` failed the build.
+  // So has one a block standing as a statement of its own declares, or a `for` head, read after.
+  test.each([
+    [
+      'a `switch` case',
+      `export function Badge({ kind }) {\n  switch (kind) {\n    case 'warn':\n      var tone = 'red.300'\n      return css({ color: tone })\n    default:\n      return null\n  }\n}`,
+    ],
+    [
+      'a callback in the `if`',
+      `export function L({ items }) {\n  if (items) {\n    var tone = 'red.300'\n    return items.map(() => css({ color: tone }))\n  }\n}`,
+    ],
+    [
+      'a `catch`',
+      `export function C() {\n  try {\n    throw 0\n  } catch (e) {\n    var tone = 'red.300'\n    return css({ color: tone })\n  }\n}`,
+    ],
+    ['a class `static` block', `class K { static { var tone = 'red.300'; K.A = css({ color: tone }) } }`],
+    ['a block of its own, read after it', `{\n  var tone = 'red.300'\n}\nexport const A = css({ color: tone })`],
+    [
+      'a `for` head, read after the loop',
+      `for (var tone = 'red.300'; false; ) {}\nexport const A = css({ color: tone })`,
+    ],
+  ])('a `var` declared in %s, read where it has run, compiles', (_, body) => {
+    const result = createFoldFixture().fold(withImport(body))
+
+    expect(result.folded.map((entry) => entry.className)).toEqual(['c_red.300'])
+  })
+
+  // Called where the block may not have run, it may hold no function: called anyway, `extra?.()`
+  // compiled `fw_bold` past an `if` that did not run, and a key read from one named a method.
+  test.each([
+    ['called', `if (globalThis.flag) {\n  var pick = () => ({ color: 'red.300' })\n}\nexport const A = css(pick())`],
+    [
+      'walked for a method',
+      `if (globalThis.flag) {\n  var helpers = { pick: () => ({ color: 'red.300' }) }\n}\nexport const A = css(helpers.pick())`,
+    ],
+    [
+      'called in a helper whose `if` did not run',
+      `const make = (primary) => {\n  if (primary) {\n    var extra = () => ({ fontWeight: 'bold' })\n  }\n  return { color: 'blue.300', ...extra?.() }\n}\nexport const A = css(make(false))`,
+    ],
+    [
+      'read for a key',
+      `if (globalThis.flag) {\n  var KEY = 'pick'\n}\nconst helpers = { undefined: () => ({ color: 'blue.300' }), [KEY]: () => ({ color: 'red.300' }) }\nexport const A = css(helpers.undefined())`,
+    ],
+  ])('a `var` declared in a block, %s outside it, is not called', (_, body) => {
+    const result = createFoldFixture().fold(withImport(body))
+
+    expect(result.folded).toEqual([])
+    expect(result.skipped.map((entry) => entry.reason)).toEqual(['dynamic'])
+  })
+
+  // In a helper the build runs, the block ran when its declaration bound it.
+  test('a `var` a helper declares in an `if` that ran is called after it', () => {
+    const result = createFoldFixture().fold(
+      withImport(
+        `const make = (primary) => {\n  if (primary) {\n    var extra = () => ({ fontWeight: 'bold' })\n  }\n  return { color: 'blue.300', ...extra?.() }\n}\nexport const A = css(make(true))`,
+      ),
+    )
+
+    expect(result.folded.map((entry) => entry.className)).toEqual(['c_blue.300 fw_bold'])
   })
 
   test('an array written into, then joined', () => {
@@ -209,6 +297,31 @@ describe('a recursion with no end the build can see', () => {
     )
 
     expect(refusal).toMatchObject({ kind: 'recursion', subject: 'loop', helper: 'nest', line: 2, column: 14 })
+  })
+
+  // Read while a refused recursion unwinds — a property after the one refused — an export walked
+  // for a method was cached as unknown, and failed every module reading it from then on, in this
+  // process, until its own module changed.
+  test('an export read while a refused recursion unwinds is read again for another module', () => {
+    const tokens = {
+      'app/unwind/tokens.ts':
+        "const palette = { primary: () => 'red.300' }\nexport const primary = palette.primary()\n",
+    }
+    const first = createFoldFixture()
+    first.addFiles(tokens)
+    const refused = first.fold(
+      `import { css } from 'styled-system/css'\nimport { primary } from './tokens'\nconst card = (n) => ({ zIndex: n < 100 ? card(n + 1).zIndex : n, color: primary })\nexport const A = css(card(0))\n`,
+      'app/unwind/card.tsx',
+    )
+    const second = createFoldFixture()
+    second.addFiles(tokens)
+    const result = second.fold(
+      `import { css } from 'styled-system/css'\nimport { primary } from './tokens'\nexport const B = css({ color: primary })\n`,
+      'app/unwind/button.tsx',
+    )
+
+    expect(refused.folded).toEqual([])
+    expect(result.folded.map((entry) => entry.className)).toEqual(['c_red.300'])
   })
 
   test('branching, as surely', () => {
@@ -855,6 +968,22 @@ describe('what an `export *` gives', () => {
     )
 
     expect(result.folded.map((entry) => entry.className)).toEqual(classes)
+  })
+
+  // After a directory's index too, as Vite resolves `./lib` to `lib/index.ts`: read in its place,
+  // the declaration file gave nothing.
+  test('a directory beside a declaration file of its name is read through its index', () => {
+    const fixture = createFoldFixture()
+    fixture.addFiles({
+      'app/lib/index.ts': `export const tone = { color: 'red.300' }\n`,
+      'app/lib.d.ts': `export const tone: { color: string }\n`,
+    })
+    const result = fixture.fold(
+      `import { css } from 'styled-system/css'\nimport { tone } from './lib'\nexport const A = css(tone)\n`,
+      'app/use.tsx',
+    )
+
+    expect(result.folded.map((entry) => entry.className)).toEqual(['c_red.300'])
   })
 
   // A recipe a star member exports is not what a barrel exporting the name itself gives.
