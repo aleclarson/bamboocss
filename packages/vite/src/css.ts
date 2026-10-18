@@ -140,6 +140,7 @@ type OutputContext = {
   environment?: {
     name?: string
     config?: {
+      consumer?: string
       build?: {
         sourcemap?: StaticCompilationSession['sourcemap']
         ssr?: boolean | string
@@ -285,7 +286,8 @@ const pruneEmittedSheets = async (
   // Load the complete parser/remapping closure before opening the output projection. A
   // rejected chunk load therefore publishes no partial reachability or prune state, and the
   // process-wide retryable loader lets a later rebuild recover.
-  const { containsGeneratedCssAsset, optimizeStaticCssAssets } = await loadCssOutputModule()
+  const { adoptEmittedSheet, containsGeneratedCssAsset, moveSheetAliases, optimizeStaticCssAssets } =
+    await loadCssOutputModule()
   let handledNames = session.prunedSheetNames.get(outputOptions)
   if (!handledNames) {
     handledNames = new Set()
@@ -300,6 +302,8 @@ const pruneEmittedSheets = async (
   const build = context.environment?.config?.build ?? session.ssrBuild
   const emitsAssets = build?.emitAssets ?? (!build?.ssr || build?.ssrEmitAssets === true)
   const discarded = early && !emitsAssets
+  const consumer = context.environment?.config?.consumer
+  const browser = consumer === undefined ? !build?.ssr : consumer === 'client'
 
   const environmentName = context.environment?.name ?? 'default'
   // A sheet the late pass still finds there was emitted after that deletion, and is written: an
@@ -319,7 +323,8 @@ const pruneEmittedSheets = async (
   const outputProjection = session.beginOutputProjection(environmentName, outputOptions, bundle, carriesSheet)
   try {
     const outputDir = outputOptions.dir ?? (outputOptions.file ? dirname(outputOptions.file) : undefined)
-    const deferred = pruneCss && isWrite === true && outputDir !== undefined && pending.length > 0
+    // Never a discarded copy, which is named after the sheet an environment writes instead.
+    const deferred = pruneCss && isWrite === true && outputDir !== undefined && pending.length > 0 && !discarded
     const remaining = truncateList(pending, { unit: 'environment', separator: ', ' })
     const sourcemap = context.environment?.config?.build?.sourcemap ?? session.sourcemap
 
@@ -333,7 +338,7 @@ const pruneEmittedSheets = async (
     // when Vite emitted the sheet while rendering chunks — `cssCodeSplit` on, the default.
     const cssCodeSplit = context.environment?.config?.build?.cssCodeSplit ?? session.cssCodeSplit ?? true
     const split =
-      splitCss && session.splitCss && pruneCss && cssCodeSplit && context.emitFile && context.getFileName
+      splitCss && !discarded && session.splitCss && pruneCss && cssCodeSplit && context.emitFile && context.getFileName
         ? {
             ...chunkOwnership(bundle, environmentName, session),
             emit: (chunkFileName: string, css: string) => {
@@ -371,6 +376,39 @@ const pruneEmittedSheets = async (
       for (const className of [...session.prunedClasses]) {
         if (!before.has(className)) session.prunedClasses.delete(className)
       }
+    }
+
+    // A discarded copy is what a server's markup links, by its name, so it takes the name of the
+    // sheet written under the same original name, or, when none has been yet, is moved to it once
+    // one is. Pruned all the same, for the check that every live class has a rule.
+    if (sheets && pruneCss) {
+      for (const result of results) {
+        if (discarded) {
+          const emitted = session.emittedSheets.get(result.original)
+          if (emitted) {
+            adoptEmittedSheet(bundle as never, result.asset, emitted, session, sourcemap)
+            handledNames.add(emitted.fileName)
+          } else if (isWrite) {
+            // This output replaces what the environment wrote last, and with it that one's alias.
+            session.sheetAliases = session.sheetAliases.filter(
+              (alias) => alias.environment !== environmentName || alias.original !== result.original,
+            )
+            session.sheetAliases.push({
+              environment: environmentName,
+              original: result.original,
+              current: result.fileName,
+            })
+          }
+        } else if (emitsAssets && (browser || !session.emittedSheets.get(result.original)?.browser)) {
+          session.emittedSheets.set(result.original, {
+            environment: environmentName,
+            browser,
+            fileName: result.fileName,
+            source: result.optimized,
+          })
+        }
+      }
+      if (!discarded) moveSheetAliases(session)
     }
 
     // Said out loud, both ways. Pruning is the difference between the sheet a project

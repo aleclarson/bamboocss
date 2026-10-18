@@ -4415,6 +4415,64 @@ describe('the stylesheet URL', () => {
     180_000,
   )
 
+  /**
+   * The server's copy of the sheet is one Vite discards, so it has to carry the name of the one the
+   * client writes. Built first, the server pruned its copy against itself alone and named it after
+   * those bytes, which no environment wrote: the client's, pruned against both, kept a rule only
+   * the client reaches, and every server-rendered page linked a stylesheet that was not there.
+   */
+  test.each(linkCases)(
+    'on %s, a server built first links the sheet the client writes after it',
+    async (label, create) => {
+      const tag = `${label}-first`.replace(/\W/g, '').toLowerCase()
+      const app = join(cwd, `src/__url-app-${tag}.tsx`)
+      const other = join(cwd, `src/__url-other-${tag}.tsx`)
+      const configPath = join(cwd, `__url-${tag}.bamboo.config.ts`)
+      const clientOut = join(cwd, `__url-client-${tag}-out`)
+      const ssrOut = join(cwd, `__url-ssr-${tag}-out`)
+      writeFileSync(
+        app,
+        `import href from 'virtual:bamboo.css?url'\nimport { css } from '../styled-system/css'\nexport const cls = css({ width: '[51.3px]' })\n;(globalThis as any).__bambooUrlApp = { href, cls }\n`,
+      )
+      // Reached by the client's input alone.
+      writeFileSync(
+        other,
+        `import { css } from '../styled-system/css'\nexport const other = css({ width: '[51.6px]' })\n`,
+      )
+      writeIsolatedBambooConfig(configPath, [`./src/__url-app-${tag}.tsx`, `./src/__url-other-${tag}.tsx`])
+      try {
+        const builder = (await create({
+          root: cwd,
+          configFile: false,
+          logLevel: 'silent',
+          css: { postcss: { plugins: [] } },
+          plugins: [bamboocss({ cwd, configPath, reportSummary: false })],
+          builder: {},
+          build: { emptyOutDir: true },
+          environments: {
+            client: { build: { outDir: clientOut, rollupOptions: { input: { app, other } } } },
+            ssr: { build: { outDir: ssrOut, rollupOptions: { input: { app } } } },
+          },
+        })) as TestEnvironmentBuilder
+        await builder.build(builder.environments.ssr)
+        await builder.build(builder.environments.client)
+
+        const linked = [...new Set(readOutputFiles(ssrOut, '.js').match(/\/assets\/[\w.-]+\.css/g) ?? [])]
+        expect(linked, 'the server bundle links no stylesheet').not.toEqual([])
+        const written = readdirSync(join(clientOut, 'assets')).filter((file) => file.endsWith('.css'))
+        for (const href of linked) {
+          expect(existsSync(join(clientOut, href)), `the client wrote no ${href}, but ${written.join(', ')}`).toBe(true)
+          expect(readFileSync(join(clientOut, href), 'utf8')).toContain(esc('w_[51.6px]'))
+        }
+      } finally {
+        for (const file of [app, other, configPath]) rmSync(file, { force: true })
+        rmSync(clientOut, { force: true, recursive: true })
+        rmSync(ssrOut, { force: true, recursive: true })
+      }
+    },
+    180_000,
+  )
+
   // Vite 6 builds the outputs it writes from `rollupOptions.output` before `options` runs, so the
   // finalizer installed there never ran: the client's sheet, deferred until SSR completed, was never
   // finalized, and a rule only the server reaches was missing from it, with the build green.

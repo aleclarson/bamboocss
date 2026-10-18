@@ -10,7 +10,7 @@ import selectorParser from 'postcss-selector-parser'
 import type { Rollup } from 'vite'
 import { bare } from './class-name'
 import { pruneStaticCss } from './prune-static-css'
-import type { DeferredSheet, StaticCompilationSession, WrittenOutput } from './static-session'
+import type { DeferredSheet, EmittedSheet, StaticCompilationSession, WrittenOutput } from './static-session'
 
 const INLINE_SOURCE_MAP = /\n?\/\/# sourceMappingURL=data:application\/json[^\n]*$/
 
@@ -344,9 +344,73 @@ const replaceFileReference = (path: string, previous: string, next: string) => {
   return true
 }
 
+/** Move every reference the written text `outputs` make to `previous` onto `next`, but in `skip`. */
+const rewriteWrittenReferences = (outputs: readonly WrittenOutput[], previous: string, next: string, skip?: string) => {
+  const seen = new Set<string>()
+  for (const output of outputs) {
+    for (const file of output.files) {
+      if (!REFERENCING_EXTENSIONS.test(file)) continue
+      const target = join(output.dir, file)
+      if (seen.has(target) || file === skip) continue
+      seen.add(target)
+      if (!existsSync(target)) continue
+      replaceFileReference(target, previous, next)
+    }
+  }
+}
+
+/**
+ * Give a copy of the sheet an environment discards the name and bytes of the one written under
+ * the same original name (`StaticCompilationSession.emittedSheets`), every reference its bundle
+ * makes moving with the name.
+ */
+export const adoptEmittedSheet = (
+  bundle: Rollup.OutputBundle,
+  asset: Rollup.OutputAsset,
+  emitted: EmittedSheet,
+  session: StaticCompilationSession,
+  sourcemap: StaticCompilationSession['sourcemap'],
+) => {
+  asset.source = emitted.source
+  const previous = asset.fileName
+  if (previous === emitted.fileName) return
+  if (bundle[emitted.fileName] && bundle[emitted.fileName] !== asset) {
+    throw new Error(`bamboocss: final CSS asset name collision at ${JSON.stringify(emitted.fileName)}.`)
+  }
+  asset.fileName = emitted.fileName
+  replaceAssetReferences(bundle, previous, emitted.fileName, sourcemap)
+  if (session.refusesBundleKeys) return
+  try {
+    bundle[emitted.fileName] = asset
+    if (bundle[emitted.fileName] === asset) delete bundle[previous]
+  } catch {
+    // A bundle that refuses new keys keeps the old one.
+  }
+}
+
+/**
+ * Move what each alias's environment wrote onto the name a sheet of its original name was
+ * written under, once one has been. @see `SheetAlias`
+ *
+ * Only once that environment's output is on disk, which is what there is to move: an alias read
+ * before it was written stays as it is until then.
+ */
+export const moveSheetAliases = (session: StaticCompilationSession) => {
+  for (const alias of session.sheetAliases) {
+    const emitted = session.emittedSheets.get(alias.original)
+    if (!emitted || emitted.fileName === alias.current) continue
+    const outputs = session.writtenOutputs.filter((output) => output.environment === alias.environment)
+    if (!outputs.length) continue
+    rewriteWrittenReferences(outputs, alias.current, emitted.fileName)
+    alias.current = emitted.fileName
+  }
+}
+
 export interface FinalizedSheet extends DeferredSheet {
   /** The name the final sheet was written under, or `undefined` when its bytes did not move. */
   renamed?: string
+  /** The bytes it was written with. */
+  final: string
   before: number
   after: number
 }
@@ -390,7 +454,12 @@ export const finalizeDeferredSheets = (
       final = splitStaticCss(final, session, new Map([...sheet.moved].map((className) => [className, '']))).css
     }
     if (!prune || final === sheet.provisional) {
-      finalized.push({ ...sheet, before: sheet.provisional.length, after: sheet.provisional.length })
+      finalized.push({
+        ...sheet,
+        final: sheet.provisional,
+        before: sheet.provisional.length,
+        after: sheet.provisional.length,
+      })
       continue
     }
 
@@ -407,17 +476,7 @@ export const finalizeDeferredSheets = (
       rmSync(copy, { force: true })
     }
 
-    const seen = new Set<string>()
-    for (const output of outputs) {
-      for (const file of output.files) {
-        if (!REFERENCING_EXTENSIONS.test(file)) continue
-        const target = join(output.dir, file)
-        if (seen.has(target) || file === sheet.fileName) continue
-        seen.add(target)
-        if (!existsSync(target)) continue
-        replaceFileReference(target, sheet.fileName, nextName)
-      }
-    }
+    rewriteWrittenReferences(outputs, sheet.fileName, nextName, sheet.fileName)
 
     // The asset as the bundler still holds it, and the finished bundle around it, for a
     // framework that keeps that bundle and copies the sheet into a later build by the name its
@@ -438,7 +497,7 @@ export const finalizeDeferredSheets = (
     }
     if (bundle) replaceAssetReferences(bundle as Rollup.OutputBundle, sheet.fileName, nextName, sourcemap)
 
-    finalized.push({ ...sheet, renamed: nextName, before: sheet.provisional.length, after: final.length })
+    finalized.push({ ...sheet, renamed: nextName, final, before: sheet.provisional.length, after: final.length })
   }
 
   return finalized

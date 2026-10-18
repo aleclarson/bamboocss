@@ -1212,6 +1212,19 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
 
     for (const sheet of finalized) {
       if (!sheet.renamed) continue
+      // What a discarded copy is named after moves with the sheet, as every written reference to
+      // the sheet has, an alias's among them.
+      const emitted = staticSession.emittedSheets.get(sheet.originalFileName)
+      if (emitted?.fileName === sheet.fileName) {
+        staticSession.emittedSheets.set(sheet.originalFileName, {
+          ...emitted,
+          fileName: sheet.renamed,
+          source: sheet.final,
+        })
+      }
+      for (const alias of staticSession.sheetAliases) {
+        if (alias.current === sheet.fileName) alias.current = sheet.renamed
+      }
       logger.info(
         'vite',
         `Pruned ${sheet.originalFileName} again once every environment had compiled, which restored ` +
@@ -2167,6 +2180,21 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
       if (config.command === 'build' && !exitWarningInstalled) {
         exitWarningInstalled = true
         process.once('beforeExit', () => {
+          // A server's copy linked before any environment wrote the sheet, which none then did.
+          const unwritten = staticSession.sheetAliases.filter(
+            (alias) => staticSession.emittedSheets.get(alias.original)?.fileName !== alias.current,
+          )
+          if (unwritten.length) {
+            logger.warn(
+              'vite',
+              `${truncateList(
+                unwritten.map((alias) => `${JSON.stringify(alias.environment)} links ${alias.current}`),
+                { unit: 'output', separator: ', ' },
+              )}: a copy of the stylesheet its environment discards, which no environment writing the sheet ` +
+                `wrote after it, so nothing serves that name. Build the environment that writes the stylesheet ` +
+                `after the one linking it, in the same run.`,
+            )
+          }
           if (!staticSession.deferredSheets.length) return
           logger.warn(
             'vite',
@@ -2842,6 +2870,9 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
         }
 
         await finalizeDeferredSheetsIfComplete()
+        // A copy this output links, discarded before a sheet of its name was written, and written
+        // itself only after one was.
+        if (staticSession.sheetAliases.length) (await loadCssOutputModule()).moveSheetAliases(staticSession)
       },
     },
   }

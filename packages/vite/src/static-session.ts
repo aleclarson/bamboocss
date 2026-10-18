@@ -50,6 +50,30 @@ export interface DeferredSheet {
   moved?: ReadonlySet<string>
 }
 
+/** The stylesheet an environment writing its assets wrote, as a copy another one discards is named after. */
+export interface EmittedSheet {
+  environment: string
+  /** Whether that environment's output runs in a browser, whose sheet is the one a page links. */
+  browser: boolean
+  /** The name it took, relative to its output directory. */
+  fileName: string
+  /** The bytes under that name. */
+  source: string
+}
+
+/**
+ * A copy of the stylesheet an environment discarded and linked before any environment writing the
+ * sheet had named it — a server built before the client — kept under a name of its own until one
+ * does, when what its written output says is moved to that name.
+ */
+export interface SheetAlias {
+  environment: string
+  /** The name Vite gave the sheet, which the one written carries too. */
+  original: string
+  /** The name the environment's written output links now. */
+  current: string
+}
+
 /** One output an environment wrote, for rewriting the references a finalized sheet's rename moves. */
 export interface WrittenOutput {
   environment: string
@@ -124,6 +148,17 @@ export interface StaticCompilationSession {
   deferredSheets: DeferredSheet[]
   /** Every output this run has written, in the order the bundler wrote them. */
   writtenOutputs: WrittenOutput[]
+  /**
+   * The sheet each environment writing its assets wrote, by the name Vite gave it.
+   *
+   * A server environment's copy is one Vite discards, and its markup links it by name — through
+   * `virtual:bamboo.css?url` — so the copy takes the name and bytes of the sheet written under the
+   * same original name. Named after its own bytes, it linked a sheet nothing wrote wherever the two
+   * prunes differed. A browser environment's sheet is the one kept when two write one.
+   */
+  emittedSheets: Map<string, EmittedSheet>
+  /** Copies discarded and linked before a sheet of their name was written. @see `SheetAlias` */
+  sheetAliases: SheetAlias[]
   /** Sheet assets already pruned in this generation, so the late pass leaves them alone. */
   prunedAssets: WeakSet<object>
   /**
@@ -201,6 +236,8 @@ export const createStaticCompilationSession = (): StaticCompilationSession => {
     prunedClasses: new Set(),
     deferredSheets: [],
     writtenOutputs: [],
+    emittedSheets: new Map(),
+    sheetAliases: [],
     prunedAssets: new WeakSet(),
     prunedSheetNames: new WeakMap(),
     splitCss: true,

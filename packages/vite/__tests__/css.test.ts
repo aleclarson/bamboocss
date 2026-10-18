@@ -1,6 +1,6 @@
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { Builder } from '@bamboocss/node'
 import * as bambooConfig from '@bamboocss/config'
@@ -915,6 +915,115 @@ describe('a watch rebuild prunes again', () => {
     // The same output options, as a watcher hands them to the next build.
     await renderStart.call(context, outputOptions as never, {} as never)
     expect(await build(), 'the rebuild prunes again').not.toContain('345.6789px')
+  })
+})
+
+/**
+ * A server environment's copy of the sheet is one Vite discards, and what its markup links by name.
+ * Named after its own bytes, it linked a sheet nothing wrote wherever its prune and the written
+ * sheet's differed, so it takes the written one's name and bytes, or, when none has been written
+ * yet, is moved to it once one is.
+ */
+describe("a server's discarded copy of the sheet", () => {
+  const sheet =
+    `@layer reset, base, tokens, utilities;` +
+    `@layer utilities{.h_\\[345\\.6789px\\]{height:345.6789px}.w_\\[3\\.1px\\]{width:3.1px}}` +
+    `:root{--made-with-bamboo:🌱}`
+  const server = { name: 'ssr', config: { consumer: 'server', build: { ssr: true, emitAssets: false } } }
+  const browser = { name: 'client', config: { consumer: 'client', build: { emitAssets: true } } }
+  const setUp = () => {
+    const session = createStaticCompilationSession()
+    session.prunableClasses.add(esc('h_[345.6789px]'))
+    session.prunableClasses.add(esc('w_[3.1px]'))
+    session.markClassUsed('h_[345.6789px]')
+    // A lazy chunk owning the used atom, which a split would move into a sheet of the chunk's own.
+    session.classNamesOf = (_environment, moduleId) => (moduleId === '/lazy.tsx' ? ['h_[345.6789px]'] : [])
+    const generate = hookOf(bamboocssCssEarly({ session, pruneCss: true }).generateBundle)!
+    return { session, generate }
+  }
+  const bundleOf = () => ({
+    'a.css': { type: 'asset', fileName: 'a.css', names: [], source: sheet },
+    'entry.js': {
+      type: 'chunk',
+      fileName: 'entry.js',
+      name: 'entry',
+      isEntry: true,
+      imports: [],
+      modules: { '/entry.tsx': {} },
+      code: `export const href = "/a.css"\n`,
+    },
+    'lazy.js': {
+      type: 'chunk',
+      fileName: 'lazy.js',
+      name: 'lazy',
+      isEntry: false,
+      imports: [],
+      modules: { '/lazy.tsx': {} },
+      code: ``,
+    },
+  })
+
+  test('takes the name and bytes of the sheet written under its original name, unsplit and not deferred', async () => {
+    const { session, generate } = setUp()
+    session.expectedEnvironments = new Set(['ssr', 'client', 'rsc'])
+    session.emittedSheets.set('a.css', {
+      environment: 'client',
+      browser: true,
+      fileName: 'a.b-written.css',
+      source: '/* written */',
+    })
+    const emitFile = vi.fn(() => 'reference')
+    const bundle = bundleOf()
+
+    await generate.call(
+      { environment: server, emitFile, getFileName: () => 'lazy-sheet.css' } as never,
+      { dir: join(tmpdir(), 'bamboo-discarded-out') } as never,
+      bundle as never,
+      true as never,
+    )
+
+    const copy = Object.values(bundle).find((output) => output.type === 'asset') as { fileName: string; source: string }
+    expect(copy.fileName).toBe('a.b-written.css')
+    expect(copy.source).toBe('/* written */')
+    expect(bundle['entry.js'].code).toContain('/a.b-written.css')
+    expect(emitFile, 'a discarded copy is not split').not.toHaveBeenCalled()
+    expect(session.deferredSheets).toEqual([])
+    expect(session.sheetAliases).toEqual([])
+  })
+
+  test('linked before any sheet of its name was written, is moved to the one written after it', async () => {
+    const { session, generate } = setUp()
+    const ssrOut = mkdtempSync(join(tmpdir(), 'bamboo-discarded-ssr-'))
+    onTestFinished(() => rmSync(ssrOut, { recursive: true, force: true }))
+
+    const serverBundle = bundleOf()
+    await generate.call(
+      { environment: server } as never,
+      { dir: ssrOut } as never,
+      serverBundle as never,
+      true as never,
+    )
+    const provisional = Object.values(serverBundle).find((output) => output.type === 'asset')!.fileName
+    expect(provisional).toMatch(/^a\.b-[A-Za-z0-9]+\.css$/)
+    expect(session.sheetAliases).toEqual([{ environment: 'ssr', original: 'a.css', current: provisional }])
+    // What the server's write leaves on disk, as the write observer records it.
+    writeFileSync(join(ssrOut, 'entry.js'), serverBundle['entry.js'].code)
+    session.writtenOutputs.push({ environment: 'ssr', dir: ssrOut, files: ['entry.js'] })
+
+    // The client keeps the atom the server never used, so its sheet is named after other bytes.
+    session.markClassUsed('w_[3.1px]')
+    const clientBundle = bundleOf()
+    await generate.call(
+      { environment: browser } as never,
+      { dir: join(tmpdir(), 'bamboo-discarded-client-out') } as never,
+      clientBundle as never,
+      true as never,
+    )
+    const written = Object.values(clientBundle).find((output) => output.type === 'asset')!.fileName
+
+    expect(written).not.toBe(provisional)
+    expect(readFileSync(join(ssrOut, 'entry.js'), 'utf8')).toBe(`export const href = "/${written}"\n`)
+    expect(session.sheetAliases).toEqual([{ environment: 'ssr', original: 'a.css', current: written }])
   })
 })
 
