@@ -383,9 +383,16 @@ export class BambooContext extends Generator {
     )
   }
 
-  /** A path as the user typed it, when it is under `cwd`. */
-  private relative = (file: string) =>
-    file.startsWith(this.config.cwd) ? file.slice(this.config.cwd.length + 1) : file
+  /**
+   * A path as the user typed it when it is under `cwd`, spelled with `/` on every platform. On
+   * Windows the glob hands over `C:/app/src/a.tsx` against a `cwd` of `C:\app`, so comparing the
+   * two as spelled never matched, and every entry printed absolute.
+   */
+  private relative = (file: string) => {
+    const { path } = this.runtime
+    const inside = path.relative(this.config.cwd, file)
+    return (inside && !inside.startsWith('..') && !path.isAbsolute(inside) ? inside : file).replaceAll('\\', '/')
+  }
 
   /**
    * Whether a file is one bamboo wrote.

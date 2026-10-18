@@ -3,7 +3,7 @@ import { BambooError } from '@bamboocss/shared'
 import type { Config } from '@bamboocss/types'
 import { build, type Plugin } from 'esbuild'
 import findUp from 'escalade/sync'
-import { mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, readFileSync, realpathSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import Module, { createRequire, SourceMap } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -599,11 +599,28 @@ async function locate(
   // it after the error's name, as `Error.prototype.toString` does whatever a class makes of that;
   // a header written otherwise — a name or message changed since — has the message on its first
   // line, where a frame cannot be.
-  const names = [pathToFileURL(bundled).href, bundled]
+  //
+  // The bundle as a frame may spell it: by its URL or its path, under the links above it as a
+  // module loader resolves them, and with Windows' short folder names (`RUNNER~1`) expanded or not.
+  // On Windows, too, with either separator, and in either case. Compared as written, no frame there
+  // named the bundle, and the error said nowhere it came from.
+  const fold =
+    process.platform === 'win32'
+      ? (value: string) => value.replaceAll('\\', '/').toLowerCase()
+      : (value: string) => value
+  const spellings = new Set([bundled])
+  for (const real of [realpathSync, realpathSync.native]) {
+    try {
+      spellings.add(join(real(dirname(bundled)), basename(bundled)))
+    } catch {
+      // Its folder is gone as well: named as it was written.
+    }
+  }
+  const names = [...spellings].flatMap((path) => [pathToFileURL(path).href, path]).map(fold)
   const frames = framesOf(error, error.stack)
   const positions: Array<[number, number]> = []
   for (const frame of frames.split('\n')) {
-    const text = frame.trim()
+    const text = fold(frame.trim())
     if (!text.startsWith('at ')) continue
     const name = names.find((name) => text.includes(`${name}:`))
     const position = name && /^:(\d+):(\d+)\)?$/.exec(text.slice(text.lastIndexOf(`${name}:`) + name.length))

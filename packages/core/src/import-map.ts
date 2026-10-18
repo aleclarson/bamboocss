@@ -138,8 +138,9 @@ export class ImportMap {
         return true
       }
 
-      // that might be a TS path mapping, it could be completely different from the actual path
-      const resolvedMod = resolveTsPath?.(result.mod)
+      // that might be a TS path mapping, it could be completely different from the actual path.
+      // Spelled with `/`, as `absMod` is: a resolver answering with `\` on Windows matched nothing
+      const resolvedMod = resolveTsPath?.(result.mod)?.replaceAll('\\', '/')
 
       for (const mod of mods) {
         const absMod = [this.context.config.cwd, mod].join('/').replaceAll('\\', '/')

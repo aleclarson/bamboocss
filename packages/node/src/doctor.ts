@@ -162,17 +162,22 @@ export function formatDoctorReport(report: DoctorReport): string {
     `patterns    ${report.patterns}`,
   ]
 
+  // The report keeps each path as the platform spells it; the text names it as `include` is
+  // written, with `/`, so it reads the same on Windows.
   const detail = (title: string, items: string[]) =>
     items.length ? [``, title, ...items.map((item) => `  ${item}`)] : []
+  const files = (items: string[]) => items.map((item) => item.replaceAll('\\', '/'))
   lines.push(
-    ...detail('missing', report.artifacts.missing),
-    ...detail('out of date', report.artifacts.stale),
-    ...detail('no longer generated', report.artifacts.leftover),
+    ...detail('missing', files(report.artifacts.missing)),
+    ...detail('out of date', files(report.artifacts.stale)),
+    ...detail('no longer generated', files(report.artifacts.leftover)),
     ...detail(
       'not extracted',
-      report.unextracted.map(({ file, message }) => `${file}: ${message.split('\n').find(Boolean) ?? ''}`),
+      report.unextracted.map(
+        ({ file, message }) => `${file.replaceAll('\\', '/')}: ${message.split('\n').find(Boolean) ?? ''}`,
+      ),
     ),
-    ...detail('calls to nothing', report.deadCalls),
+    ...detail('calls to nothing', files(report.deadCalls)),
   )
 
   lines.push('', report.problems.length ? report.problems.join('\n') : 'No problems found.')

@@ -298,14 +298,23 @@ const lineAt = (code: string, offset: number) => code.slice(0, offset).split('\n
 export { normalizeFsPath } from './fs-path'
 
 /**
+ * A file as a message names it: relative to the project when it is inside it, and spelled with
+ * `/` either way, as Vite and tsc print a path and as `include` is written. `relative` answers
+ * with `\` on Windows, so a message there named `src\theme.ts` where Vite's own named `src/theme.ts`.
+ */
+const displayPath = (root: string, file: string) => {
+  const path = relative(root, file)
+  return (path && !path.startsWith('..') && !isAbsolute(path) ? path : file).replaceAll('\\', '/')
+}
+
+/**
  * Why the compiler refused a call, as a sentence: what the code does, and where it is.
  *
  * Located relative to the project when it is inside it. The helper is often in another module,
  * so the location is the part that says where to look. @see FoldRefusal
  */
 export const describeRefusal = (refusal: FoldRefusal, root: string) => {
-  const path = relative(root, refusal.filePath)
-  const at = `${path && !path.startsWith('..') && !isAbsolute(path) ? path : refusal.filePath}:${refusal.line}:${refusal.column}`
+  const at = `${displayPath(root, refusal.filePath)}:${refusal.line}:${refusal.column}`
   if (refusal.kind === 'write') {
     return (
       `\`${refusal.subject}\` is written after its declaration, by \`${refusal.excerpt}\` at ${at}, so it no ` +
@@ -1611,8 +1620,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     for (const state of transformStateByEnvironment.values()) {
       for (const artifact of state.transformArtifactsByModule.values()) {
         if (!artifact.classNames.some((entry) => entry.split(/\s+/).includes(className))) continue
-        const path = relative(root, artifact.file)
-        files.add(path && !path.startsWith('..') && !isAbsolute(path) ? path : artifact.file)
+        files.add(displayPath(root, artifact.file))
       }
     }
     return [...files].sort()
