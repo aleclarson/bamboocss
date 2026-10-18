@@ -908,6 +908,77 @@ describe('load config', () => {
       await expect(loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })).rejects.toThrow()
     })
 
+    // A chain of plain objects ends, however long. Cut short at a hundred levels, a key held further
+    // up was lost from the copy, and the loader's defaults were written over the config's own.
+    test('a config holding its keys more than a hundred prototypes up keeps them', async () => {
+      const root = project({
+        'bamboo.config.ts': `let o: any = { outdir: 'custom-out', presets: [], include: ['src'] }\nfor (let i = 0; i < 150; i++) o = Object.create(o)\nexport default Object.freeze(o)`,
+      })
+
+      const { config } = await loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })
+
+      expect(config).toMatchObject({ outdir: 'custom-out', include: ['src'], presets: [] })
+    })
+
+    // Read-only that far up, the default is written into a copy, where the write failed, blaming a
+    // proxy the config does not have.
+    test('a read-only key more than a hundred prototypes up is written over in a copy', async () => {
+      const root = project({
+        'bamboo.config.ts': `let o: any = Object.freeze({ outdir: undefined })\nfor (let i = 0; i < 150; i++) o = Object.create(o)\no.include = ['src']\no.presets = []\nexport default o`,
+      })
+
+      const { config } = await loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })
+
+      expect(config).toMatchObject({ outdir: 'styled-system', include: ['src'] })
+    })
+
+    // Refused, its own value is read in place of the list written. `''`, as `CI && [...]` gives with
+    // `CI` empty, loaded with no presets, and `false` failed on a list, naming no key.
+    test.each([
+      ["''", "''"],
+      ['`false`', 'false'],
+      ['`0`', '0'],
+    ])('a proxy refusing the presets written over %s fails the load, naming `presets`', async (_, presets) => {
+      const root = project({
+        'bamboo.config.ts': `export default new Proxy({ outdir: 'out', validation: 'warn', include: [], presets: ${presets} }, { set: () => false })`,
+      })
+
+      await expect(loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })).rejects.toThrow(
+        'The config refused `presets`',
+      )
+    })
+
+    // Its own list, read in place of the one written, names presets the loader bundles: those copies,
+    // as the list written holds, where they were resolved from the project — a bare `Cannot find
+    // module` where it does not depend on them.
+    test.each([['@bamboocss/preset-base'], ['@bamboocss/dev/presets']])(
+      'a proxy refusing the presets written over its own naming `%s` loads the copy the loader bundles',
+      async (name) => {
+        const root = project({
+          'bamboo.config.ts': `export default new Proxy({ outdir: 'out', validation: 'warn', include: [], presets: ['${name}'] }, { set: () => false })`,
+        })
+
+        const { config } = await loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })
+
+        // `preset-base` brings the utilities, `preset-bamboo` the tokens.
+        expect(Object.keys({ ...config.utilities, ...config.theme?.tokens }).length).toBeGreaterThan(0)
+      },
+    )
+
+    // Taken and not kept, as a read-only store does: it loaded with no presets, in silence.
+    test.each([
+      ['none', `{ outdir: 'out', include: [] }`],
+      ["`''`", `{ outdir: 'out', include: [], presets: '' }`],
+    ])('a proxy taking the presets written and keeping %s fails the load, naming `presets`', async (_, target) => {
+      const root = project({
+        'bamboo.config.ts': `export default new Proxy(${target}, { set: () => true })`,
+      })
+
+      await expect(loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })).rejects.toThrow(
+        'The config did not keep `presets`',
+      )
+    })
+
     test('a getter for `presets` is read, and written over', async () => {
       const root = project({
         'bamboo.config.ts': `export default new (class { preflight = true; get presets() { return [] } })()`,
@@ -935,6 +1006,22 @@ describe('load config', () => {
       const root = project({
         'preset.ts': `export default Promise.resolve({ name: 'p', theme: { tokens: { colors: { x: { value: 'red' } } } } })`,
         'bamboo.config.ts': `export default { presets: [import('./preset')] }`,
+      })
+
+      const { config } = await loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })
+
+      expect(config.theme?.tokens?.colors).toMatchObject({ x: { value: 'red' } })
+    })
+
+    // Named as a bundler resolves it: `require.resolve` tries no `.ts`, where 1.56.7 loaded these.
+    test.each([
+      ['with no extension', './my-preset', 'my-preset.ts'],
+      ['as the `.js` it compiles to', './my-preset.js', 'my-preset.ts'],
+      ['as a directory', './presets', 'presets/index.ts'],
+    ])('a preset in TypeScript named by its path %s loads', async (_, specifier, file) => {
+      const root = project({
+        [file]: `export default { name: 'p', theme: { tokens: { colors: { x: { value: 'red' } } } } }`,
+        'bamboo.config.ts': `export default { presets: ['${specifier}'] }`,
       })
 
       const { config } = await loadConfig({ cwd: root, file: join(root, 'bamboo.config.ts') })

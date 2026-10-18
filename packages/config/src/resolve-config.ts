@@ -56,14 +56,17 @@ function warnIfBaseDropped(listed: unknown[] | undefined, resolved: Preset[]) {
  */
 export async function resolveConfig(result: BundleConfigResult, cwd: string): Promise<LoadConfigResult> {
   const listed = result.config.presets
+  const presets = listed
+    ? Array.from(new Set(listed.map((preset: any) => getBundledPreset(preset) ?? preset)))
+    : [...defaultPresets]
 
-  writeDefault(
-    result.config,
-    'presets',
-    listed ? Array.from(new Set(listed.map((preset: any) => getBundledPreset(preset) ?? preset))) : [...defaultPresets],
-  )
+  // Refused, its own list is read in place of this one, which `getResolvedConfig` maps the same way;
+  // anything else, `''` as `CI && [...]` gives with `CI` empty, loaded with no presets.
+  writeDefault(result.config, 'presets', presets, Array.isArray)
 
-  warnIfBaseDropped(listed, result.config.presets as Preset[])
+  // What was written, not what the config holds: refused, it holds the names, which read as dropping
+  // a preset it named.
+  warnIfBaseDropped(listed, presets as Preset[])
 
   // `plugins` is the only source of hooks — a preset cannot carry them — so this is the
   // complete set, not a preliminary one. Merged before `getResolvedConfig` because

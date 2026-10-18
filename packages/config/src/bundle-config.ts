@@ -9,6 +9,7 @@ import Module, { createRequire, SourceMap } from 'node:module'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
+import { types } from 'node:util'
 import { findConfig } from './find-config'
 import { resolveSolutionAliases, type SolutionAliases } from './tsconfig-utils'
 import type { BundleConfigResult, ConfigFileOptions } from './types'
@@ -56,7 +57,7 @@ const requireBanner = (file: string) =>
  */
 export async function bundle<T extends Config = Config>(filepath: string, cwd: string, options: BundleOptions = {}) {
   // A path, or a package name — a string preset is loaded through here too — resolved from `cwd`.
-  const file = require.resolve(filepath, { paths: [cwd] })
+  const file = resolveFile(filepath, cwd)
   const esm = isEsmFile(file)
   const { code, dependencies } = await bundleFile(file, cwd, esm, options)
 
@@ -152,24 +153,33 @@ export async function settle(value: any) {
 const writtenKeys = (config: any) => [...['outdir', 'validation'].filter((key) => config[key] == null), 'presets']
 
 /**
- * How far up a prototype chain the loader looks. A proxy's `getPrototypeOf` may make one with no
- * end, a new proxy every level, which was walked until memory ran out.
+ * How many proxies up a prototype chain the loader looks. A proxy's `getPrototypeOf` may make one
+ * with no end, a new proxy every level, which was walked until memory ran out.
  */
-const CHAIN_LIMIT = 100
+const PROXY_LIMIT = 100
+
+/**
+ * `object` and what it inherits, nearest first, to the end of its chain: only a proxy can make one
+ * with no end, so only proxies count against `PROXY_LIMIT`, and a cycle one makes is walked once
+ * around. A chain of plain objects ends, however long — cut short at a hundred levels, as it was, a
+ * key held further up was lost, and the loader wrote its default over the config's own.
+ */
+function* prototypeChain(object: object) {
+  const walked = new Set<object>()
+  let proxies = 0
+  for (let from: object | null = object; from !== null && !walked.has(from); from = Object.getPrototypeOf(from)) {
+    if (types.isProxy(from) && ++proxies > PROXY_LIMIT) return
+    walked.add(from)
+    yield from
+  }
+}
 
 /**
  * Whether `object[key] = value` would succeed, as assignment decides it: through a setter, into a
- * writable property, or by adding one to an object that takes one. A proxy's `set` trap is not seen,
- * and a prototype chain a proxy's `getPrototypeOf` makes a cycle of is walked once around.
+ * writable property, or by adding one to an object that takes one. A proxy's `set` trap is not seen.
  */
 function assignable(object: object, key: string) {
-  const walked = new Set<object>()
-  for (
-    let from: object | null = object;
-    from !== null && !walked.has(from) && walked.size < CHAIN_LIMIT;
-    from = Object.getPrototypeOf(from)
-  ) {
-    walked.add(from)
+  for (const from of prototypeChain(object)) {
     const descriptor = Object.getOwnPropertyDescriptor(from, key)
     if (!descriptor) continue
     if (descriptor.get || descriptor.set) return descriptor.set !== undefined
@@ -211,13 +221,8 @@ function writableOf(value: any) {
   // inherits — and V8's `for…in` reads one it inherits however enumerable — and with none, a read by
   // name asks its `get`, as for any key, where `for…in` reads nothing.
   const listed = new Set<PropertyKey>()
-  const walked = new Set<object>()
-  for (
-    let from = value;
-    from !== null && from !== Object.prototype && !walked.has(from) && walked.size < CHAIN_LIMIT;
-    from = Object.getPrototypeOf(from)
-  ) {
-    walked.add(from)
+  for (const from of prototypeChain(value)) {
+    if (from === Object.prototype) break
     for (const key of Reflect.ownKeys(from)) {
       // One it holds hides one of the same name it inherits.
       if (seen.has(key)) continue
@@ -238,21 +243,69 @@ function writableOf(value: any) {
 }
 
 /**
- * Write one of the loader's defaults into the config, failing where the config refuses it and is
- * left holding none — a `Proxy` whose trap returns false — as an assignment does in an ES module.
- * The loader's CommonJS build is not strict, where the refusal was dropped in silence and the config
- * loaded without the default. One left holding a value — what its trap stored, wrapped or changed
- * as it was, or the config's own — loses nothing the loader needs, and loads with that, as it did
- * there.
+ * Write one of the loader's defaults into the config, failing where it is left holding nothing the
+ * loader can use — refused, by a `Proxy` whose trap returns false, as an assignment fails in an ES
+ * module, or not kept, by one returning true without storing it, as a read-only store does. The
+ * loader's CommonJS build is not strict, where the refusal was dropped in silence, and the store
+ * that did not keep it went unseen in either: the config loaded without the default. One left
+ * holding a value `usable` takes — what its trap stored, wrapped or changed as it was, or the
+ * config's own — loads with that, as it did there: by default a value of the type written. Any
+ * non-null one was taken, so a `presets: ''` loaded with no presets, and `false` failed on a list
+ * naming no key.
  */
-export function writeDefault(config: Record<PropertyKey, any>, key: string, value: unknown) {
-  if (!Reflect.set(config, key, value) && config[key] == null) {
-    throw new BambooError(
-      'CONFIG_ERROR',
-      `💥 The config refused \`${key}\`, which the loader writes into it, and holds none: a \`Proxy\` whose ` +
-        `trap returns false for the write does. Have the trap take the write and return \`true\`, or export a ` +
-        `plain object.`,
-    )
+export function writeDefault(
+  config: Record<PropertyKey, any>,
+  key: string,
+  value: unknown,
+  usable = (held: unknown) => held != null && typeof held === typeof value,
+) {
+  const taken = Reflect.set(config, key, value)
+  const held = config[key]
+  if (usable(held)) return
+  const holds = held == null ? 'none' : 'none it can load with'
+  throw new BambooError(
+    'CONFIG_ERROR',
+    taken
+      ? `💥 The config did not keep \`${key}\`, which the loader writes into it, and holds ${holds}: a ` +
+          `\`Proxy\` whose trap returns \`true\` without storing the write does, as a read-only store does. Have ` +
+          `the trap store the write, or export a plain object.`
+      : `💥 The config refused \`${key}\`, which the loader writes into it, and holds ${holds}: a \`Proxy\` ` +
+          `whose trap returns false for the write does. Have the trap take the write and return \`true\`, or ` +
+          `export a plain object.`,
+  )
+}
+
+/** Extensions a path to TypeScript is written without, or with the `.js` it compiles to. */
+const TYPESCRIPT = [
+  ['', ['.ts', '.mts', '.cts', '.tsx']],
+  ['.js', ['.ts', '.tsx']],
+  ['.mjs', ['.mts']],
+  ['.cjs', ['.cts']],
+] as const
+
+/**
+ * `filepath` resolved from `cwd`, as Node resolves it, or a path to TypeScript as a bundler does:
+ * `require.resolve` tries `.js`, `.json` and `.node`, so `presets: ['./my-preset']` beside a
+ * `my-preset.ts` — or `'./my-preset.js'`, as an ES module written in TypeScript names it — failed,
+ * where 1.56.7 loaded it.
+ */
+function resolveFile(filepath: string, cwd: string) {
+  try {
+    return require.resolve(filepath, { paths: [cwd] })
+  } catch (error) {
+    if (!filepath.startsWith('.') && !isAbsolute(filepath)) throw error
+    const path = resolve(cwd, filepath)
+    for (const [suffix, extensions] of TYPESCRIPT) {
+      if (suffix && !path.endsWith(suffix)) continue
+      const base = path.slice(0, path.length - suffix.length)
+      for (const candidate of [
+        ...extensions.map((extension) => base + extension),
+        ...(suffix ? [] : extensions.map((extension) => join(base, `index${extension}`))),
+      ]) {
+        if (statSync(candidate, { throwIfNoEntry: false })?.isFile()) return candidate
+      }
+    }
+    throw error
   }
 }
 
@@ -632,7 +685,8 @@ export async function bundleConfig(options: ConfigFileOptions): Promise<BundleCo
   }
 
   if (result.config.outdir == null) writeDefault(result.config, 'outdir', 'styled-system')
-  if (result.config.validation == null) writeDefault(result.config, 'validation', 'warn')
+  // Held or not, it loads: a `validation` it does not hold is read as `'warn'`, the default written.
+  if (result.config.validation == null) writeDefault(result.config, 'validation', 'warn', () => true)
 
   return {
     ...result,

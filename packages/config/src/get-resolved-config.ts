@@ -1,6 +1,7 @@
 import { BambooError, omit, pick, traverse } from '@bamboocss/shared'
 import type { Config, BambooHooks, Preset } from '@bamboocss/types'
 import { bundle, settle } from './bundle-config'
+import { getBundledPreset } from './bundled-preset'
 import { mergeConfigs } from './merge-config'
 import { rememberExternalPreset, type ExternalPresetProvenance } from './resolution-provenance'
 
@@ -33,7 +34,11 @@ export async function getResolvedConfig(config: ExtendableConfig, cwd: string, h
     const current = stack.pop()!
 
     const subPresets = current.presets ?? []
-    for (const subPreset of subPresets) {
+    for (const listed of subPresets) {
+      // The config's own list, where it refused the one the loader wrote (`resolveConfig`): a preset
+      // it names that the loader bundles is that copy, as written it is, not one resolved from the
+      // project — a bare `Cannot find module` under pnpm.
+      const subPreset = current === config ? (getBundledPreset(listed) ?? listed) : listed
       // `false`, as `dark && darkPreset` gives, is left out, and handed to no hook: a hook reads a
       // preset, which is an object. `null` and `undefined` are not: a misspelled import is one,
       // and is refused below.
