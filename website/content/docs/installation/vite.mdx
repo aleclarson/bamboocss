@@ -306,10 +306,12 @@ stylesheet emitted by an earlier one, and elements carrying them would render un
   h_\[31\.3px\]
 ```
 
-A watch rebuild ends the same way when an environment builds again after the sheet was pruned against its last output —
-rebuilt alone, or finishing first in a rebuild of every environment, before the one emitting the sheet writes a new one.
-A browser environment that imports the stylesheet itself is the exception, since the sheet it writes supersedes its
-last, and so is a server environment that links its own copy through `?url`. A server environment emitting a sheet of
+A watch rebuild ends the same way when an environment rebuilds alone after the sheet was pruned against its last output.
+When an edit rebuilds several environments, a sheet written while another one is still replacing its output is held, and
+pruned again from its source once that output is written — or, if the replacement fails, once the old output is back —
+so a class only the other environment reaches keeps its rule, as it does in a full build. A browser environment that
+imports the stylesheet itself is never refused for what its own last sheet pruned, since the sheet it writes supersedes
+it, and neither is a server environment that links its own copy through `?url`. A server environment emitting a sheet of
 its own otherwise still answers for the browser environments' sheets, in every kind of run: those are what its pages
 link.
 

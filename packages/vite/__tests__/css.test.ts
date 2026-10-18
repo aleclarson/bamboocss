@@ -798,13 +798,23 @@ describe('saying why the stylesheet was not pruned', () => {
     `@layer utilities{.h_\\[345\\.6789px\\]{height:345.6789px}}` +
     `:root{--made-with-bamboo:🌱}`
 
-  const generate = async (options: { pruneCss?: boolean; pending?: string[]; write?: boolean }) => {
+  const generate = async (options: {
+    pruneCss?: boolean
+    pending?: string[]
+    replacing?: string[]
+    write?: boolean
+  }) => {
     const session = createStaticCompilationSession()
     session.prunableClasses.add(esc('h_[345.6789px]'))
     if (options.pending) {
       session.expectedEnvironments = new Set(['client', ...options.pending])
       session.participatingEnvironments.add('client')
       session.completedEnvironments.add('client')
+    }
+    for (const environment of options.replacing ?? []) {
+      session.participatingEnvironments.add(environment)
+      session.completedEnvironments.add(environment)
+      session.replacingEnvironments.add(environment)
     }
 
     const plugin = bamboocssCss({ cwd, session, pruneCss: options.pruneCss })
@@ -858,6 +868,16 @@ describe('saying why the stylesheet was not pruned', () => {
     // The asset itself and the bundle around it travel along, so a finalization can move them.
     expect(handedOn?.asset?.fileName).toBe(handedOn?.fileName)
     expect(handedOn?.bundle?.[handedOn.fileName]).toBe(handedOn?.asset)
+  })
+
+  /**
+   * In a watch, an environment replacing its output counts as complete, its old output being what
+   * is on disk. A sheet written meanwhile is pruned against that, and held to be pruned again once
+   * the replacement settles; the environment replacing its own sheet holds nothing for itself.
+   */
+  test('holds a written sheet while another environment replaces its output, and not for its own', async () => {
+    expect((await generate({ replacing: ['ssr'], write: true })).session.deferredSheets).toHaveLength(1)
+    expect((await generate({ replacing: ['client'], write: true })).session.deferredSheets).toEqual([])
   })
 
   /** An in-memory build has no file to finalize, so the guard in `buildEnd` stays its answer. */

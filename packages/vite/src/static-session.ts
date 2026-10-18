@@ -81,6 +81,8 @@ export interface WrittenOutput {
   dir: string
   /** File names relative to `dir`, as the bundler reported them. */
   files: string[]
+  /** Which of the environment's configured outputs wrote them, where that is known. */
+  slot?: number
 }
 
 /** Shared state between the build-time fold and the virtual CSS module. */
@@ -127,6 +129,16 @@ export interface StaticCompilationSession {
   participatingEnvironments: Set<string>
   /** Environments whose latest generation reached its observable output commit point. */
   completedEnvironments: Set<string>
+  /**
+   * Environments replacing an output that is still live, in a watch: rebuilding, their old output
+   * written and their new one not yet, or not yet given up on.
+   *
+   * Counted complete all the same (`completedEnvironments`), as the old output describes what is on
+   * disk until the new one replaces it. But a sheet another environment writes meanwhile is pruned
+   * against that old output, and is held to be pruned again once the replacement settles: written,
+   * it may reach a class the sheet would otherwise ship without.
+   */
+  replacingEnvironments: Set<string>
   /**
    * Environments whose sheet survives Vite deleting the assets they do not emit, as it is emitted
    * after: an SSR build's with `cssCodeSplit` off, before Vite 7.1.10. Seen in the late pass, they
@@ -232,6 +244,7 @@ export const createStaticCompilationSession = (): StaticCompilationSession => {
     expectedEnvironments: undefined,
     participatingEnvironments: new Set(),
     completedEnvironments: new Set(),
+    replacingEnvironments: new Set(),
     lateSheetEnvironments: new Set(),
     prunedClasses: new Set(),
     deferredSheets: [],

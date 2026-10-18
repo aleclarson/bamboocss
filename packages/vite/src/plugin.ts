@@ -1178,6 +1178,10 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
   ) => {
     if (!staticSession.deferredSheets.length) return
     if (remainingEnvironments(staticSession, candidate).length) return
+    // Nor while an environment is replacing its output, the one whose sheet was held among them:
+    // until it is written, or has failed, the run's reachability is not settled, and its own file
+    // may not be on disk yet.
+    if (staticSession.replacingEnvironments.size) return
 
     const sheets = staticSession.deferredSheets.splice(0)
     const { finalizeDeferredSheets } = await loadCssOutputModule()
@@ -1260,6 +1264,10 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     // cold environment with no observable output is incomplete.
     if (liveOutputSlotsByEnvironment.get(environment)?.size) {
       staticSession.completedEnvironments.add(environment)
+      // Only in a watch. A run building an environment twice — the RSC plugin builds two of them
+      // twice — finalizes in the output of the environment completing it, as a first build does: the
+      // plugin writes the names its hooks recorded, which a later rename would leave stale.
+      if (watching) staticSession.replacingEnvironments.add(environment)
     } else {
       staticSession.completedEnvironments.delete(environment)
     }
@@ -1281,6 +1289,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     const epoch = createTransformEpoch(state)
     liveOutputSlotsByEnvironment.set(environment, new Map([[DIRECT_OUTPUT_TOKEN, { epoch }]]))
     staticSession.completedEnvironments.add(environment)
+    staticSession.replacingEnvironments.delete(environment)
     rebuildStaticTransformContributions()
   }
 
@@ -1340,6 +1349,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     pendingOutputCycles.delete(environment)
     preparedGenerations.delete(environment)
     staticSession.completedEnvironments.add(environment)
+    staticSession.replacingEnvironments.delete(environment)
     rebuildStaticTransformContributions()
   }
 
@@ -1432,7 +1442,16 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
       transformStateByEnvironment.delete(environment)
       staticSession.completedEnvironments.delete(environment)
     }
+    staticSession.replacingEnvironments.delete(environment)
     rebuildStaticTransformContributions()
+    // A sheet held for this replacement is settled with it, failed as it is: pruned again against
+    // the output it fell back to, which the held prune already saw, it comes to the same bytes, and
+    // is no longer held.
+    if (watching && staticSession.deferredSheets.length) {
+      void finalizeDeferredSheetsIfComplete().catch((error: unknown) =>
+        logger.warn('vite', `Could not prune the stylesheet again once a replacement failed: ${String(error)}`),
+      )
+    }
   }
 
   staticSession.finalizeDeferred = ({ environment, bundle, sourcemap }) =>
@@ -1907,6 +1926,8 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
   let command: 'build' | 'serve' = 'build'
   let defaultEmitAssets = true
   let defaultConsumer: 'client' | 'server' = 'client'
+  /** A build that watches, whose environments rebuild while their siblings' outputs stay live. */
+  let watching = false
   let exitWarningInstalled = false
 
   /** Which context the published derivations below were built from. */
@@ -2168,7 +2189,8 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
       // that is the one input a later setter could not correct: the context would already be
       // built, and the class names in the bundle already named from it.
       host.setCommand(config.command)
-      host.setWatch(config.command === 'build' && config.build.watch != null)
+      watching = config.command === 'build' && config.build.watch != null
+      host.setWatch(watching)
       defaultEmitAssets = config.build?.emitAssets ?? (!config.build?.ssr || config.build?.ssrEmitAssets === true)
       defaultConsumer = config.build?.ssr ? 'server' : 'client'
 
@@ -2196,10 +2218,11 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
             )
           }
           if (!staticSession.deferredSheets.length) return
+          const unfinished = new Set([...remainingEnvironments(staticSession), ...staticSession.replacingEnvironments])
           logger.warn(
             'vite',
             `The stylesheet was pruned against an incomplete run: ` +
-              `${truncateList(remainingEnvironments(staticSession), { unit: 'environment', separator: ', ' })} never ` +
+              `${truncateList([...unfinished], { unit: 'environment', separator: ', ' })} never ` +
               `completed, so a rule reached only by an environment that compiled after the sheet was written was ` +
               `never restored. Build every declared environment, or set ` +
               `\`bamboocss({ pruneCss: false })\` to ship the full extracted stylesheet.`,
@@ -2499,15 +2522,26 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
         // that copy through `?url`: its pages are styled by the browser environments' sheets, and
         // a class one of those lost stays lost to them whatever this one writes — it passed, the
         // page unstyled until the browser's environment built again.
+        //
+        // In a watch, sheets are held far more often — whenever a sibling is replacing its output —
+        // so the guard stands aside only for what is about to be pruned again with this environment's
+        // output in view: a held sheet, and one whose environment is replacing it.
+        const settled = (other: string) =>
+          !watching ||
+          (!staticSession.replacingEnvironments.has(other) &&
+            !staticSession.deferredSheets.some((sheet) => sheet.environment === other))
         const consumer = consumerByEnvironment.get(environment) ?? consumerOf(this)
         const pruned = !writesOwnSheet
-          ? livePrunedClasses()
+          ? livePrunedClasses(settled)
           : consumer === 'client' || linksOwnSheet
             ? new Set<string>()
-            : livePrunedClasses((other) => other !== environment && consumerByEnvironment.get(other) !== 'server')
-        const lost = staticSession.deferredSheets.length
-          ? []
-          : [...staticSession.usedClasses].filter((className) => pruned.has(bare(className)))
+            : livePrunedClasses(
+                (other) => other !== environment && consumerByEnvironment.get(other) !== 'server' && settled(other),
+              )
+        const lost =
+          !watching && staticSession.deferredSheets.length
+            ? []
+            : [...staticSession.usedClasses].filter((className) => pruned.has(bare(className)))
         if (lost.length) {
           throw new Error(
             `bamboocss: ${lost.length} class(es) in use as the ${JSON.stringify(environment)} environment finished ` +
@@ -2851,20 +2885,32 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
         // Recorded before publishing, so a finalization this very output completes can rewrite
         // the references it wrote. By `fileName` rather than by key: the CSS plugin renames an
         // asset in place, and Rolldown refuses a re-keyed bundle.
+        const identity = outputIdentityByBundle.get(bundle) ?? outputIdentityByOptions.get(outputOptions)
         const outputDir = outputOptions.dir ?? (outputOptions.file ? dirname(outputOptions.file) : undefined)
         if (outputDir) {
-          staticSession.writtenOutputs.push({
+          const written = {
             environment,
             dir: resolve(outputDir),
             files: Object.values(bundle).map((output) => output.fileName),
-          })
+            slot: identity?.environment === environment ? identity.outputSlot : undefined,
+          }
+          // In place of what the same output wrote last, which a watch would otherwise list once a
+          // round, every finalization reading each file again.
+          const previous =
+            written.slot === undefined
+              ? -1
+              : staticSession.writtenOutputs.findIndex(
+                  (output) =>
+                    output.environment === environment && output.dir === written.dir && output.slot === written.slot,
+                )
+          if (previous === -1) staticSession.writtenOutputs.push(written)
+          else staticSession.writtenOutputs[previous] = written
         }
 
         // Reaching any write hook proves the bundler has already replaced every file for this
         // output. Publish immediately: a later writeBundle rejection cannot put the old bytes
         // back, so retaining the old contribution would make Bamboo disagree with the disk in
         // the opposite direction. Generate/render failures never enter this phase.
-        const identity = outputIdentityByBundle.get(bundle) ?? outputIdentityByOptions.get(outputOptions)
         if (identity?.environment === environment) {
           publishPreparedOutput(identity.environment, identity.outputToken, identity.outputSlot, true)
         }

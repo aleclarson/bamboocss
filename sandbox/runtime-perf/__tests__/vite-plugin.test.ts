@@ -3301,6 +3301,182 @@ const runRemovedLiveRuleWatchRebuild = async (
 }
 
 /**
+ * Rebuild the client while SSR is replacing its output, from an edit to a module only SSR imports:
+ * the client rebuilds too, as its stylesheet watches every extracted file.
+ *
+ * SSR's old output still counted as complete, so the client's sheet was pruned against it and
+ * written as final: a class new to the extraction shipped with no rule, and one extracted before
+ * and pruned failed SSR's guard on the client's old losses though the client's rebuild could keep
+ * it. The sheet is held now while SSR replaces its output, and pruned again once SSR's output is
+ * written — or, when SSR's replacement fails, once its old output is back, to the same bytes.
+ */
+const runSiblingReplacementWatchRebuild = async (
+  create: (config: Record<string, unknown>) => Promise<unknown>,
+  label: string,
+  shape: 'a new class' | 'a class extracted before' | 'a failed replacement',
+) => {
+  const widths = { client: '77.0px', kept: '77.2px', fresh: '77.1px', pruned: '77.3px' }
+  const clientEntry = join(cwd, `src/__sibling-client-${label}.tsx`)
+  const ssrEntry = join(cwd, `src/__sibling-ssr-${label}.tsx`)
+  const serverOnly = join(cwd, `src/__sibling-server-${label}.tsx`)
+  const unused = join(cwd, `src/__sibling-unused-${label}.tsx`)
+  const ssrTrigger = join(cwd, `src/__sibling-ssr-trigger-${label}.txt`)
+  const configPath = join(cwd, `__sibling-${label}.bamboo.config.ts`)
+  const clientOutDir = join(cwd, `__sibling-client-${label}-out`)
+  const ssrOutDir = join(cwd, `__sibling-ssr-${label}-out`)
+  rmSync(clientOutDir, { force: true, recursive: true })
+  rmSync(ssrOutDir, { force: true, recursive: true })
+
+  let holding: Promise<void> | undefined
+  let release = () => {}
+  let failSsr = false
+  const sibling: VitePlugin = {
+    name: `bamboocss:test-sibling-replacement-${label}`,
+    enforce: 'pre',
+    sharedDuringBuild: true,
+    async transform(code, id) {
+      if (this.environment.name !== 'ssr') return
+      const file = id.split('?')[0]
+      // Held until the client's cycle has ended, so SSR is replacing its output throughout.
+      if (file === serverOnly && holding) {
+        await holding
+        if (failSsr) throw new Error(`SSR replacement failed by a test plugin (${label})`)
+      }
+      // An edit only SSR sees: its entry starts using a class the client's sheet pruned.
+      if (file === ssrEntry) {
+        this.addWatchFile(ssrTrigger)
+        if (readFileSync(ssrTrigger, 'utf8').trim() === 'pruned') {
+          return { code: `${code}export { pruned } from './__sibling-unused-${label}'\n`, map: null }
+        }
+      }
+    },
+  }
+
+  const server = (...widthsUsed: string[]) =>
+    `import { css } from '../styled-system/css'\n` +
+    widthsUsed.map((width, index) => `export const s${index} = css({ width: '[${width}]' })\n`).join('')
+  writeFileSync(
+    clientEntry,
+    `import 'virtual:bamboo.css'\nimport { css } from '../styled-system/css'\nexport const client = css({ width: '[${widths.client}]' })\n`,
+  )
+  writeFileSync(ssrEntry, `export * from './__sibling-server-${label}'\n`)
+  writeFileSync(serverOnly, server(widths.kept))
+  // Extracted, and reached by nothing at first: every sheet prunes it.
+  writeFileSync(
+    unused,
+    `import { css } from '../styled-system/css'\nexport const pruned = css({ width: '[${widths.pruned}]' })\n`,
+  )
+  writeWatchTrigger(ssrTrigger, 'first')
+  writeIsolatedBambooConfig(configPath, [
+    `./src/__sibling-client-${label}.tsx`,
+    `./src/__sibling-ssr-${label}.tsx`,
+    `./src/__sibling-server-${label}.tsx`,
+    `./src/__sibling-unused-${label}.tsx`,
+  ])
+  await settled()
+
+  const builder = (await create({
+    root: cwd,
+    logLevel: 'silent',
+    css: { postcss: { plugins: [] } },
+    plugins: [sibling, bamboocss({ cwd, configPath, reportSummary: false })],
+    build: { watch: {}, minify: false, emptyOutDir: false, rollupOptions: { external: [/^react/] } },
+    builder: {},
+    environments: {
+      client: {
+        build: {
+          outDir: clientOutDir,
+          lib: { entry: clientEntry, formats: ['es'], fileName: `sibling-client-${label}` },
+        },
+      },
+      ssr: {
+        build: {
+          ssr: true,
+          outDir: ssrOutDir,
+          lib: { entry: ssrEntry, formats: ['es'], fileName: `sibling-ssr-${label}` },
+        },
+      },
+    },
+  })) as TestEnvironmentBuilder
+
+  let clientWatcher: TestBuildWatcher | undefined
+  let ssrWatcher: TestBuildWatcher | undefined
+  const clientSheets = () => readdirSync(clientOutDir).filter((file) => file.endsWith('.css'))
+  try {
+    clientWatcher = (await builder.build(builder.environments.client)) as TestBuildWatcher
+    expect(await nextEnvironmentWatchBuild(clientWatcher)).toBeUndefined()
+    ssrWatcher = (await builder.build(builder.environments.ssr)) as TestBuildWatcher
+    expect(await nextEnvironmentWatchBuild(ssrWatcher)).toBeUndefined()
+    await watchersQuiet([clientWatcher, ssrWatcher])
+    expect(readOutputFiles(clientOutDir, '.css')).not.toContain(widths.pruned)
+
+    // The edit both rebuild for, SSR held until the client's cycle has ended.
+    holding = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    failSsr = shape === 'a failed replacement'
+    rmSync(clientOutDir, { force: true, recursive: true })
+    const rebuiltClient = watchCycleUntil(
+      clientWatcher,
+      () => existsSync(clientOutDir) && clientSheets().length > 0,
+      'rebuilding the client from the edit',
+    )
+    const rebuiltSsr = watchCycleUntil(
+      ssrWatcher,
+      () => true,
+      'rebuilding SSR from the edit',
+      failSsr ? 'SSR replacement failed by a test plugin' : undefined,
+    )
+    await new Promise((settle) => setTimeout(settle, 800))
+    if (shape === 'a class extracted before') {
+      writeFileSync(serverOnly, `${server(widths.kept)}export { pruned } from './__sibling-unused-${label}'\n`)
+    } else {
+      writeFileSync(serverOnly, server(widths.kept, widths.fresh))
+    }
+    expect(await rebuiltClient).toBeUndefined()
+    release()
+    holding = undefined
+    const ssrError = await rebuiltSsr
+    failSsr = false
+    await watchersQuiet([clientWatcher, ssrWatcher])
+
+    // Pruned again from source once SSR's replacement was settled, and renamed only if that
+    // restored a rule: one sheet either way.
+    expect(clientSheets()).toHaveLength(1)
+    const css = readOutputFiles(clientOutDir, '.css')
+    if (shape === 'a failed replacement') {
+      expect(ssrError?.message).toContain('SSR replacement failed by a test plugin')
+      expect(css).not.toContain(widths.fresh)
+
+      // Nothing is left held: an SSR-only rebuild newly using a class the client's sheet pruned
+      // fails, as one does with no sibling replacing.
+      const failedSsr = watchCycleUntil(
+        ssrWatcher,
+        () => true,
+        'rebuilding SSR alone',
+        'already pruned out of a stylesheet',
+      )
+      await new Promise((settle) => setTimeout(settle, 800))
+      writeWatchTrigger(ssrTrigger, 'pruned')
+      expect((await failedSsr)?.message).toContain(esc(`w_[${widths.pruned}]`))
+      await watchersQuiet([clientWatcher, ssrWatcher])
+    } else {
+      expect(ssrError).toBeUndefined()
+      const used = shape === 'a new class' ? widths.fresh : widths.pruned
+      expect(readOutputFiles(ssrOutDir, '.js')).toContain(`w_[${used}]`)
+      expect(css).toContain(`.${esc(`w_[${used}]`)}`)
+    }
+  } finally {
+    release()
+    await Promise.all([clientWatcher?.close(), ssrWatcher?.close()])
+    for (const file of [clientEntry, ssrEntry, serverOnly, unused, ssrTrigger, configPath])
+      rmSync(file, { force: true })
+    rmSync(clientOutDir, { force: true, recursive: true })
+    rmSync(ssrOutDir, { force: true, recursive: true })
+  }
+}
+
+/**
  * Rebuild both environment watchers while one generation is deliberately held after
  * `buildStart`.
  *
@@ -4074,6 +4250,31 @@ export default defineConfig({
       false,
     )
   }, 180_000)
+
+  const siblingShapes = ['a new class', 'a class extracted before', 'a failed replacement'] as const
+  test.each(siblingShapes)(
+    'Vite 7 prunes a watch sheet again once the sibling replacing its output settles, with %s',
+    async (shape) => {
+      await runSiblingReplacementWatchRebuild(
+        (config) => createVite7Builder(config as Parameters<typeof createVite7Builder>[0]),
+        `vite7-${siblingShapes.indexOf(shape)}`,
+        shape,
+      )
+    },
+    180_000,
+  )
+
+  test.each(siblingShapes)(
+    'Vite 8 prunes a watch sheet again once the sibling replacing its output settles, with %s',
+    async (shape) => {
+      await runSiblingReplacementWatchRebuild(
+        (config) => createBuilder(config as Parameters<typeof createBuilder>[0]),
+        `vite8-${siblingShapes.indexOf(shape)}`,
+        shape,
+      )
+    },
+    180_000,
+  )
 
   test('Vite 7 defers whole-run guards during concurrent replacement generations', async () => {
     await runConcurrentEnvironmentWatchRebuild(
