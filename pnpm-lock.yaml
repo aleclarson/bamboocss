@@ -1028,6 +1028,9 @@ importers:
       vite-bundle-visualizer:
         specifier: 1.2.1
         version: 1.2.1(rolldown@1.2.5)(rollup@4.53.1)
+      vite6:
+        specifier: npm:vite@6.4.1
+        version: vite@6.4.1(@types/node@24.10.1)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.44.1)(tsx@4.20.6)(yaml@2.9.0)
       vite8:
         specifier: npm:vite@8.2.1
         version: vite@8.2.1(@types/node@24.10.1)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.44.1)(tsx@4.20.6)(yaml@2.9.0)

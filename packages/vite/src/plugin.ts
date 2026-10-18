@@ -1275,6 +1275,23 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     rebuildStaticTransformContributions()
   }
 
+  /**
+   * An environment whose output is written with no finalizer, completed as one whose `options` was
+   * given no output is: at once, its outputs unstaged. Vite 6 builds the outputs it writes from
+   * `rollupOptions.output` before `options` runs, so the finalizer installed there is not on the
+   * object written, and Rollup reads an output's plugins before `outputOptions`, too late to add
+   * one. The generation it prepared waited for that finalizer for good: the deferred sheet was
+   * never finalized, a class only a later environment reached shipped with no rule, and the build
+   * passed.
+   */
+  const completeUnobservedOutputs = (environment: string) => {
+    outputTokensByEnvironment.delete(environment)
+    const generation = preparedGenerations.get(environment)
+    if (!generation) return
+    preparedGenerations.delete(environment)
+    completeEnvironmentGeneration(environment, generation.state)
+  }
+
   const sameTokens = (left: Set<number>, right: Set<number>) =>
     left.size === right.size && [...left].every((token) => right.has(token))
 
@@ -1991,6 +2008,11 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
       ? (value as TaggedOutputFinalizer)
       : undefined
   }
+  /** Whether an output's `plugins` hold a finalizer installed for `environment`, in any slot. */
+  const carriesOutputFinalizer = (value: unknown, environment: string): boolean =>
+    Array.isArray(value)
+      ? value.some((entry) => carriesOutputFinalizer(entry, environment))
+      : outputFinalizerTag(value)?.environment === environment
   const findOutputStartMarker = (
     value: unknown,
     environment: string,
@@ -2104,6 +2126,17 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     options(inputOptions) {
       installOutputFinalizers(inputOptions as typeof inputOptions & InputOptionsWithOutput, environmentName(this))
       return inputOptions
+    },
+
+    outputOptions(outputOptions) {
+      const environment = environmentName(this)
+      if (
+        outputTokensByEnvironment.get(environment)?.size &&
+        !carriesOutputFinalizer(outputOptions.plugins, environment)
+      ) {
+        completeUnobservedOutputs(environment)
+      }
+      return null
     },
 
     configResolved(config) {

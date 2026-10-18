@@ -16,6 +16,7 @@ import { logger } from '@bamboocss/logger'
 import { esc } from '@bamboocss/shared'
 import bamboocss from '@bamboocss/vite'
 import { build, createBuilder as createVite7Builder, createServer, type Plugin as VitePlugin, type Rollup } from 'vite'
+import { createBuilder as createVite6Builder } from 'vite6'
 import { TraceMap, originalPositionFor } from '@jridgewell/trace-mapping'
 import { build as buildVite8, createBuilder, createServer as createVite8Server, type Plugin } from 'vite8'
 import { afterEach, beforeEach, describe, expect, onTestFinished, test, vi } from 'vitest'
@@ -4206,6 +4207,53 @@ describe('the stylesheet URL', () => {
     },
     180_000,
   )
+
+  // Vite 6 builds the outputs it writes from `rollupOptions.output` before `options` runs, so the
+  // finalizer installed there never ran: the client's sheet, deferred until SSR completed, was never
+  // finalized, and a rule only the server reaches was missing from it, with the build green.
+  test('on Vite 6 with rollupOptions.output set, an announced run finalizes the sheet it deferred', async () => {
+    const client = join(cwd, 'src/__vite6-output-client.tsx')
+    const server = join(cwd, 'src/__vite6-output-server.tsx')
+    const configPath = join(cwd, '__vite6-output.bamboo.config.ts')
+    const clientOut = join(cwd, '__vite6-output-client-out')
+    const ssrOut = join(cwd, '__vite6-output-ssr-out')
+    writeFileSync(
+      client,
+      `import 'virtual:bamboo.css'\nimport { css } from '../styled-system/css'\nexport const a = css({ height: '[61.5px]' })\n`,
+    )
+    writeFileSync(server, `import { css } from '../styled-system/css'\nexport const b = css({ width: '[61.3px]' })\n`)
+    writeIsolatedBambooConfig(configPath, ['./src/__vite6-output-client.tsx', './src/__vite6-output-server.tsx'])
+    try {
+      const builder = await createVite6Builder({
+        root: cwd,
+        configFile: false,
+        logLevel: 'silent',
+        css: { postcss: { plugins: [] } },
+        plugins: [bamboocss({ cwd, configPath, reportSummary: false })],
+        builder: {},
+        build: { emptyOutDir: true },
+        environments: {
+          client: {
+            build: { outDir: clientOut, rollupOptions: { input: { client }, output: { entryFileNames: '[name].js' } } },
+          },
+          ssr: {
+            build: {
+              ssr: true,
+              outDir: ssrOut,
+              rollupOptions: { input: { server }, output: { entryFileNames: '[name].js' } },
+            },
+          },
+        },
+      })
+      await builder.buildApp()
+
+      expect(readOutputFiles(join(clientOut, 'assets'), '.css')).toContain('61.3px')
+    } finally {
+      for (const file of [client, server, configPath]) rmSync(file, { force: true })
+      rmSync(clientOut, { force: true, recursive: true })
+      rmSync(ssrOut, { force: true, recursive: true })
+    }
+  }, 180_000)
 
   /**
    * The same import on a dev server, which leaves `?url` to Vite's asset plugin, and that plugin

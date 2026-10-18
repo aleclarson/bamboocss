@@ -28,6 +28,7 @@
     "typescript": "7.0.2",
     "vite": "7.2.6",
     "vite-bundle-visualizer": "1.2.1",
+    "vite6": "npm:vite@6.4.1",
     "vite8": "npm:vite@8.2.1"
   }
 }
