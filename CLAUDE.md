@@ -181,6 +181,21 @@ that writes a `styled-system` package under `packages/**` can be resolved by unr
 `mkdtempSync(tmpdir())`, and remove the whole directory in teardown — or, for a module that only needs bytes, an overlay
 (`ctx.project.addSourceFile`), which writes nothing.
 
+**The suite runs on Windows too** (`Unit Tests (Windows)` in `quality.yml`). A test written on macOS failed there in a
+few ways, each of which took out dozens of tests at once:
+
+- A path the product or Vite hands back — a module id, a watch file, a source map source, a glob result, a resolution
+  read — is spelled with `/` on every platform, and `join` spells one with `\` on Windows. Spell both sides with `/`
+  before comparing them.
+- The runner's temporary folder is `C:\Users\RUNNER~1\…`. Only `realpathSync.native` expands that short name, and the
+  product canonicalizes with it, so canonicalize a temporary root with `realpathSync.native`, not `realpathSync`.
+- A `node_modules/.bin` tool is a `.cmd` there, which `spawn` and `execFileSync` cannot start without a shell. Run the
+  tool's script with `process.execPath`; pnpm names its own in `npm_execpath`.
+- A drive-less fixture root such as `/app` gets a drive only where something resolves it. Root one through
+  `resolve('/app')`.
+- `writeFileSync` can reach a watcher as two changes, a truncation and a write, so a watch test has to allow for a
+  second build. `writeWatchTrigger` in the sandbox test writes a trigger file as one change.
+
 **Extraction semantics are pinned in `packages/node/__tests__/extraction/`.** Those tests drive `ctx.parseFile` against
 overlaid sources and assert the result items and the CSS they encode. They were ported from the retired TypeScript
 engine's suite; where the two engines disagreed the test says which way and why (a bare `css` nobody imported is not

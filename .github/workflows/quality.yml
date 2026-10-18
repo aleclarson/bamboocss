@@ -65,14 +65,11 @@ jobs:
   # On Windows, where nothing ran the suite before: a watcher reports `C:\app\src\a.tsx` there,
   # a glob `C:/app/src/a.tsx`, and a drive letter in either case — the spellings `fs-path.ts`
   # reconciles, whose miss let an edit go unseen by the dev stylesheet — and links are junctions.
-  #
-  # Not a gate yet. The suite has never been brought green on Windows, so this reports what fails
-  # there without failing the workflow; take `continue-on-error` out once it passes.
+  # What a test has to allow for there is in CLAUDE.md, under "The suite runs on Windows too".
   tests-windows:
     name: Unit Tests (Windows)
     runs-on: windows-latest
     timeout-minutes: 45
-    continue-on-error: true
     steps:
       # As committed. A Windows checkout writes every line ending as CRLF, and the suite reads its
       # fixtures and snapshots as the repository holds them.
