@@ -1906,13 +1906,11 @@ describe('load config', () => {
       symlinkSync(root, link, 'junction')
 
       const aliases = await resolveSolutionAliases(join(link, 'bamboo.config.ts'), link)
+      // As `get-tsconfig` answers, with `/` on every platform.
+      const target = join(link, 'src/theme/tokens').replaceAll('\\', '/')
 
-      expect(aliases?.candidates('@/theme/tokens', join(root, 'bamboo.config.ts'))).toEqual([
-        join(link, 'src/theme/tokens'),
-      ])
-      expect(aliases?.candidates('@/theme/tokens', join(link, 'bamboo.config.ts'))).toEqual([
-        join(link, 'src/theme/tokens'),
-      ])
+      expect(aliases?.candidates('@/theme/tokens', join(root, 'bamboo.config.ts'))).toEqual([target])
+      expect(aliases?.candidates('@/theme/tokens', join(link, 'bamboo.config.ts'))).toEqual([target])
     })
 
     // A root that compiles the config itself — no `files` or `include`, so everything — is the

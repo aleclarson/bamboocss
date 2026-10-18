@@ -18,15 +18,6 @@ const out = mkdtempSync(join(tmpdir(), 'bamboo-types-'))
 let program: ts.Program
 let index: ts.Symbol
 
-const options: ts.CompilerOptions = {
-  module: ts.ModuleKind.NodeNext,
-  moduleResolution: ts.ModuleResolutionKind.NodeNext,
-  noEmit: true,
-  skipLibCheck: false,
-  strict: true,
-  target: ts.ScriptTarget.ES2022,
-}
-
 /**
  * The package's own dependencies, which the declarations import, each linked where it really is.
  * Through one link to the package's `node_modules`, itself a folder of links, TypeScript found
@@ -44,31 +35,22 @@ const linkDependencies = (from: string, to: string) => {
 beforeAll(() => {
   build(out)
   linkDependencies(join(import.meta.dirname, '..', 'node_modules'), join(out, 'node_modules'))
-  program = ts.createProgram([join(out, 'index.d.ts')], options)
+  program = ts.createProgram([join(out, 'index.d.ts')], {
+    module: ts.ModuleKind.NodeNext,
+    moduleResolution: ts.ModuleResolutionKind.NodeNext,
+    noEmit: true,
+    skipLibCheck: false,
+    strict: true,
+    target: ts.ScriptTarget.ES2022,
+  })
   index = program.getTypeChecker().getSymbolAtLocation(program.getSourceFile(join(out, 'index.d.ts'))!)!
 }, 60_000)
 afterAll(() => rmSync(out, { force: true, recursive: true }))
 
 test('type-check with skipLibCheck off', () => {
   const diagnostics = ts.getPreEmitDiagnostics(program)
-  // TEMPORARY: how each bare import resolved, to read off a Windows run.
-  const trace: string[] = []
-  for (const name of ['microdiff', 'pkg-types']) {
-    ts.resolveModuleName(
-      name,
-      join(out, 'config.d.ts'),
-      { ...options, traceResolution: true },
-      {
-        ...ts.sys,
-        trace: (line) => trace.push(line),
-      },
-    )
-  }
 
-  expect(
-    diagnostics.map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n')),
-    [`out: ${out}`, `dirname: ${import.meta.dirname}`, ...trace].join('\n'),
-  ).toEqual([])
+  expect(diagnostics.map((diagnostic) => ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'))).toEqual([])
 })
 
 // Each from the module the package's source exports it from — not whichever copy `export type *`

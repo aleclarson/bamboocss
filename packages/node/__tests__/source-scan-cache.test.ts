@@ -358,8 +358,8 @@ describe('source-scan cache', () => {
     builder.extract()
     reads.mockClear()
     builder.toCss({ layerParams: true })
-    const readFiles = [...new Set(reads.mock.calls.map((call) => String(call[0])))]
-    expect(readFiles, 'only the edited file was re-scanned').toEqual([fixture])
+    const readFiles = [...new Set(reads.mock.calls.map((call) => slash(String(call[0]))))]
+    expect(readFiles, 'only the edited file was re-scanned').toEqual([slash(fixture)])
     reads.mockRestore()
   }, 120_000)
 

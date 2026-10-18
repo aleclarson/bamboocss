@@ -816,7 +816,7 @@ describe.sequential('vite plugin, real rebuild', () => {
 
       expect(transformCalls, 'the Bamboo-compiled entry took Rollup’s cached transform path').toBe(1)
       expect(error?.message).toContain('cached transform metadata')
-      expect(error?.message).toContain(JSON.stringify(staleEntry))
+      expect(error?.message).toContain(JSON.stringify(slash(staleEntry)))
       expect(error?.message).toContain('version 1; expected schema version 5')
       expect(error?.message).toContain('cached JavaScript may still name CSS classes whose rules would be dropped')
       expect(error?.message).toContain('Restart Vite to invalidate its in-memory transform cache')
@@ -931,7 +931,7 @@ describe.sequential('vite plugin, real rebuild', () => {
 
       expect(transformCalls, 'the altered Bamboo entry took Rollup’s cached transform path').toBe(1)
       expect(error?.message).toContain('cached transform metadata')
-      expect(error?.message).toContain(JSON.stringify(integrityEntry))
+      expect(error?.message).toContain(JSON.stringify(slash(integrityEntry)))
       expect(error?.message).toContain('schema version 5 integrity check')
       expect(error?.message).toContain('cached JavaScript may still name CSS classes whose rules would be dropped')
       expect(error?.message).toContain('Restart Vite to invalidate its in-memory transform cache')
@@ -3347,9 +3347,11 @@ const runSiblingReplacementWatchRebuild = async (
     sharedDuringBuild: true,
     async transform(code, id) {
       if (this.environment.name !== 'ssr') return
-      // Held until the client's cycle has ended, so SSR is replacing its output throughout.
-      if (isModule(id, serverOnly) && holding) {
-        await holding
+      if (isModule(id, serverOnly)) {
+        // Held until the client's cycle has ended, so SSR is replacing its output throughout.
+        if (holding) await holding
+        // Failed for the whole round, not only in the build held: a watcher can see the one write
+        // twice, and a second build, held by nothing, replaced SSR's output after all.
         if (failSsr) throw new Error(`SSR replacement failed by a test plugin (${label})`)
       }
       // An edit only SSR sees: its entry starts using a class the client's sheet pruned.
@@ -3439,6 +3441,7 @@ const runSiblingReplacementWatchRebuild = async (
     )
     await new Promise((settle) => setTimeout(settle, 800))
     const clientBuilds = cyclesStartedBy(clientWatcher)
+    const ssrBuilds = cyclesStartedBy(ssrWatcher)
     if (shape === 'a class extracted before') {
       writeFileSync(serverOnly, `${server(widths.kept)}export { pruned } from './__sibling-unused-${label}'\n`)
     } else {
@@ -3448,14 +3451,15 @@ const runSiblingReplacementWatchRebuild = async (
     release()
     holding = undefined
     const ssrError = await rebuiltSsr
-    failSsr = false
     await watchersQuiet([clientWatcher, ssrWatcher])
+    failSsr = false
 
     // Pruned again from source once SSR's replacement was settled, and renamed only if that
     // restored a rule, the sheet it replaces gone: one sheet a client build. A watcher can see one
     // write twice, and a second build's sheet is written beside the first's, as Vite leaves every
     // asset of an output it does not empty; the newest is the one its output is.
     const builds = clientBuilds()
+    const rounds = `${builds} client and ${ssrBuilds()} SSR build(s)`
     expect(clientSheets().length).toBeGreaterThanOrEqual(1)
     expect(clientSheets().length).toBeLessThanOrEqual(Math.max(builds, 1))
     const css = clientSheets()
@@ -3464,7 +3468,7 @@ const runSiblingReplacementWatchRebuild = async (
       .map((path) => readFileSync(path, 'utf8'))[0]!
     if (shape === 'a failed replacement') {
       expect(ssrError?.message).toContain('SSR replacement failed by a test plugin')
-      expect(css).not.toContain(widths.fresh)
+      expect(css, rounds).not.toContain(widths.fresh)
 
       // Nothing is left held: an SSR-only rebuild newly using a class the client's sheet pruned
       // fails, as one does with no sibling replacing.
