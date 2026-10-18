@@ -2039,6 +2039,131 @@ const runClientFirstWatchRebuild = async (
 }
 
 /**
+ * Build the client first, then SSR, whose output another plugin rejects once Bamboo's early pass
+ * has finalized the client's sheet in it, then rebuild SSR alone.
+ *
+ * The finalization restored SSR's class to the client's sheet on disk, while the loss history the
+ * guard read was the set that pass put back as it ended, still holding the client's provisional
+ * losses: only SSR's output being written rebuilt it, and a rejected one never is. SSR's next
+ * rebuild failed naming the class the client's sheet holds, and the one after that passed.
+ */
+const runRejectedCompletionWatchRebuild = async (
+  create: (config: Record<string, unknown>) => Promise<unknown>,
+  label: string,
+  widths: { ssr: string; client: string },
+) => {
+  const ssrTrigger = join(cwd, `src/__rejected-completion-ssr-${label}.txt`)
+  const configPath = join(cwd, `__rejected-completion-${label}.bamboo.config.ts`)
+  const clientOutDir = join(cwd, `__rejected-completion-client-${label}-out`)
+  const ssrOutDir = join(cwd, `__rejected-completion-ssr-${label}-out`)
+  const calls = { client: 0, ssr: 0 }
+  rmSync(clientOutDir, { force: true, recursive: true })
+  rmSync(ssrOutDir, { force: true, recursive: true })
+
+  const environmentSource: VitePlugin = {
+    name: `bamboocss:test-rejected-completion-source-${label}`,
+    enforce: 'pre',
+    sharedDuringBuild: true,
+    transform(_code, id) {
+      if (id.split('?')[0] !== envSharedModule) return
+
+      const environment = this.environment.name as keyof typeof calls
+      calls[environment]++
+      if (environment === 'ssr') this.addWatchFile(ssrTrigger)
+      const width = environment === 'ssr' ? widths.ssr : widths.client
+      return {
+        code:
+          `import { css } from '../styled-system/css'\n` + `export const className = css({ width: '[${width}]' })\n`,
+        map: null,
+      }
+    },
+  }
+  // A normal-order hook, so it runs after Bamboo's early pass has finalized the client's sheet.
+  let rejectSsrOutput = true
+  const rejecter: VitePlugin = {
+    name: `bamboocss:test-rejected-completion-rejecter-${label}`,
+    sharedDuringBuild: true,
+    generateBundle() {
+      if (this.environment.name !== 'ssr' || !rejectSsrOutput) return
+      rejectSsrOutput = false
+      throw new Error('SSR output rejected once by a test plugin')
+    },
+  }
+
+  writeFileSync(
+    envSharedModule,
+    `import { css } from '../styled-system/css'\n` +
+      `export const ssr = css({ width: '[${widths.ssr}]' })\n` +
+      `export const client = css({ width: '[${widths.client}]' })\n`,
+  )
+  writeWatchTrigger(ssrTrigger, 'first')
+  writeFileSync(envClientEntry, `import 'virtual:bamboo.css'\nexport { className } from './__env-shared'\n`)
+  writeFileSync(envSsrEntry, `export { className } from './__env-shared'\n`)
+  writeIsolatedBambooConfig(configPath, ['./src/__env-shared.tsx', './src/__env-client.tsx', './src/__env-ssr.tsx'])
+  await settled()
+
+  const builder = (await create({
+    root: cwd,
+    logLevel: 'silent',
+    css: { postcss: { plugins: [] } },
+    plugins: [environmentSource, bamboocss({ cwd, configPath, reportSummary: false }), rejecter],
+    build: {
+      watch: {},
+      minify: false,
+      emptyOutDir: false,
+      rollupOptions: { external: [/^react/] },
+    },
+    builder: {},
+    environments: {
+      client: {
+        build: {
+          outDir: clientOutDir,
+          lib: { entry: envClientEntry, formats: ['es'], fileName: `rejected-completion-client-${label}` },
+        },
+      },
+      ssr: {
+        build: {
+          ssr: true,
+          outDir: ssrOutDir,
+          lib: { entry: envSsrEntry, formats: ['es'], fileName: `rejected-completion-ssr-${label}` },
+        },
+      },
+    },
+  })) as TestEnvironmentBuilder
+
+  let clientWatcher: TestBuildWatcher | undefined
+  let ssrWatcher: TestBuildWatcher | undefined
+  try {
+    clientWatcher = (await builder.build(builder.environments.client)) as TestBuildWatcher
+    expect(await nextEnvironmentWatchBuild(clientWatcher)).toBeUndefined()
+    ssrWatcher = (await builder.build(builder.environments.ssr)) as TestBuildWatcher
+    expect((await nextEnvironmentWatchBuild(ssrWatcher))?.message).toContain('SSR output rejected once')
+    await watchersQuiet([clientWatcher, ssrWatcher])
+
+    // Finalized in SSR's early pass, before the rejection: the sheet on disk holds SSR's class.
+    expect(readOutputFiles(clientOutDir, '.css')).toContain(`.${esc(`w_[${widths.ssr}]`)}`)
+    expect(readOutputFiles(ssrOutDir, '.js')).toBe('')
+
+    let beforeSsrEdit = Number.POSITIVE_INFINITY
+    const rebuiltSsr = watchCycleUntil(ssrWatcher, () => calls.ssr > beforeSsrEdit, 'rebuilding SSR from its trigger')
+    await new Promise((settle) => setTimeout(settle, 800))
+    beforeSsrEdit = calls.ssr
+    writeWatchTrigger(ssrTrigger, 'second')
+    expect(await rebuiltSsr).toBeUndefined()
+    await watchersQuiet([clientWatcher, ssrWatcher])
+
+    expect(readOutputFiles(ssrOutDir, '.js')).toContain(`w_[${widths.ssr}]`)
+    expect(readOutputFiles(clientOutDir, '.css')).toContain(`.${esc(`w_[${widths.ssr}]`)}`)
+  } finally {
+    await Promise.all([clientWatcher?.close(), ssrWatcher?.close()])
+    rmSync(ssrTrigger, { force: true })
+    rmSync(configPath, { force: true })
+    rmSync(clientOutDir, { force: true, recursive: true })
+    rmSync(ssrOutDir, { force: true, recursive: true })
+  }
+}
+
+/**
  * Reject one environment after Bamboo generated its candidate bundle, then rebuild only its
  * sibling.
  *
@@ -3846,6 +3971,22 @@ export default defineConfig({
       'vite8-sheet',
       { ssr: '96.101px', client: '96.202px', edited: '96.303px' },
       true,
+    )
+  }, 180_000)
+
+  test('Vite 7 keeps no provisional loss past an output rejected after it finalized the sheet', async () => {
+    await runRejectedCompletionWatchRebuild(
+      (config) => createVite7Builder(config as Parameters<typeof createVite7Builder>[0]),
+      'vite7',
+      { ssr: '97.101px', client: '97.202px' },
+    )
+  }, 180_000)
+
+  test('Vite 8 keeps no provisional loss past an output rejected after it finalized the sheet', async () => {
+    await runRejectedCompletionWatchRebuild(
+      (config) => createBuilder(config as Parameters<typeof createBuilder>[0]),
+      'vite8',
+      { ssr: '98.101px', client: '98.202px' },
     )
   }, 180_000)
 

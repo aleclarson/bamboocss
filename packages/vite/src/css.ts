@@ -320,18 +320,7 @@ const pruneEmittedSheets = async (
     // This environment completes the run, so the sheets earlier ones deferred can be finalized
     // now — inside this projection, where reachability is the whole run's, and before any
     // other plugin's hook reads a name out of this bundle or copies a sheet into it.
-    if (completesRun) {
-      // Finalizing rebuilds the loss history from every environment's outputs, into whichever set
-      // is current. A staged projection's is the working set `restore` records as this output's
-      // own, so it is set back afterwards: otherwise the stage took the other environments' losses
-      // for its own, and kept them past a rebuild of theirs that restored the class.
-      const own = outputProjection.staged ? new Set(session.prunedClasses) : undefined
-      await session.finalizeDeferred?.({ environment: environmentName, bundle, sourcemap })
-      if (own) {
-        session.prunedClasses.clear()
-        for (const className of own) session.prunedClasses.add(className)
-      }
-    }
+    if (completesRun) await session.finalizeDeferred?.({ environment: environmentName, bundle, sourcemap })
     if (!carriesSheet) return
 
     // Splitting needs the chunks to still be open to a new stylesheet each, which is only so

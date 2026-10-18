@@ -8,11 +8,6 @@ export interface StaticOutputProjection {
   cssLoaded: boolean
   /** Compiler-owned atoms every JavaScript output represented by this projection can name. */
   requiredClasses: ReadonlySet<string>
-  /**
-   * Whether the loss history read and written during the projection is the candidate's own, set
-   * back by `restore`, rather than the committed one.
-   */
-  staged: boolean
   /** Restore the committed whole-build projection after the candidate CSS has been staged. */
   restore(): void
 }
@@ -116,10 +111,12 @@ export interface StaticCompilationSession {
    */
   lateSheetEnvironments: Set<string>
   /**
-   * Escape-free class names a completed prune removed from an emitted stylesheet.
+   * Escape-free class names the prune running now removed from an emitted stylesheet.
    *
-   * Kept so a later environment can notice that a class it just compiled is already gone from
-   * a sheet that has been finalized. Escape-free because that is the spelling the prune pass
+   * Recorded so a later environment can notice that a class it just compiled is already gone
+   * from a sheet that has been finalized: the pass that opened the prune keeps them on the output
+   * the sheet went out with, and the guard reads every live output's. Never the history itself,
+   * which only those outputs hold. Escape-free because that is the spelling the prune pass
    * decides on; see `bare` there.
    */
   prunedClasses: Set<string>
@@ -213,7 +210,7 @@ export const createStaticCompilationSession = (): StaticCompilationSession => {
       const requiredClasses = new Set(
         [...session.usedClasses].filter((className) => prunable.has(className.replaceAll('\\', ''))),
       )
-      return { cssLoaded: session.cssLoaded, requiredClasses, staged: false, restore() {} }
+      return { cssLoaded: session.cssLoaded, requiredClasses, restore() {} }
     },
     markClassUsed(className) {
       // Split on whitespace. A folded call reports one entry per call

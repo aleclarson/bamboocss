@@ -681,6 +681,79 @@ describe('compiler', () => {
   }, 60_000)
 
   /**
+   * The loss history is read off the live outputs alone, so a sheet emitted with no generation
+   * behind it — a harness's, which never ran `buildEnd` — is given an output of the environment as
+   * it stands, for what it lost to be kept on, rather than lost from the history.
+   */
+  test('what a sheet with no generation behind it pruned still fails a later environment', async () => {
+    const entry = join(cwd, 'src/__orphan-sheet.tsx')
+    const widths = { kept: '94.401px', lost: '94.402px' }
+    const source = (...used: string[]) =>
+      `import { css } from 'styled-system/css'\n` +
+      used.map((width, index) => `export const c${index} = css({ width: '[${width}]' })\n`).join('')
+    const { css, fold: compiler } = plugins({ cwd, reportSummary: false })
+    const resolvedCss = hookOf(css.resolveId)!.call({} as never, VIRTUAL_CSS_ID, undefined, {} as never) as string
+    const environments = {
+      client: { name: 'client', config: { build: { sourcemap: false, emitAssets: true } } },
+      ssr: { name: 'ssr', config: { build: { sourcemap: false, ssr: true, emitAssets: false } } },
+    }
+    const context = (environment: (typeof environments)[keyof typeof environments]) => ({
+      addWatchFile() {},
+      environment,
+      getModuleIds: () => [entry, resolvedCss].values(),
+      getModuleInfo: () => null,
+    })
+    const start = async (environment: (typeof environments)[keyof typeof environments], ...used: string[]) => {
+      const hooks = context(environment)
+      await hookOf(css.buildStart)?.call(hooks as never, {} as never)
+      await hookOf(compiler.buildStart)?.call(hooks as never, {} as never)
+      const stylesheet = await hookOf(css.load)?.call(hooks as never, resolvedCss, {} as never)
+      await hookOf(compiler.transform)!.call(hooks as never, source(...used), entry, {} as never)
+      return { hooks, stylesheet }
+    }
+
+    writeFileSync(
+      entry,
+      `import 'virtual:bamboo.css'\n` +
+        `import { css } from 'styled-system/css'\n` +
+        `export const inventory = [css({ width: '[${widths.kept}]' }), css({ width: '[${widths.lost}]' })]\n`,
+    )
+    try {
+      const config = { command: 'build', root: cwd, build: { sourcemap: false } }
+      await hookOf(css.configResolved)?.call({} as never, config as never)
+      await hookOf(compiler.configResolved)?.call({} as never, config as never)
+
+      // SSR first, to completion: what the client's sheet keeps is what SSR's output names.
+      const first = await start(environments.ssr, widths.kept)
+      hookOf(compiler.buildEnd)?.call(first.hooks as never, undefined as never)
+
+      // The client emits its sheet with no `buildEnd`, so no generation of its own.
+      const { stylesheet } = await start(environments.client, widths.kept)
+      const bundle = {
+        'style.css': { type: 'asset', fileName: 'style.css', names: [], originalFileNames: [], source: stylesheet },
+      }
+      await hookOf(css.generateBundle)?.call(
+        { environment: environments.client } as never,
+        {} as never,
+        bundle as never,
+        false,
+      )
+      const emitted = Object.values(bundle)
+        .map((asset) => String(asset.source))
+        .join('\n')
+      expect(emitted).toContain(widths.kept)
+      expect(emitted).not.toContain(widths.lost)
+
+      const rebuilt = await start(environments.ssr, widths.kept, widths.lost)
+      expect(() => hookOf(compiler.buildEnd)?.call(rebuilt.hooks as never, undefined as never)).toThrow(
+        `w_\\[${widths.lost.replace('.', '\\.')}\\]`,
+      )
+    } finally {
+      rmSync(entry, { force: true })
+    }
+  }, 60_000)
+
+  /**
    * No foreign recipe config outlives the edit that changed it, in any environment.
    *
    * The config of an imported recipe is parsed once per declaring module and cached, and both

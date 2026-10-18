@@ -1123,26 +1123,24 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     return required
   }
 
-  /** What the live outputs of every environment but `environment` pruned out of their sheets. */
-  const prunedOutside = (environment: string) => {
+  /**
+   * What the live outputs' sheets pruned out: every environment's, or every one's but `except`'s.
+   *
+   * The loss history the guard reads, computed from the outputs whenever it is read and kept
+   * nowhere. A set kept beside them was also the set a prune records into, and went stale where
+   * the two roles crossed: the finalization of a run in an output another plugin then rejected put
+   * back a set still holding the sheet's provisional losses, which only that output being written
+   * rebuilt — so the environment's next rebuild failed naming a class the sheet on disk holds.
+   */
+  const livePrunedClasses = (except?: string) => {
     const pruned = new Set<string>()
-    for (const [other, slots] of liveOutputSlotsByEnvironment) {
-      if (other === environment) continue
+    for (const [environment, slots] of liveOutputSlotsByEnvironment) {
+      if (environment === except) continue
       for (const slot of slots.values()) {
         for (const className of slot.prunedClasses ?? []) pruned.add(className)
       }
     }
     return pruned
-  }
-
-  /** Derive loss history from the stylesheet outputs which are still observable. */
-  const rebuildLivePrunedClasses = () => {
-    staticSession.prunedClasses.clear()
-    for (const slots of liveOutputSlotsByEnvironment.values()) {
-      for (const slot of slots.values()) {
-        for (const className of slot.prunedClasses ?? []) staticSession.prunedClasses.add(className)
-      }
-    }
   }
 
   /**
@@ -1170,9 +1168,9 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     const { finalizeDeferredSheets } = await loadCssOutputModule()
 
     // The final prune records what it removed from source, which replaces the provisional
-    // loss history outright: a class the provisional prune removed and the final one kept is
-    // no longer lost.
-    const committed = staticSession.prunedClasses
+    // losses outright: a class the provisional prune removed and the final one kept is no longer
+    // lost. Recorded into a set of its own, so the prune of the pass this runs in keeps its own.
+    const outer = staticSession.prunedClasses
     staticSession.prunedClasses = new Set()
     let finalized: ReturnType<typeof finalizeDeferredSheets>
     let lost: Set<string>
@@ -1186,17 +1184,16 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
       })
     } finally {
       lost = staticSession.prunedClasses
-      staticSession.prunedClasses = committed
+      staticSession.prunedClasses = outer
     }
 
-    // The loss history belongs to the sheet's environment, so a later rebuild of another
-    // environment alone can notice that a class it compiles is already gone from the file.
+    // The losses belong to the sheet's environment, so a later rebuild of another environment
+    // alone can notice that a class it compiles is already gone from the file.
     for (const sheet of finalized) {
       for (const slot of liveOutputSlotsByEnvironment.get(sheet.environment)?.values() ?? []) {
         slot.prunedClasses = new Set(lost)
       }
     }
-    rebuildLivePrunedClasses()
 
     for (const sheet of finalized) {
       if (!sheet.renamed) continue
@@ -1257,7 +1254,6 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     liveOutputSlotsByEnvironment.set(environment, new Map([[DIRECT_OUTPUT_TOKEN, { epoch }]]))
     staticSession.completedEnvironments.add(environment)
     rebuildStaticTransformContributions()
-    rebuildLivePrunedClasses()
   }
 
   const prepareEnvironmentGeneration = (environment: string, state: EnvironmentTransformState) => {
@@ -1317,7 +1313,6 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     preparedGenerations.delete(environment)
     staticSession.completedEnvironments.add(environment)
     rebuildStaticTransformContributions()
-    rebuildLivePrunedClasses()
   }
 
   const publishPreparedOutput = (environment: string, outputToken: number, outputSlot: number, wasWritten: boolean) => {
@@ -1376,7 +1371,6 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
       // from wedging every later sibling guard and coverage report indefinitely.
       staticSession.completedEnvironments.add(environment)
       rebuildStaticTransformContributions()
-      rebuildLivePrunedClasses()
     }
 
     if (!allOutputsSucceeded || !wasWritten) return
@@ -1411,7 +1405,6 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
       staticSession.completedEnvironments.delete(environment)
     }
     rebuildStaticTransformContributions()
-    rebuildLivePrunedClasses()
   }
 
   staticSession.finalizeDeferred = ({ environment, bundle, sourcemap }) =>
@@ -1441,10 +1434,8 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
       const currentState = transformStateByEnvironment.get(environment)
       // Unstaged — a hook harness, or a Vite 6 build outside a watch, whose `options` is given no
       // output — what this output prunes is kept on the environment's live output, as a staged
-      // output's stage is once written, so the guard can tell it from another environment's
-      // (`prunedOutside`) and rebuilding the history from those outputs keeps it. It was written
-      // to the history alone, which the next environment to finish rebuilt without it.
-      const committed = staticSession.prunedClasses
+      // output's stage is once written, so the guard can tell it from another environment's.
+      const outer = staticSession.prunedClasses
       const own = replacesGeneratedStylesheet ? new Set<string>() : undefined
       if (own) staticSession.prunedClasses = own
       let restored = false
@@ -1454,35 +1445,38 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
           environment,
           currentState ? ownedClassesForState(currentState) : currentRequiredClasses(),
         ),
-        staged: own !== undefined,
         restore() {
           if (restored || !own) return
           restored = true
-          staticSession.prunedClasses = committed
-          const slots = liveOutputSlotsByEnvironment.get(environment)
+          staticSession.prunedClasses = outer
+          if (!own.size) return
+          let slots = liveOutputSlotsByEnvironment.get(environment)
+          // An output with no generation behind it — a harness's that never ran `buildEnd` — is
+          // given one of the environment as it stands, for what its sheet lost to be kept on.
           if (!slots?.size) {
-            for (const className of own) committed.add(className)
-            return
+            slots = new Map([
+              [DIRECT_OUTPUT_TOKEN, { epoch: createTransformEpoch(currentState ?? newEnvironmentState()) }],
+            ])
+            liveOutputSlotsByEnvironment.set(environment, slots)
+            rebuildStaticTransformContributions()
           }
           for (const slot of slots.values()) {
             slot.prunedClasses = new Set([...(slot.prunedClasses ?? []), ...own])
           }
-          rebuildLivePrunedClasses()
         },
       }
     }
 
-    const committedPrunedClasses = staticSession.prunedClasses
-    staticSession.prunedClasses = new Set(committedPrunedClasses)
+    // A set of the prune's own to record into, which `restore` keeps as this output's stage.
+    const outer = staticSession.prunedClasses
+    staticSession.prunedClasses = new Set()
     rebuildStaticTransformContributions(environment, generation.epoch.state)
     const requiredClasses = requiredClassesForProjection(environment, generation.epoch.ownedClasses)
-    if (replacesGeneratedStylesheet) staticSession.prunedClasses.clear()
 
     let restored = false
     return {
       cssLoaded: generation.epoch.state.cssLoaded,
       requiredClasses,
-      staged: true,
       restore() {
         if (restored) return
         restored = true
@@ -1506,7 +1500,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
             : {}
         outputStageByBundle.set(bundle, stage)
         outputStageByOptions.set(outputOptions, { stage, epoch: generation.epoch.id })
-        staticSession.prunedClasses = committedPrunedClasses
+        staticSession.prunedClasses = outer
         rebuildStaticTransformContributions()
       },
     }
@@ -2443,7 +2437,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
         // A styled component that renders only on the server is what trips this; anything the
         // client also renders is compiled in both environments and never lands here.
         //
-        // `prunedClasses` is only ever filled by a prune that already ran, and a prune keeps
+        // An output's losses are only ever recorded by a prune that already ran, and a prune keeps
         // everything marked used, so an intersection can only mean a marker that arrived after.
         //
         // Not while a written sheet is waiting to be finalized: that sheet was pruned against
@@ -2451,7 +2445,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
         // its output is what restores a rule this environment reached. The guard is for the runs that
         // have no finalization coming — an in-memory build, or one that never announced its
         // environments.
-        const pruned = writesOwnSheet ? prunedOutside(environment) : staticSession.prunedClasses
+        const pruned = livePrunedClasses(writesOwnSheet ? environment : undefined)
         const lost =
           currentWillEmitCss || staticSession.deferredSheets.length
             ? []
