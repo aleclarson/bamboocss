@@ -117,6 +117,25 @@ tree.** Committing source that has not been rebuilt leaves those artifacts gener
 fails on the "Check generated output is committed" step. Run `pnpm build` before committing anything that changes what
 the generator emits.
 
+**A green local run can still miss what CI sees, three ways.** Each one reached a push in one session:
+
+- CI type-checks straight after `pnpm install`, whose `prepare` is `build-fast`: no `dist` holds declarations. A test
+  importing a built entry (`await import('../dist/index.mjs')`) fails there with TS7016 and passes locally after a full
+  `pnpm build`. Type-check after `build-fast` to see what CI sees.
+- `pnpm install` runs every workspace project's `prepare` and `postinstall`: the config samples under
+  `packages/config/__tests__/samples/` run `bamboo codegen`, the sandboxes theirs, the Nuxt apps `nuxt prepare`. A
+  config option made an error fails the install, and every CI job with it, while any sample still sets it. A local
+  install that is "Already up to date" runs none of them; `pnpm -r --no-bail run prepare` does.
+- pnpm checks dependencies before running a script. After anything changes a `package.json` — pulling a Version Packages
+  commit is enough — the next `pnpm` command silently runs an install, whose `prepare` replaces the release native
+  binary with a debug build (15 MB against 2 MB) and rebuilds every `dist` without declarations. Run
+  `pnpm install --frozen-lockfile --ignore-scripts` after pulling, and check the binary before a bench.
+
+**"Everything is committed" needs more than `git status`.** Another session's worktree can hold uncommitted work —
+`git worktree list`, then `git status` in each — and `.gitignore` ignores `.*`, so a plan file such as `.PLAN_FIXES.md`
+never shows up at all. After a publish, the registry can take minutes to show a package's new version: poll
+`https://registry.npmjs.org/<name>` before calling a release partial.
+
 ### Testing Workflow
 
 🚨 **The codegen and sandbox suites run against generated artifacts on disk, and their test commands do not regenerate
