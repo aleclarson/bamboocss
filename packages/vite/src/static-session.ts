@@ -50,7 +50,10 @@ export interface DeferredSheet {
   moved?: ReadonlySet<string>
 }
 
-/** The stylesheet an environment writing its assets wrote, as a copy another one discards is named after. */
+/**
+ * A stylesheet an environment writing its assets wrote: what a copy another environment discards is
+ * named after, and, in a watch, what is pruned again as the environments it awaits settle.
+ */
 export interface EmittedSheet {
   environment: string
   /** Whether that environment's output runs in a browser, whose sheet is the one a page links. */
@@ -61,6 +64,20 @@ export interface EmittedSheet {
   fileName: string
   /** The bytes under that name. */
   source: string
+  /** The output directory it was written under, absolute; none for an output held in memory. */
+  dir?: string
+  /** The sheet as extracted, before any pruning, to prune again from. */
+  extracted?: string
+  /** Escape-free classes its emission moved into chunk sheets of their own. */
+  moved?: ReadonlySet<string>
+  sourcemap?: StaticCompilationSession['sourcemap']
+  /**
+   * Environments whose output, written, it has to be pruned again against, in a watch: those
+   * replacing their output while it was pruned, whose old output it was pruned against, and those
+   * whose guard stood aside for it. It is pruned again from source as each settles — its output
+   * written, or its replacement failed — so it is never final against an output on its way out.
+   */
+  awaiting?: Set<string>
 }
 
 /**
@@ -153,8 +170,8 @@ export interface StaticCompilationSession {
    *
    * Counted complete all the same (`completedEnvironments`), as the old output describes what is on
    * disk until the new one replaces it. But a sheet another environment writes meanwhile is pruned
-   * against that old output, and is held to be pruned again once the replacement settles: written,
-   * it may reach a class the sheet would otherwise ship without.
+   * against that old output, and is pruned again once the replacement settles (`EmittedSheet`'s
+   * `awaiting`): written, it may reach a class the sheet would otherwise ship without.
    */
   replacingEnvironments: Set<string>
   /**
@@ -366,4 +383,46 @@ export const emittedSheetFor = (session: StaticCompilationSession, original: str
     }
   }
   return found
+}
+
+/** Text a written output's references to a stylesheet live in: chunk code, and HTML. */
+const LINKING_EXTENSIONS = /\.(?:[cm]?js|html?)$/i
+
+/**
+ * What an output's write makes of the sheets its environment's output pass named (`PendingSheet`):
+ * a sheet it writes is the one a copy of the same name is named after from now, and a copy it
+ * discards that its code or HTML links is a link to move with that sheet. Both replace what the
+ * same output recorded the last time it was written; an output held in memory, `dir` unset, records
+ * its sheets and links nothing that could be moved.
+ *
+ * Code and HTML only: a manifest lists the copy whether or not anything links it, and read as a link
+ * it said a server bundle importing the sheet for its effect linked a sheet nothing serves.
+ */
+export const commitWrittenSheets = (
+  session: StaticCompilationSession,
+  written: { environment: string; dir?: string; files: readonly string[]; slot?: number },
+  bundle: Record<string, { type: string; fileName: string; code?: string; source?: unknown }>,
+) => {
+  const key = writtenOutputKey({ environment: written.environment, dir: written.dir ?? '', slot: written.slot })
+  const files = new Set(written.files)
+  const named = session.pendingSheets.get(written.environment) ?? []
+  const emitted = named
+    .filter((sheet) => !sheet.discarded && files.has(sheet.fileName))
+    .map(({ discarded: _discarded, ...sheet }) => ({ ...sheet, dir: written.dir }))
+  // Moved to the end, so the sheet an output wrote last is the last one `emittedSheetFor` meets.
+  session.emittedSheets.delete(key)
+  if (emitted.length) session.emittedSheets.set(key, emitted)
+
+  session.sheetAliases.delete(key)
+  const copies = written.dir === undefined ? [] : named.filter((sheet) => sheet.discarded)
+  if (!copies.length) return
+  const texts = Object.values(bundle).flatMap((output) => {
+    if (!LINKING_EXTENSIONS.test(output.fileName)) return []
+    const text = output.type === 'chunk' ? output.code : output.source
+    return typeof text === 'string' ? [text] : []
+  })
+  const aliases = copies
+    .filter((copy) => texts.some((text) => text.includes(copy.fileName)))
+    .map((copy) => ({ environment: written.environment, output: key, original: copy.original, current: copy.fileName }))
+  if (aliases.length) session.sheetAliases.set(key, aliases)
 }

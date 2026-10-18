@@ -872,12 +872,18 @@ describe('saying why the stylesheet was not pruned', () => {
 
   /**
    * In a watch, an environment replacing its output counts as complete, its old output being what
-   * is on disk. A sheet written meanwhile is pruned against that, and held to be pruned again once
-   * the replacement settles; the environment replacing its own sheet holds nothing for itself.
+   * is on disk. A sheet written meanwhile is pruned against that, and awaits the replacement, to be
+   * pruned again once it settles; the environment replacing its own sheet awaits nothing for itself.
+   * Neither is held as a first build's sheet is, for the run to complete.
    */
-  test('holds a written sheet while another environment replaces its output, and not for its own', async () => {
-    expect((await generate({ replacing: ['ssr'], write: true })).session.deferredSheets).toHaveLength(1)
-    expect((await generate({ replacing: ['client'], write: true })).session.deferredSheets).toEqual([])
+  test('a written sheet awaits another environment replacing its output, and not its own', async () => {
+    const awaiting = async (replacing: string) => {
+      const { session } = await generate({ replacing: [replacing], write: true })
+      expect(session.deferredSheets).toEqual([])
+      return [...(session.pendingSheets.get('client')?.[0]?.awaiting ?? [])]
+    }
+    expect(await awaiting('ssr')).toEqual(['ssr'])
+    expect(await awaiting('client')).toEqual([])
   })
 
   /** An in-memory build has no file to finalize, so the guard in `buildEnd` stays its answer. */

@@ -1,6 +1,6 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { dirname, isAbsolute, relative, resolve } from 'node:path'
 
 import { logger } from '@bamboocss/logger'
 import type { ImportMapOutput } from '@bamboocss/types'
@@ -16,10 +16,13 @@ import type { FoldResult, SkipReason, SkippedCall } from './fold'
 import { loadCssOutputModule, loadFoldModule } from './lazy-modules'
 import type { StaticStyleSetCompiler } from './style-set'
 import {
+  commitWrittenSheets,
   createStaticCompilationSession,
   emittedSheetFor,
   remainingEnvironments,
   selectorClassName,
+  type DeferredSheet,
+  type EmittedSheet,
   type StaticCompilationSession,
 } from './static-session'
 
@@ -1146,7 +1149,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
   }
 
   /**
-   * What the live outputs' sheets pruned out: every environment's, or those `counts` says.
+   * What an environment's live outputs' sheets pruned out.
    *
    * The loss history the guard reads, computed from the outputs whenever it is read and kept
    * nowhere. A set kept beside them was also the set a prune records into, and went stale where
@@ -1154,19 +1157,10 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
    * back a set still holding the sheet's provisional losses, which only that output being written
    * rebuilt — so the environment's next rebuild failed naming a class the sheet on disk holds.
    */
-  const livePrunedClasses = (counts: (environment: string) => boolean = () => true) => {
-    const pruned = new Set<string>()
-    for (const [environment, slots] of liveOutputSlotsByEnvironment) {
-      if (!counts(environment)) continue
-      for (const slot of slots.values()) {
-        for (const className of slot.prunedClasses ?? []) pruned.add(className)
-      }
-      // And, in a watch, what the sheet it is about to write in their place lost.
-      if (!staticSession.replacingEnvironments.has(environment)) continue
-      for (const className of preparedGenerations.get(environment)?.prunedLosses ?? []) pruned.add(className)
-    }
-    return pruned
-  }
+  const liveLossesOf = (environment: string) =>
+    [...(liveOutputSlotsByEnvironment.get(environment)?.values() ?? [])].flatMap((slot) => [
+      ...(slot.prunedClasses ?? []),
+    ])
 
   /**
    * Prune again, from source, the sheets the run wrote pruned against what it knew, now that every
@@ -1188,17 +1182,31 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
   ) => {
     if (!staticSession.deferredSheets.length) return
     if (remainingEnvironments(staticSession, candidate).length) return
-    // Nor while an environment is replacing its output, the one whose sheet was held among them:
-    // until it is written, or has failed, the run's reachability is not settled, and its own file
-    // may not be on disk yet.
-    if (staticSession.replacingEnvironments.size) return
+    await finalizeSheets(
+      staticSession.deferredSheets.splice(0),
+      'once every environment had compiled',
+      bundle,
+      sourcemap,
+    )
+  }
 
-    const sheets = staticSession.deferredSheets.splice(0)
+  /**
+   * Prune sheets on disk again from their source, against the run's reachability as it is now,
+   * renaming each whose bytes move and every written reference with it. What each lost replaces its
+   * environment's losses outright: a class an earlier prune removed and this one kept is no longer
+   * lost.
+   */
+  const finalizeSheets = async (
+    sheets: DeferredSheet[],
+    /** When, for the log: what made the sheet ready to be pruned again. */
+    when: string,
+    /** The bundle being generated as this runs, whose references are not on disk yet. */
+    bundle?: object,
+    sourcemap?: StaticCompilationSession['sourcemap'],
+  ) => {
     const { finalizeDeferredSheets } = await loadCssOutputModule()
 
-    // The final prune records what it removed from source, which replaces the provisional
-    // losses outright: a class the provisional prune removed and the final one kept is no longer
-    // lost. Recorded into a set of its own, so the prune of the pass this runs in keeps its own.
+    // Recorded into a set of its own, so the prune of the pass this runs in keeps its own.
     const outer = staticSession.prunedClasses
     staticSession.prunedClasses = new Set()
     let finalized: ReturnType<typeof finalizeDeferredSheets>
@@ -1238,10 +1246,54 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
       }
       logger.info(
         'vite',
-        `Pruned ${sheet.originalFileName} again once every environment had compiled, which restored ` +
-          `a rule the earlier prune removed: ${sheet.before} → ${sheet.after} bytes, now ${sheet.renamed}.`,
+        `Pruned ${sheet.originalFileName} again ${when}, which restored a rule the earlier prune removed: ` +
+          `${sheet.before} → ${sheet.after} bytes, now ${sheet.renamed}.`,
       )
     }
+  }
+
+  /**
+   * Prune again, in a watch, each written sheet an environment it awaited has settled for — its
+   * output written, or its replacement failed or given up on (`EmittedSheet`'s `awaiting`).
+   *
+   * Each settlement prunes again, rather than the last of them: an environment whose output another
+   * plugin rejected goes on replacing it, reported by no hook, and a sheet waiting for every awaited
+   * one stayed without the rule a sibling's written output needs. Pruned against a replacement still
+   * in flight, the sheet is pruned again as that one settles too.
+   */
+  const settleAwaiting = async () => {
+    if (!watching) return
+    const due: EmittedSheet[] = []
+    for (const sheet of [...staticSession.emittedSheets.values()].flat()) {
+      if (!sheet.awaiting?.size || sheet.dir === undefined || sheet.extracted === undefined) continue
+      let settled = false
+      for (const environment of sheet.awaiting) {
+        if (staticSession.replacingEnvironments.has(environment)) continue
+        sheet.awaiting.delete(environment)
+        settled = true
+      }
+      if (settled) due.push(sheet)
+    }
+    if (!due.length) return
+    await finalizeSheets(
+      due.map((sheet) => ({
+        environment: sheet.environment,
+        dir: sheet.dir!,
+        originalFileName: sheet.original,
+        fileName: sheet.fileName,
+        source: sheet.extracted!,
+        provisional: sheet.source,
+        sourcemap: sheet.sourcemap ?? staticSession.sourcemap,
+        moved: sheet.moved,
+      })),
+      'once the environments it awaited had settled',
+    )
+  }
+  /** `settleAwaiting` from a hook that cannot wait for it: a rollback, an output given up on. */
+  const settleAwaitingLater = () => {
+    void settleAwaiting().catch((error: unknown) =>
+      logger.warn('vite', `Could not prune the stylesheet again once a replacement settled: ${String(error)}`),
+    )
   }
 
   const observeEnvironmentBuildStart = (environment: string) => {
@@ -1300,6 +1352,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     staticSession.completedEnvironments.add(environment)
     staticSession.replacingEnvironments.delete(environment)
     rebuildStaticTransformContributions()
+    settleAwaitingLater()
   }
 
   const prepareEnvironmentGeneration = (environment: string, state: EnvironmentTransformState) => {
@@ -1453,30 +1506,17 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     }
     staticSession.replacingEnvironments.delete(environment)
     rebuildStaticTransformContributions()
-    settleHeldSheets()
+    // A sheet awaiting this replacement is settled with it, failed as it is: pruned again against
+    // the output it fell back to, which the earlier prune already saw, it comes to the same bytes.
+    settleAwaitingLater()
   }
 
-  /**
-   * Prune again the sheets held for a replacement that has failed, in a watch. Against the output
-   * it fell back to, which the held prune already saw, each comes to the same bytes, and is no
-   * longer held.
-   */
-  const settleHeldSheets = () => {
-    if (!watching || !staticSession.deferredSheets.length) return
-    void finalizeDeferredSheetsIfComplete().catch((error: unknown) =>
-      logger.warn('vite', `Could not prune the stylesheet again once a replacement failed: ${String(error)}`),
-    )
-  }
-
-  // Its old output stays on disk, so the environment is replacing nothing now: a sibling's guard
-  // reads past its losses no longer. And what it held for an output never written holds nothing; a
-  // sheet an earlier round wrote and held stays held, on disk as it is.
+  // Its old output stays on disk, so the environment is replacing nothing now, and what its output
+  // pass named is never written.
   staticSession.abandonOutput = (environment) => {
     staticSession.replacingEnvironments.delete(environment)
-    staticSession.deferredSheets = staticSession.deferredSheets.filter(
-      (sheet) => sheet.environment !== environment || existsSync(join(sheet.dir, sheet.fileName)),
-    )
-    settleHeldSheets()
+    staticSession.pendingSheets.delete(environment)
+    settleAwaitingLater()
   }
 
   staticSession.finalizeDeferred = ({ environment, bundle, sourcemap }) =>
@@ -2144,7 +2184,12 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
         )
       }
       if (generation && stage) generation.stagedOutputs.set(outputToken, stage)
-      if (!isWrite) publishPreparedOutput(environment, outputToken, outputSlot, false)
+      if (isWrite) return
+      // Held in memory, the output has nothing to write: what it carries counts as it finishes
+      // generating, for a copy another environment discards to take its name from.
+      const files = Object.values(bundle as Record<string, { fileName: string }>).map((output) => output.fileName)
+      commitWrittenSheets(staticSession, { environment, files, slot: outputSlot }, bundle as never)
+      publishPreparedOutput(environment, outputToken, outputSlot, false)
     }
     return Object.assign(
       {
@@ -2254,11 +2299,10 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
             )
           }
           if (!staticSession.deferredSheets.length) return
-          const unfinished = new Set([...remainingEnvironments(staticSession), ...staticSession.replacingEnvironments])
           logger.warn(
             'vite',
             `The stylesheet was pruned against an incomplete run: ` +
-              `${truncateList([...unfinished], { unit: 'environment', separator: ', ' })} never ` +
+              `${truncateList(remainingEnvironments(staticSession), { unit: 'environment', separator: ', ' })} never ` +
               `completed, so a rule reached only by an environment that compiled after the sheet was written was ` +
               `never restored. Build every declared environment, or set ` +
               `\`bamboocss({ pruneCss: false })\` to ship the full extracted stylesheet.`,
@@ -2559,24 +2603,53 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
         // a class one of those lost stays lost to them whatever this one writes — it passed, the
         // page unstyled until the browser's environment built again.
         //
-        // In a watch, sheets are held far more often — whenever a sibling is replacing its output —
-        // so the guard stands aside only for a sheet that will yet be pruned with this environment's
-        // output in view: one held, and one an environment replacing its output has not pruned yet,
-        // which is held then, as this environment is replacing its own. Once that pass has pruned it
-        // unheld, it is final: what it and the output it replaces lost are read.
-        const settled = (other: string) =>
-          !watching ||
-          (!staticSession.deferredSheets.some((sheet) => sheet.environment === other) &&
-            (!staticSession.replacingEnvironments.has(other) ||
-              preparedGenerations.get(other)?.prunedLosses !== undefined))
+        // In a watch, an environment replacing its output, or one whose written sheet is still to be
+        // pruned again (`EmittedSheet`'s `awaiting`), has a sheet that is pruned with this
+        // environment's output in view once that is written — `standAside` makes sure of it, whatever
+        // that sheet is, written or about to be — so what it lost is not this guard's to read. All but
+        // a replacement whose output pass has already pruned its sheet with no sibling replacing:
+        // that sheet is final, and what it lost is read in place of what its old output lost.
+        const standAside = (other: string, pending: boolean) => {
+          for (const sheet of [...staticSession.emittedSheets.values()].flat()) {
+            if (sheet.environment === other && sheet.dir !== undefined) (sheet.awaiting ??= new Set()).add(environment)
+          }
+          if (!pending) return
+          for (const sheet of staticSession.pendingSheets.get(other) ?? []) {
+            if (!sheet.discarded && sheet.dir !== undefined) (sheet.awaiting ??= new Set()).add(environment)
+          }
+        }
+        const lostTo = (other: string): Iterable<string> => {
+          if (!watching || other === environment) return liveLossesOf(other)
+          // Held for the run to complete, as a first build's sheet is, it is finalized then.
+          if (staticSession.deferredSheets.some((sheet) => sheet.environment === other)) return []
+          if (staticSession.replacingEnvironments.has(other)) {
+            const generation = preparedGenerations.get(other)
+            const named = (staticSession.pendingSheets.get(other) ?? []).filter((sheet) => !sheet.discarded)
+            const final =
+              generation?.prunedLosses !== undefined &&
+              named.length > 0 &&
+              named.every((sheet) => !sheet.awaiting?.size)
+            // The sheet on disk is pruned again with this output in view all the same, should the
+            // replacement never be written.
+            standAside(other, !final)
+            return final ? generation.prunedLosses! : []
+          }
+          const written = [...staticSession.emittedSheets.values()]
+            .flat()
+            .filter((sheet) => sheet.environment === other)
+          if (!written.some((sheet) => sheet.awaiting?.size)) return liveLossesOf(other)
+          standAside(other, false)
+          return []
+        }
         const consumer = consumerByEnvironment.get(environment) ?? consumerOf(this)
-        const pruned = !writesOwnSheet
-          ? livePrunedClasses(settled)
+        const environments = !writesOwnSheet
+          ? [...liveOutputSlotsByEnvironment.keys()]
           : consumer === 'client' || linksOwnSheet
-            ? new Set<string>()
-            : livePrunedClasses(
-                (other) => other !== environment && consumerByEnvironment.get(other) !== 'server' && settled(other),
+            ? []
+            : [...liveOutputSlotsByEnvironment.keys()].filter(
+                (other) => other !== environment && consumerByEnvironment.get(other) !== 'server',
               )
+        const pruned = new Set(environments.flatMap((other) => [...lostTo(other)]))
         const lost =
           !watching && staticSession.deferredSheets.length
             ? []
@@ -2945,9 +3018,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
           if (previous === -1) staticSession.writtenOutputs.push(written)
           else staticSession.writtenOutputs[previous] = written
           // The sheets it carries, and the discarded copies it links, are only now on disk.
-          if (staticSession.pendingSheets.size || staticSession.emittedSheets.size || staticSession.sheetAliases.size) {
-            ;(await loadCssOutputModule()).commitWrittenSheets(staticSession, written, bundle as never)
-          }
+          commitWrittenSheets(staticSession, written, bundle as never)
         }
 
         // Reaching any write hook proves the bundler has already replaced every file for this
@@ -2959,6 +3030,8 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
         }
 
         await finalizeDeferredSheetsIfComplete()
+        // A sheet that awaited this output, or this sheet, awaiting one already written.
+        await settleAwaiting()
         // A link one output makes to a discarded copy, whichever of the two was written last.
         if (staticSession.sheetAliases.size) (await loadCssOutputModule()).moveSheetAliases(staticSession)
       },
@@ -2975,13 +3048,14 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     closeBundle: {
       order: 'post',
       sequential: true,
-      handler() {
+      async handler() {
         // `closeBundle` belongs to the input plugin driver; Rollup and Rolldown do not invoke
         // it on configured output plugins. Vite closes a successful `write: false` result after
         // all configured outputs have generated. Running last and sequentially means an earlier
         // input close hook which rejects prevents publication, while a generate failure leaves
         // the token set incomplete and is therefore a no-op here.
         closePreparedMemoryOutputs(environmentName(this))
+        await settleAwaiting()
       },
     },
   }

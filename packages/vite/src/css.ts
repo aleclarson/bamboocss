@@ -312,13 +312,7 @@ const pruneEmittedSheets = async (
   // This environment is the candidate completing the run, not one still to compile: it has
   // finished transforming, and what it emits here is what it contributes.
   const pending = remainingEnvironments(session, environmentName)
-  // In a watch, environments replacing an output that is still live: what this sheet is pruned
-  // against counts their old output, and is pruned again once their new one is written.
-  const replacing = [...session.replacingEnvironments].filter((name) => name !== environmentName)
-  // Only an environment building cold completes the run here. One replacing its own output does
-  // once that output is written (`bamboocss:output-write-observer`): a held sheet is not finalized
-  // against a candidate whose output may yet fail, and may have dropped a class its old output names.
-  const completesRun = !pending.length && !session.replacingEnvironments.size && session.deferredSheets.length > 0
+  const completesRun = !pending.length && session.deferredSheets.length > 0
   if (!carriesSheet && !completesRun) return
 
   // This bundle now replaces the previously emitted stylesheet, so its prune result also
@@ -329,9 +323,8 @@ const pruneEmittedSheets = async (
   try {
     const outputDir = outputOptions.dir ?? (outputOptions.file ? dirname(outputOptions.file) : undefined)
     // Never a discarded copy, which is named after the sheet an environment writes instead.
-    const unsettled = [...pending, ...replacing]
-    const deferred = pruneCss && isWrite === true && outputDir !== undefined && unsettled.length > 0 && !discarded
-    const remaining = truncateList(unsettled, { unit: 'environment', separator: ', ' })
+    const deferred = pruneCss && isWrite === true && outputDir !== undefined && pending.length > 0 && !discarded
+    const remaining = truncateList(pending, { unit: 'environment', separator: ', ' })
     const sourcemap = context.environment?.config?.build?.sourcemap ?? session.sourcemap
 
     // This environment completes the run, so the sheets earlier ones deferred can be finalized
@@ -388,24 +381,34 @@ const pruneEmittedSheets = async (
     // sheet written under the same original name, or, when none has been yet, is moved to it once
     // one is (`commitWrittenSheets`, as the output is written). Pruned all the same, for the check
     // that every live class has a rule.
+    //
+    // A sheet this environment writes is recorded too, with what it was pruned from. In a watch, it
+    // was pruned against the old output of every environment replacing its output now, and is pruned
+    // again from that source as each of them settles (`awaiting`).
     if (sheets && pruneCss && (discarded || emitsAssets)) {
-      const pending = session.pendingSheets.get(environmentName) ?? []
+      const named = session.pendingSheets.get(environmentName) ?? []
+      const replacing = [...session.replacingEnvironments].filter((name) => name !== environmentName)
       for (const result of results) {
         const emitted = discarded ? emittedSheetFor(session, result.original) : undefined
         if (emitted) {
           adoptEmittedSheet(bundle as never, result.asset, emitted, session, sourcemap)
           handledNames.add(emitted.fileName)
         }
-        pending.push({
+        named.push({
           environment: environmentName,
           browser,
           discarded,
           original: result.original,
           fileName: result.asset.fileName,
           source: emitted?.source ?? result.optimized,
+          dir: isWrite === true && outputDir !== undefined ? resolve(outputDir) : undefined,
+          extracted: result.source,
+          moved: result.moved,
+          sourcemap,
+          awaiting: new Set(discarded ? [] : replacing),
         })
       }
-      session.pendingSheets.set(environmentName, pending)
+      session.pendingSheets.set(environmentName, named)
     }
 
     // Said out loud, both ways. Pruning is the difference between the sheet a project
@@ -415,21 +418,13 @@ const pruneEmittedSheets = async (
       logger.info('vite', 'Reachability pruning is off (`pruneCss: false`). The full extracted stylesheet ships.')
     }
 
-    if (!sheets || !pruneCss || !unsettled.length) return
+    if (!sheets || !pruneCss || !pending.length) return
 
     if (deferred) {
-      // In place of the same sheet this output held last, which a watch round that never settled
-      // left: its file is not the one on disk any more. Another sheet stays held, as another output
-      // writing into the same directory may have written it.
-      const dir = resolve(outputDir!)
-      const originals = new Set(results.map((result) => result.original))
-      session.deferredSheets = session.deferredSheets.filter(
-        (sheet) => sheet.environment !== environmentName || sheet.dir !== dir || !originals.has(sheet.originalFileName),
-      )
       for (const result of results) {
         session.deferredSheets.push({
           environment: environmentName,
-          dir,
+          dir: resolve(outputDir!),
           originalFileName: result.original,
           fileName: result.fileName,
           source: result.source,
