@@ -633,6 +633,54 @@ describe('a watch round with a sibling replacing its output', () => {
     expect(readdirSync(join(cwd, 'out-client/assets'))).toEqual(written)
     await finishClient()
   })
+
+  /**
+   * The other order of the run completing: a sibling's new output is written first, and the sheet
+   * held for the run is pruned again then, under a new name. The run's finalization prunes that
+   * file, not the one it was held under, which is gone.
+   */
+  test("a sheet held for the run, pruned again with a sibling's output first, is finalized as the run completes", async () => {
+    const cwd = createProject()
+    const widths = { kept: '94.1px', later: '94.2px', edgeOnly: '94.3px' }
+    const clientId = join(cwd, 'src/client.tsx')
+    const serverId = join(cwd, 'src/server.tsx')
+    const edgeId = join(cwd, 'src/edge.tsx')
+    writeFileSync(clientId, source(`'virtual:bamboo.css'`, widths.kept))
+    writeFileSync(serverId, source(false, widths.kept, widths.later))
+    writeFileSync(edgeId, source(false, widths.edgeOnly))
+    const edge: EnvironmentSpec = { name: 'edge', consumer: 'server', build: { ssr: true, emitAssets: false } }
+    const run = await createRun(cwd, true, ['client', 'ssr', 'edge'])
+    await run.round(client, [{ id: clientId, code: source(`'virtual:bamboo.css'`, widths.kept) }], { imports: 'sheet' })
+    await run.round(ssr, [{ id: serverId, code: source(false, widths.kept) }])
+
+    await run.round(ssr, [{ id: serverId, code: source(false, widths.kept, widths.later) }])
+    await run.round(edge, [{ id: edgeId, code: source(false, widths.edgeOnly) }])
+    expect(run.sheets('client')).toContain('.w_\\[94\\.2px\\]')
+    expect(run.sheets('client')).toContain('.w_\\[94\\.3px\\]')
+  })
+
+  /** A sheet written again with the same bytes after it was recorded is the same sheet, pruned again. */
+  test('a sheet rewritten with its own bytes is still pruned again', async () => {
+    const cwd = createProject()
+    const widths = { kept: '95.1px', fresh: '95.2px' }
+    const clientId = join(cwd, 'src/client.tsx')
+    const serverId = join(cwd, 'src/server.tsx')
+    writeFileSync(clientId, source(`'virtual:bamboo.css'`, widths.kept))
+    writeFileSync(serverId, source(false, widths.kept, widths.fresh))
+    const run = await createRun(cwd, true, ['client', 'ssr'])
+    const clientModules = [{ id: clientId, code: source(`'virtual:bamboo.css'`, widths.kept) }]
+    await run.round(client, clientModules, { imports: 'sheet' })
+    await run.round(ssr, [{ id: serverId, code: source(false, widths.kept) }])
+
+    const finishSsr = await run.start(ssr, [{ id: serverId, code: source(false, widths.kept, widths.fresh) }])
+    await run.round(client, clientModules, { imports: 'sheet' })
+    // What a later plugin's `writeBundle`, or any tool, may do: the same bytes, written again.
+    await new Promise((settle) => setTimeout(settle, 20))
+    const assets = join(cwd, 'out-client/assets')
+    for (const file of readdirSync(assets)) writeFileSync(join(assets, file), readFileSync(join(assets, file)))
+    await finishSsr()
+    expect(run.sheets('client')).toContain('.w_\\[95\\.2px\\]')
+  })
 })
 
 describe("a server's link to its discarded copy of the sheet", () => {

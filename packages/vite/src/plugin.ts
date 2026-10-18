@@ -1250,11 +1250,19 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
         // the sheet has, an alias's among them.
         emitted.fileName = sheet.renamed
         emitted.source = sheet.final
-        emitted.writtenAt = statSync(join(sheet.dir, sheet.renamed), { throwIfNoEntry: false })?.mtimeMs
+        emitted.writtenAt = statSync(join(emitted.dir ?? sheet.dir, sheet.renamed), { throwIfNoEntry: false })?.mtimeMs
       }
       if (!sheet.renamed) continue
       for (const alias of [...staticSession.sheetAliases.values()].flat()) {
         if (alias.current === sheet.fileName) alias.current = sheet.renamed
+      }
+      // A first build's sheet held for the run, pruned again before the run completes: what its
+      // finalization prunes from source is the file under the new name, or it finds none and leaves
+      // the sheet without what the run's last environment reaches.
+      for (const held of staticSession.deferredSheets) {
+        if (held.dir !== sheet.dir || held.fileName !== sheet.fileName) continue
+        held.fileName = sheet.renamed
+        held.provisional = sheet.final
       }
       logger.info(
         'vite',
@@ -1297,10 +1305,16 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     // One at a time, so a sheet that fails to be pruned again leaves the others, and the record of
     // its own name, as they are.
     for (const sheet of due) {
-      // A file of its name written since is a newer output's, recorded as that output's write is
-      // observed; renamed from under it, its output would link a sheet that is not there.
+      // A newer output of the environment, of the same name, may have written its file and not yet
+      // been observed: renamed from under it, that output would link a sheet that is not there, and
+      // its own commit takes the sheet over. Not one never written — rejected, or still to write —
+      // nor a file only written again since, which is this sheet still, and is pruned again.
       const written = statSync(join(sheet.dir!, sheet.fileName), { throwIfNoEntry: false })
-      if (!written || written.mtimeMs !== sheet.writtenAt) continue
+      if (!written) continue
+      const newer = (staticSession.pendingSheets.get(sheet.environment) ?? []).some(
+        (pending) => !pending.discarded && pending.dir === sheet.dir && pending.fileName === sheet.fileName,
+      )
+      if (newer && written.mtimeMs !== sheet.writtenAt) continue
 
       // Only a sheet a rule comes back to — one for a class live output names — pruned from its
       // source as the run reaches it now. One it would only lose rules from, or none it can restore
@@ -1322,6 +1336,10 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
             (output) => output.type === 'asset' && output.fileName === sheet.fileName,
           )
         : undefined
+      // Held for the run too, its asset and bundle are a framework's to copy, and move with it.
+      const held = asset
+        ? undefined
+        : staticSession.deferredSheets.find((entry) => entry.dir === sheet.dir && entry.fileName === sheet.fileName)
       try {
         await finalizeSheets(
           [
@@ -1335,6 +1353,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
               sourcemap: sheet.sourcemap ?? staticSession.sourcemap,
               moved: sheet.moved,
               ...(asset ? { asset: asset as { fileName: string; source: string }, bundle } : {}),
+              ...(held?.asset ? { asset: held.asset, bundle: held.bundle } : {}),
             },
           ],
           'once the environments it awaited had settled',

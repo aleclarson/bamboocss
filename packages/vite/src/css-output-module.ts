@@ -493,11 +493,15 @@ export const finalizeDeferredSheets = (
       sheet.asset.source = final
       sheet.asset.fileName = nextName
       if (sheet.bundle) {
-        try {
-          sheet.bundle[nextName] = sheet.asset
-          if (sheet.bundle[nextName] === sheet.asset) delete sheet.bundle[sheet.fileName]
-        } catch {
-          // A bundle that refuses new keys keeps the old one.
+        // Re-keyed only where the bundler allows it, as `optimizeStaticCssAssets` does: Rolldown logs
+        // the assignment as a plugin's mistake, and ignores it.
+        if (!session.refusesBundleKeys) {
+          try {
+            sheet.bundle[nextName] = sheet.asset
+            if (sheet.bundle[nextName] === sheet.asset) delete sheet.bundle[sheet.fileName]
+          } catch {
+            // A bundle that refuses new keys keeps the old one.
+          }
         }
         replaceAssetReferences(sheet.bundle as Rollup.OutputBundle, sheet.fileName, nextName, sheet.sourcemap)
       }

@@ -415,9 +415,14 @@ export const commitWrittenSheets = (
   const key = writtenOutputKey({ environment: written.environment, dir: written.dir ?? '', slot: written.slot })
   const files = new Set(written.files)
   const named = session.pendingSheets.get(written.environment) ?? []
-  const emitted = named
-    .filter((sheet) => !sheet.discarded && files.has(sheet.fileName))
-    .map(({ discarded: _discarded, ...sheet }) => ({ ...sheet, dir: written.dir, lost }))
+  const committed = named.filter((sheet) => !sheet.discarded && files.has(sheet.fileName))
+  const emitted = committed.map(({ discarded: _discarded, ...sheet }) => ({ ...sheet, dir: written.dir, lost }))
+  // No longer pending: a sheet of the environment pending under the same name is a newer output's.
+  if (committed.length)
+    session.pendingSheets.set(
+      written.environment,
+      named.filter((sheet) => !committed.includes(sheet)),
+    )
   // Moved to the end, so the sheet an output wrote last is the last one `emittedSheetFor` meets.
   session.emittedSheets.delete(key)
   if (emitted.length) session.emittedSheets.set(key, emitted)
