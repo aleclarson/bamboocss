@@ -55,6 +55,8 @@ export interface EmittedSheet {
   environment: string
   /** Whether that environment's output runs in a browser, whose sheet is the one a page links. */
   browser: boolean
+  /** The name Vite gave it, which a copy of the same sheet another environment discards carries too. */
+  original: string
   /** The name it took, relative to its output directory. */
   fileName: string
   /** The bytes under that name. */
@@ -62,15 +64,27 @@ export interface EmittedSheet {
 }
 
 /**
- * A copy of the stylesheet an environment discarded and linked before any environment writing the
- * sheet had named it — a server built before the client — kept under a name of its own until one
- * does, when what its written output says is moved to that name.
+ * A sheet an environment's output pass named, until that output is written: one it writes is an
+ * `EmittedSheet` then, and a copy it discards that the written output links is a `SheetAlias`.
+ * Neither is anything before: an output another plugin rejects writes nothing, and names nothing.
+ */
+export interface PendingSheet extends EmittedSheet {
+  /** Whether the environment discards it, rather than writing it. */
+  discarded: boolean
+}
+
+/**
+ * Where an output an environment wrote links a copy of the stylesheet that environment discards,
+ * and by which name, so the link moves with the sheet written under the same original name: to it
+ * once one is written, after it as it is renamed.
  */
 export interface SheetAlias {
   environment: string
+  /** The written output linking it. @see `writtenOutputKey` */
+  output: string
   /** The name Vite gave the sheet, which the one written carries too. */
   original: string
-  /** The name the environment's written output links now. */
+  /** The name the output's written files link now. */
   current: string
 }
 
@@ -84,6 +98,10 @@ export interface WrittenOutput {
   /** Which of the environment's configured outputs wrote them, where that is known. */
   slot?: number
 }
+
+/** One key per output an environment writes: its directory, and its slot where that is known. */
+export const writtenOutputKey = (output: { environment: string; dir: string; slot?: number }) =>
+  `${output.environment}\0${output.dir}\0${output.slot ?? ''}`
 
 /** Shared state between the build-time fold and the virtual CSS module. */
 export interface StaticCompilationSession {
@@ -161,16 +179,19 @@ export interface StaticCompilationSession {
   /** Every output this run has written, in the order the bundler wrote them. */
   writtenOutputs: WrittenOutput[]
   /**
-   * The sheet each environment writing its assets wrote, by the name Vite gave it.
+   * The sheets each written output carries, by `writtenOutputKey`: replaced as the output is
+   * written again, and recorded only once it is.
    *
-   * A server environment's copy is one Vite discards, and its markup links it by name — through
-   * `virtual:bamboo.css?url` — so the copy takes the name and bytes of the sheet written under the
-   * same original name. Named after its own bytes, it linked a sheet nothing wrote wherever the two
-   * prunes differed. A browser environment's sheet is the one kept when two write one.
+   * A server environment's copy of the sheet is one Vite discards, and its markup links it by name
+   * — through `virtual:bamboo.css?url` — so the copy takes the name and bytes of the sheet written
+   * under the same original name (`emittedSheetFor`). Named after its own bytes, it linked a sheet
+   * nothing wrote wherever the two prunes differed.
    */
-  emittedSheets: Map<string, EmittedSheet>
-  /** Copies discarded and linked before a sheet of their name was written. @see `SheetAlias` */
-  sheetAliases: SheetAlias[]
+  emittedSheets: Map<string, EmittedSheet[]>
+  /** What each environment's output pass named this generation, until its output is written. */
+  pendingSheets: Map<string, PendingSheet[]>
+  /** The copies each written output links, by `writtenOutputKey`. @see `SheetAlias` */
+  sheetAliases: Map<string, SheetAlias[]>
   /** Sheet assets already pruned in this generation, so the late pass leaves them alone. */
   prunedAssets: WeakSet<object>
   /**
@@ -228,6 +249,12 @@ export interface StaticCompilationSession {
     bundle: object
     sourcemap?: StaticCompilationSession['sourcemap']
   }) => Promise<void>
+  /**
+   * Give up on an output one of Bamboo's own output hooks failed, which nothing else reports: a
+   * failure in `generateBundle` reaches no hook, and the environment would go on replacing an
+   * output it never writes. Installed by the compiler.
+   */
+  abandonOutput?: (environment: string) => void
   markClassUsed(className: string): void
 }
 
@@ -250,7 +277,8 @@ export const createStaticCompilationSession = (): StaticCompilationSession => {
     deferredSheets: [],
     writtenOutputs: [],
     emittedSheets: new Map(),
-    sheetAliases: [],
+    pendingSheets: new Map(),
+    sheetAliases: new Map(),
     prunedAssets: new WeakSet(),
     prunedSheetNames: new WeakMap(),
     splitCss: true,
@@ -324,4 +352,18 @@ export const remainingEnvironments = (
   const participating = new Set(session.expectedEnvironments ?? [])
   for (const environment of session.participatingEnvironments) participating.add(environment)
   return [...participating].filter((name) => name !== completingEnvironment && !session.completedEnvironments.has(name))
+}
+
+/**
+ * The sheet written under `original` that a discarded copy is named after: the last a browser
+ * environment wrote, whose sheet is the one a page links, or else the last any environment wrote.
+ */
+export const emittedSheetFor = (session: StaticCompilationSession, original: string): EmittedSheet | undefined => {
+  let found: EmittedSheet | undefined
+  for (const sheets of session.emittedSheets.values()) {
+    for (const sheet of sheets) {
+      if (sheet.original === original && (!found || sheet.browser || !found.browser)) found = sheet
+    }
+  }
+  return found
 }

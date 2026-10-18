@@ -10,7 +10,14 @@ import selectorParser from 'postcss-selector-parser'
 import type { Rollup } from 'vite'
 import { bare } from './class-name'
 import { pruneStaticCss } from './prune-static-css'
-import type { DeferredSheet, EmittedSheet, StaticCompilationSession, WrittenOutput } from './static-session'
+import {
+  emittedSheetFor,
+  writtenOutputKey,
+  type DeferredSheet,
+  type EmittedSheet,
+  type StaticCompilationSession,
+  type WrittenOutput,
+} from './static-session'
 
 const INLINE_SOURCE_MAP = /\n?\/\/# sourceMappingURL=data:application\/json[^\n]*$/
 
@@ -389,20 +396,57 @@ export const adoptEmittedSheet = (
 }
 
 /**
- * Move what each alias's environment wrote onto the name a sheet of its original name was
- * written under, once one has been. @see `SheetAlias`
- *
- * Only once that environment's output is on disk, which is what there is to move: an alias read
- * before it was written stays as it is until then.
+ * What an output's write makes of the sheets its environment's output pass named (`PendingSheet`):
+ * a sheet it writes is the one a copy of the same name is named after from now, and a copy it
+ * discards that its written text links is a link to move with that sheet. Both replace what the
+ * same output recorded on its last write.
+ */
+export const commitWrittenSheets = (
+  session: StaticCompilationSession,
+  written: WrittenOutput,
+  bundle: Rollup.OutputBundle,
+) => {
+  const key = writtenOutputKey(written)
+  const files = new Set(written.files)
+  const pending = session.pendingSheets.get(written.environment) ?? []
+  const emitted = pending
+    .filter((sheet) => !sheet.discarded && files.has(sheet.fileName))
+    .map(({ discarded: _discarded, ...sheet }) => sheet)
+  // Moved to the end, so the sheet an output wrote last is the one found first from the end.
+  session.emittedSheets.delete(key)
+  if (emitted.length) session.emittedSheets.set(key, emitted)
+
+  const copies = pending.filter((sheet) => sheet.discarded)
+  const texts = copies.length
+    ? Object.values(bundle).flatMap((output) =>
+        output.type === 'chunk'
+          ? [output.code]
+          : typeof output.source === 'string' && REFERENCING_EXTENSIONS.test(output.fileName)
+            ? [output.source]
+            : [],
+      )
+    : []
+  const aliases = copies
+    .filter((copy) => texts.some((text) => text.includes(copy.fileName)))
+    .map((copy) => ({ environment: written.environment, output: key, original: copy.original, current: copy.fileName }))
+  session.sheetAliases.delete(key)
+  if (aliases.length) session.sheetAliases.set(key, aliases)
+}
+
+/**
+ * Move every link a written output makes to a discarded copy onto the name of the sheet written
+ * under the same original name, where the two differ. @see `SheetAlias`
  */
 export const moveSheetAliases = (session: StaticCompilationSession) => {
-  for (const alias of session.sheetAliases) {
-    const emitted = session.emittedSheets.get(alias.original)
-    if (!emitted || emitted.fileName === alias.current) continue
-    const outputs = session.writtenOutputs.filter((output) => output.environment === alias.environment)
-    if (!outputs.length) continue
-    rewriteWrittenReferences(outputs, alias.current, emitted.fileName)
-    alias.current = emitted.fileName
+  for (const [key, aliases] of session.sheetAliases) {
+    const output = session.writtenOutputs.find((candidate) => writtenOutputKey(candidate) === key)
+    if (!output) continue
+    for (const alias of aliases) {
+      const emitted = emittedSheetFor(session, alias.original)
+      if (!emitted || emitted.fileName === alias.current) continue
+      rewriteWrittenReferences([output], alias.current, emitted.fileName)
+      alias.current = emitted.fileName
+    }
   }
 }
 

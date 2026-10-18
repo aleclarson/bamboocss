@@ -9,7 +9,7 @@ import { createCompilationHost, type CompilationBuilder, type CompilationHost } 
 import type { CssSourceMap } from './css-output-module'
 import { extractedFileKey } from './fs-path'
 import { createRetryableLazy, loadConfigModule, loadCssOutputModule } from './lazy-modules'
-import { remainingEnvironments, type StaticCompilationSession } from './static-session'
+import { emittedSheetFor, remainingEnvironments, type StaticCompilationSession } from './static-session'
 
 /**
  * What a project imports to get the stylesheet.
@@ -286,8 +286,7 @@ const pruneEmittedSheets = async (
   // Load the complete parser/remapping closure before opening the output projection. A
   // rejected chunk load therefore publishes no partial reachability or prune state, and the
   // process-wide retryable loader lets a later rebuild recover.
-  const { adoptEmittedSheet, containsGeneratedCssAsset, moveSheetAliases, optimizeStaticCssAssets } =
-    await loadCssOutputModule()
+  const { adoptEmittedSheet, containsGeneratedCssAsset, optimizeStaticCssAssets } = await loadCssOutputModule()
   let handledNames = session.prunedSheetNames.get(outputOptions)
   if (!handledNames) {
     handledNames = new Set()
@@ -387,35 +386,26 @@ const pruneEmittedSheets = async (
 
     // A discarded copy is what a server's markup links, by its name, so it takes the name of the
     // sheet written under the same original name, or, when none has been yet, is moved to it once
-    // one is. Pruned all the same, for the check that every live class has a rule.
-    if (sheets && pruneCss) {
+    // one is (`commitWrittenSheets`, as the output is written). Pruned all the same, for the check
+    // that every live class has a rule.
+    if (sheets && pruneCss && (discarded || emitsAssets)) {
+      const pending = session.pendingSheets.get(environmentName) ?? []
       for (const result of results) {
-        if (discarded) {
-          const emitted = session.emittedSheets.get(result.original)
-          if (emitted) {
-            adoptEmittedSheet(bundle as never, result.asset, emitted, session, sourcemap)
-            handledNames.add(emitted.fileName)
-          } else if (isWrite) {
-            // This output replaces what the environment wrote last, and with it that one's alias.
-            session.sheetAliases = session.sheetAliases.filter(
-              (alias) => alias.environment !== environmentName || alias.original !== result.original,
-            )
-            session.sheetAliases.push({
-              environment: environmentName,
-              original: result.original,
-              current: result.fileName,
-            })
-          }
-        } else if (emitsAssets && (browser || !session.emittedSheets.get(result.original)?.browser)) {
-          session.emittedSheets.set(result.original, {
-            environment: environmentName,
-            browser,
-            fileName: result.fileName,
-            source: result.optimized,
-          })
+        const emitted = discarded ? emittedSheetFor(session, result.original) : undefined
+        if (emitted) {
+          adoptEmittedSheet(bundle as never, result.asset, emitted, session, sourcemap)
+          handledNames.add(emitted.fileName)
         }
+        pending.push({
+          environment: environmentName,
+          browser,
+          discarded,
+          original: result.original,
+          fileName: result.asset.fileName,
+          source: emitted?.source ?? result.optimized,
+        })
       }
-      if (!discarded) moveSheetAliases(session)
+      session.pendingSheets.set(environmentName, pending)
     }
 
     // Said out loud, both ways. Pruning is the difference between the sheet a project
@@ -428,11 +418,13 @@ const pruneEmittedSheets = async (
     if (!sheets || !pruneCss || !unsettled.length) return
 
     if (deferred) {
-      // In place of what this output held last, which a watch round that never settled left: its
-      // file is not the one on disk any more.
+      // In place of the same sheet this output held last, which a watch round that never settled
+      // left: its file is not the one on disk any more. Another sheet stays held, as another output
+      // writing into the same directory may have written it.
       const dir = resolve(outputDir!)
+      const originals = new Set(results.map((result) => result.original))
       session.deferredSheets = session.deferredSheets.filter(
-        (sheet) => sheet.environment !== environmentName || sheet.dir !== dir,
+        (sheet) => sheet.environment !== environmentName || sheet.dir !== dir || !originals.has(sheet.originalFileName),
       )
       for (const result of results) {
         session.deferredSheets.push({
@@ -487,16 +479,22 @@ export const bamboocssCssEarly = (options: { session: StaticCompilationSession; 
   generateBundle: {
     order: 'pre',
     async handler(outputOptions, bundle, isWrite) {
-      await pruneEmittedSheets(
-        this as OutputContext,
-        options.session,
-        outputOptions,
-        bundle,
-        isWrite,
-        options.pruneCss ?? true,
-        true,
-        true,
-      )
+      try {
+        await pruneEmittedSheets(
+          this as OutputContext,
+          options.session,
+          outputOptions,
+          bundle,
+          isWrite,
+          options.pruneCss ?? true,
+          true,
+          true,
+        )
+      } catch (error) {
+        // Nothing else says this output failed: a failure in `generateBundle` reaches no hook.
+        options.session.abandonOutput?.((this as OutputContext).environment?.name ?? 'default')
+        throw error
+      }
     },
   },
 })
@@ -1114,68 +1112,74 @@ export const bamboocssCss = (options: BambooCssPluginOptions): Plugin => {
       order: 'post',
       async handler(outputOptions, bundle, isWrite) {
         const context = this as OutputContext
-        await pruneEmittedSheets(context, session, outputOptions, bundle, isWrite, pruneCss, false, false)
-
-        const { containsGeneratedCssAsset } = await loadCssOutputModule()
-        const environment = context.environment
-        const environmentName = environment?.name ?? 'default'
-        const replacesGeneratedStylesheet = containsGeneratedCssAsset(bundle)
-
-        // Opened only to read this environment's own view; nothing here prunes, so the stage
-        // an earlier projection recorded is left standing.
-        const outputProjection = session.beginOutputProjection(environmentName, outputOptions, bundle, false)
         try {
-          // A stylesheet that vanishes between here and disk is the worst shape a failure takes:
-          // the build is green, every class in the markup is real, and nothing is styled. The
-          // compiler knows it produced classes, so it can also insist something carries them —
-          // in the same spirit as the unimported-`virtual:bamboo.css` check, which catches the
-          // other way to end up with classes and no rules.
-          // Only the environment that served the stylesheet answers for it.
-          if (!outputProjection.cssLoaded) return
-          if (!session.transformedFiles.size) return
+          await pruneEmittedSheets(context, session, outputOptions, bundle, isWrite, pruneCss, false, false)
 
-          /**
-           * An SSR bundle emits no CSS assets, and is not supposed to.
-           *
-           * `build.ssrEmitAssets` is off by default, so Vite discards them: the client build is
-           * what carries the stylesheet, and a server bundle that imports `virtual:bamboo.css`
-           * from shared code — a root component, a layout — still asks this plugin to load it.
-           * Which means the environment *served* the sheet and then emitted nothing, and the
-           * check below read that as the failure it exists to catch.
-           *
-           * It fails a build that is entirely correct. Qwik's `vite build --ssr` is the shape
-           * that showed it: 7/7 calls compiled, the client bundle carrying the stylesheet, and
-           * the server bundle refusing to finish. React Router does not hit it only because its
-           * plugin turns `ssrEmitAssets` on.
-           *
-           * Read per environment where that exists, falling back to the run's own config, so
-           * Vite 5's single-config builds are answered by the same question.
-           */
-          const buildOptions = environment?.config?.build ?? ssrBuildOptions
-          if (buildOptions?.ssr && !buildOptions.ssrEmitAssets) return
+          const { containsGeneratedCssAsset } = await loadCssOutputModule()
+          const environment = context.environment
+          const environmentName = environment?.name ?? 'default'
+          const replacesGeneratedStylesheet = containsGeneratedCssAsset(bundle)
 
-          /**
-           * A server bundle that kept the stylesheet *module* is not missing it.
-           *
-           * Astro's prerender build turns `ssrEmitAssets` on and still emits no CSS asset: its
-           * own CSS plugin reads the stylesheet off the chunk that bundled it and inlines it into
-           * each page's HTML. The chunk still lists the module, which is the one thing a plugin
-           * that dropped the sheet could not leave behind. A client bundle gets no such pass —
-           * a browser is only styled by an asset.
-           */
-          if (buildOptions?.ssr && bundleHoldsStylesheetModule(bundle)) return
+          // Opened only to read this environment's own view; nothing here prunes, so the stage
+          // an earlier projection recorded is left standing.
+          const outputProjection = session.beginOutputProjection(environmentName, outputOptions, bundle, false)
+          try {
+            // A stylesheet that vanishes between here and disk is the worst shape a failure takes:
+            // the build is green, every class in the markup is real, and nothing is styled. The
+            // compiler knows it produced classes, so it can also insist something carries them —
+            // in the same spirit as the unimported-`virtual:bamboo.css` check, which catches the
+            // other way to end up with classes and no rules.
+            // Only the environment that served the stylesheet answers for it.
+            if (!outputProjection.cssLoaded) return
+            if (!session.transformedFiles.size) return
 
-          if (!replacesGeneratedStylesheet) {
-            throw new Error(
-              `bamboocss: ${session.transformedFiles.size} module(s) were compiled to Bamboo class values, but no ` +
-                `emitted asset carries the generated stylesheet. The build would ship unstyled.\n\n` +
-                `This happens when another plugin, or the bundler itself, drops or replaces the CSS asset after it is ` +
-                `emitted. If you are on Rolldown, report this — the rename that used to cause it is already disabled ` +
-                `there. Otherwise look for a plugin running in \`generateBundle\` that rewrites CSS assets.`,
-            )
+            /**
+             * An SSR bundle emits no CSS assets, and is not supposed to.
+             *
+             * `build.ssrEmitAssets` is off by default, so Vite discards them: the client build is
+             * what carries the stylesheet, and a server bundle that imports `virtual:bamboo.css`
+             * from shared code — a root component, a layout — still asks this plugin to load it.
+             * Which means the environment *served* the sheet and then emitted nothing, and the
+             * check below read that as the failure it exists to catch.
+             *
+             * It fails a build that is entirely correct. Qwik's `vite build --ssr` is the shape
+             * that showed it: 7/7 calls compiled, the client bundle carrying the stylesheet, and
+             * the server bundle refusing to finish. React Router does not hit it only because its
+             * plugin turns `ssrEmitAssets` on.
+             *
+             * Read per environment where that exists, falling back to the run's own config, so
+             * Vite 5's single-config builds are answered by the same question.
+             */
+            const buildOptions = environment?.config?.build ?? ssrBuildOptions
+            if (buildOptions?.ssr && !buildOptions.ssrEmitAssets) return
+
+            /**
+             * A server bundle that kept the stylesheet *module* is not missing it.
+             *
+             * Astro's prerender build turns `ssrEmitAssets` on and still emits no CSS asset: its
+             * own CSS plugin reads the stylesheet off the chunk that bundled it and inlines it into
+             * each page's HTML. The chunk still lists the module, which is the one thing a plugin
+             * that dropped the sheet could not leave behind. A client bundle gets no such pass —
+             * a browser is only styled by an asset.
+             */
+            if (buildOptions?.ssr && bundleHoldsStylesheetModule(bundle)) return
+
+            if (!replacesGeneratedStylesheet) {
+              throw new Error(
+                `bamboocss: ${session.transformedFiles.size} module(s) were compiled to Bamboo class values, but no ` +
+                  `emitted asset carries the generated stylesheet. The build would ship unstyled.\n\n` +
+                  `This happens when another plugin, or the bundler itself, drops or replaces the CSS asset after it is ` +
+                  `emitted. If you are on Rolldown, report this — the rename that used to cause it is already disabled ` +
+                  `there. Otherwise look for a plugin running in \`generateBundle\` that rewrites CSS assets.`,
+              )
+            }
+          } finally {
+            outputProjection.restore()
           }
-        } finally {
-          outputProjection.restore()
+        } catch (error) {
+          // Nothing else says this output failed: a failure in `generateBundle` reaches no hook.
+          session.abandonOutput?.(context.environment?.name ?? 'default')
+          throw error
         }
       },
     },

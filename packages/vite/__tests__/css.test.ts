@@ -1,6 +1,6 @@
 import { basename, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { Builder } from '@bamboocss/node'
 import * as bambooConfig from '@bamboocss/config'
@@ -950,7 +950,6 @@ describe("a server's discarded copy of the sheet", () => {
     `@layer utilities{.h_\\[345\\.6789px\\]{height:345.6789px}.w_\\[3\\.1px\\]{width:3.1px}}` +
     `:root{--made-with-bamboo:🌱}`
   const server = { name: 'ssr', config: { consumer: 'server', build: { ssr: true, emitAssets: false } } }
-  const browser = { name: 'client', config: { consumer: 'client', build: { emitAssets: true } } }
   const setUp = () => {
     const session = createStaticCompilationSession()
     session.prunableClasses.add(esc('h_[345.6789px]'))
@@ -986,12 +985,9 @@ describe("a server's discarded copy of the sheet", () => {
   test('takes the name and bytes of the sheet written under its original name, unsplit and not deferred', async () => {
     const { session, generate } = setUp()
     session.expectedEnvironments = new Set(['ssr', 'client', 'rsc'])
-    session.emittedSheets.set('a.css', {
-      environment: 'client',
-      browser: true,
-      fileName: 'a.b-written.css',
-      source: '/* written */',
-    })
+    session.emittedSheets.set('client', [
+      { environment: 'client', browser: true, original: 'a.css', fileName: 'a.b-written.css', source: '/* written */' },
+    ])
     const emitFile = vi.fn(() => 'reference')
     const bundle = bundleOf()
 
@@ -1008,42 +1004,11 @@ describe("a server's discarded copy of the sheet", () => {
     expect(bundle['entry.js'].code).toContain('/a.b-written.css')
     expect(emitFile, 'a discarded copy is not split').not.toHaveBeenCalled()
     expect(session.deferredSheets).toEqual([])
-    expect(session.sheetAliases).toEqual([])
-  })
-
-  test('linked before any sheet of its name was written, is moved to the one written after it', async () => {
-    const { session, generate } = setUp()
-    const ssrOut = mkdtempSync(join(tmpdir(), 'bamboo-discarded-ssr-'))
-    onTestFinished(() => rmSync(ssrOut, { recursive: true, force: true }))
-
-    const serverBundle = bundleOf()
-    await generate.call(
-      { environment: server } as never,
-      { dir: ssrOut } as never,
-      serverBundle as never,
-      true as never,
-    )
-    const provisional = Object.values(serverBundle).find((output) => output.type === 'asset')!.fileName
-    expect(provisional).toMatch(/^a\.b-[A-Za-z0-9]+\.css$/)
-    expect(session.sheetAliases).toEqual([{ environment: 'ssr', original: 'a.css', current: provisional }])
-    // What the server's write leaves on disk, as the write observer records it.
-    writeFileSync(join(ssrOut, 'entry.js'), serverBundle['entry.js'].code)
-    session.writtenOutputs.push({ environment: 'ssr', dir: ssrOut, files: ['entry.js'] })
-
-    // The client keeps the atom the server never used, so its sheet is named after other bytes.
-    session.markClassUsed('w_[3.1px]')
-    const clientBundle = bundleOf()
-    await generate.call(
-      { environment: browser } as never,
-      { dir: join(tmpdir(), 'bamboo-discarded-client-out') } as never,
-      clientBundle as never,
-      true as never,
-    )
-    const written = Object.values(clientBundle).find((output) => output.type === 'asset')!.fileName
-
-    expect(written).not.toBe(provisional)
-    expect(readFileSync(join(ssrOut, 'entry.js'), 'utf8')).toBe(`export const href = "/${written}"\n`)
-    expect(session.sheetAliases).toEqual([{ environment: 'ssr', original: 'a.css', current: written }])
+    // Named, and nothing more until the output is written: a rejected output names nothing.
+    expect(session.pendingSheets.get('ssr')).toMatchObject([
+      { discarded: true, original: 'a.css', fileName: 'a.b-written.css' },
+    ])
+    expect(session.sheetAliases.size).toBe(0)
   })
 })
 
