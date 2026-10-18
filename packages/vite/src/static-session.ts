@@ -72,6 +72,11 @@ export interface EmittedSheet {
   moved?: ReadonlySet<string>
   /** Escape-free classes the prune it was written with removed, where its output recorded them. */
   lost?: ReadonlySet<string>
+  /**
+   * When its file was last written, by Bamboo or the bundler: a file of the same name written since
+   * is a newer output's, about to be recorded, and not this one to prune again.
+   */
+  writtenAt?: number
   sourcemap?: StaticCompilationSession['sourcemap']
   /**
    * Environments whose output, written, it has to be pruned again against, in a watch: those

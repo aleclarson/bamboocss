@@ -394,6 +394,8 @@ const pruneEmittedSheets = async (
           adoptEmittedSheet(bundle as never, result.asset, emitted, session, sourcemap)
           handledNames.add(emitted.fileName)
         }
+        // Held in memory, it has no file to prune again, and awaits nothing.
+        const dir = isWrite === true && outputDir !== undefined ? resolve(outputDir) : undefined
         named.push({
           environment: environmentName,
           browser,
@@ -401,11 +403,11 @@ const pruneEmittedSheets = async (
           original: result.original,
           fileName: result.asset.fileName,
           source: emitted?.source ?? result.optimized,
-          dir: isWrite === true && outputDir !== undefined ? resolve(outputDir) : undefined,
+          dir,
           extracted: result.source,
           moved: result.moved,
           sourcemap,
-          awaiting: new Set(discarded ? [] : replacing),
+          awaiting: new Set(discarded || dir === undefined ? [] : replacing),
         })
       }
       session.pendingSheets.set(environmentName, named)

@@ -1,6 +1,6 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
-import { existsSync, readFileSync } from 'node:fs'
-import { dirname, isAbsolute, relative, resolve } from 'node:path'
+import { existsSync, readFileSync, statSync } from 'node:fs'
+import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 
 import { logger } from '@bamboocss/logger'
 import type { ImportMapOutput } from '@bamboocss/types'
@@ -21,6 +21,7 @@ import {
   emittedSheetFor,
   remainingEnvironments,
   selectorClassName,
+  writtenOutputKey,
   type DeferredSheet,
   type EmittedSheet,
   type StaticCompilationSession,
@@ -1239,14 +1240,19 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     }
 
     for (const sheet of finalized) {
-      if (!sheet.renamed) continue
-      // What a discarded copy is named after moves with the sheet, as every written reference to
-      // the sheet has, an alias's among them.
+      // The sheet as it is on disk now: what it lost, and when it was written, for the next time it
+      // is pruned again.
       for (const emitted of [...staticSession.emittedSheets.values()].flat()) {
         if (emitted.original !== sheet.originalFileName || emitted.fileName !== sheet.fileName) continue
+        emitted.lost = lost
+        if (!sheet.renamed) continue
+        // What a discarded copy is named after moves with the sheet, as every written reference to
+        // the sheet has, an alias's among them.
         emitted.fileName = sheet.renamed
         emitted.source = sheet.final
+        emitted.writtenAt = statSync(join(sheet.dir, sheet.renamed), { throwIfNoEntry: false })?.mtimeMs
       }
+      if (!sheet.renamed) continue
       for (const alias of [...staticSession.sheetAliases.values()].flat()) {
         if (alias.current === sheet.fileName) alias.current = sheet.renamed
       }
@@ -1267,7 +1273,10 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
    * one stayed without the rule a sibling's written output needs. Pruned against a replacement still
    * in flight, the sheet is pruned again as that one settles too.
    */
-  const settleAwaiting = async () => {
+  const settleAwaiting = async (
+    /** The bundle whose `writeBundle` this runs in, so a sheet of its own renamed now is renamed in it too. */
+    bundle?: Record<string, unknown>,
+  ) => {
     if (!watching) return
     const due: EmittedSheet[] = []
     for (const sheet of [...staticSession.emittedSheets.values()].flat()) {
@@ -1282,12 +1291,21 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     }
     if (!due.length) return
     const { pruneStaticCss } = await loadCssOutputModule()
+    // What live output uses: a rule only counts as coming back for a class something still names.
+    const used = new Set([...staticSession.usedClasses].map(bare))
 
-    // Only a sheet a rule comes back to, pruned from its source as the run reaches it now. One it
-    // would only lose rules from, or none it can restore — a class added to what is extracted since
-    // its source was, which its own environment's next build writes — stays as it is on disk.
-    const restoring: Array<{ sheet: EmittedSheet; lost: Set<string> }> = []
+    // One at a time, so a sheet that fails to be pruned again leaves the others, and the record of
+    // its own name, as they are.
     for (const sheet of due) {
+      // A file of its name written since is a newer output's, recorded as that output's write is
+      // observed; renamed from under it, its output would link a sheet that is not there.
+      const written = statSync(join(sheet.dir!, sheet.fileName), { throwIfNoEntry: false })
+      if (!written || written.mtimeMs !== sheet.writtenAt) continue
+
+      // Only a sheet a rule comes back to — one for a class live output names — pruned from its
+      // source as the run reaches it now. One it would only lose rules from, or none it can restore
+      // — a class added to what is extracted since its source was, which its own environment's next
+      // build writes — stays as it is, as does one whose only change is a rule nothing names.
       const outer = staticSession.prunedClasses
       staticSession.prunedClasses = new Set()
       let lost: Set<string>
@@ -1297,26 +1315,41 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
         lost = staticSession.prunedClasses
         staticSession.prunedClasses = outer
       }
-      if (!sheet.lost || [...sheet.lost].some((className) => !lost.has(className))) restoring.push({ sheet, lost })
+      if (sheet.lost && ![...sheet.lost].some((className) => !lost.has(className) && used.has(className))) continue
+
+      const asset = bundle
+        ? Object.values(bundle as Record<string, { type?: string; fileName?: string; source?: unknown }>).find(
+            (output) => output.type === 'asset' && output.fileName === sheet.fileName,
+          )
+        : undefined
+      try {
+        await finalizeSheets(
+          [
+            {
+              environment: sheet.environment,
+              dir: sheet.dir!,
+              originalFileName: sheet.original,
+              fileName: sheet.fileName,
+              source: sheet.extracted!,
+              provisional: sheet.source,
+              sourcemap: sheet.sourcemap ?? staticSession.sourcemap,
+              moved: sheet.moved,
+              ...(asset ? { asset: asset as { fileName: string; source: string }, bundle } : {}),
+            },
+          ],
+          'once the environments it awaited had settled',
+          asset ? bundle : undefined,
+          sheet.sourcemap ?? staticSession.sourcemap,
+          false,
+        )
+        sheet.lost = lost
+      } catch (error) {
+        logger.warn(
+          'vite',
+          `Could not prune ${sheet.fileName} again once the environments it awaited had settled: ${String(error)}`,
+        )
+      }
     }
-    if (!restoring.length) return
-    await finalizeSheets(
-      restoring.map(({ sheet }) => ({
-        environment: sheet.environment,
-        dir: sheet.dir!,
-        originalFileName: sheet.original,
-        fileName: sheet.fileName,
-        source: sheet.extracted!,
-        provisional: sheet.source,
-        sourcemap: sheet.sourcemap ?? staticSession.sourcemap,
-        moved: sheet.moved,
-      })),
-      'once the environments it awaited had settled',
-      undefined,
-      undefined,
-      false,
-    )
-    for (const { sheet, lost } of restoring) sheet.lost = lost
   }
   /** `settleAwaiting` from a hook that cannot wait for it: a rollback, an output given up on. */
   const settleAwaitingLater = () => {
@@ -2654,8 +2687,13 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
         }
         const lostTo = (other: string): Iterable<string> => {
           if (!watching || other === environment) return liveLossesOf(other)
-          // Held for the run to complete, as a first build's sheet is, it is finalized then.
-          if (staticSession.deferredSheets.some((sheet) => sheet.environment === other)) return []
+          // Held for the run to complete, as a first build's sheet is, it is finalized then — against
+          // this environment's old output if the run completes before this one is written, so it is
+          // pruned again once it is.
+          if (staticSession.deferredSheets.some((sheet) => sheet.environment === other)) {
+            if (staticSession.replacingEnvironments.has(environment)) standAside(other, false)
+            return []
+          }
           if (staticSession.replacingEnvironments.has(other)) {
             const generation = preparedGenerations.get(other)
             const named = (staticSession.pendingSheets.get(other) ?? []).filter((sheet) => !sheet.discarded)
@@ -2670,7 +2708,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
           }
           const written = [...staticSession.emittedSheets.values()]
             .flat()
-            .filter((sheet) => sheet.environment === other)
+            .filter((sheet) => sheet.environment === other && sheet.dir !== undefined)
           if (!written.some((sheet) => sheet.awaiting?.size)) return liveLossesOf(other)
           standAside(other, false)
           return []
@@ -3054,6 +3092,9 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
           // The sheets it carries, and the discarded copies it links, are only now on disk.
           const stage = outputStageByBundle.get(bundle) ?? outputStageByOptions.get(outputOptions)?.stage
           commitWrittenSheets(staticSession, written, bundle as never, stage?.prunedClasses)
+          for (const sheet of staticSession.emittedSheets.get(writtenOutputKey(written)) ?? []) {
+            sheet.writtenAt = statSync(join(written.dir, sheet.fileName), { throwIfNoEntry: false })?.mtimeMs
+          }
         }
 
         // Reaching any write hook proves the bundler has already replaced every file for this
@@ -3066,7 +3107,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
 
         await finalizeDeferredSheetsIfComplete()
         // A sheet that awaited this output, or this sheet, awaiting one already written.
-        await settleAwaiting()
+        await settleAwaiting(bundle as Record<string, unknown>)
         // A link one output makes to a discarded copy, whichever of the two was written last.
         if (staticSession.sheetAliases.size) (await loadCssOutputModule()).moveSheetAliases(staticSession)
       },

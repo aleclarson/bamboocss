@@ -71,6 +71,10 @@ interface Behaviour {
   memory?: boolean
   /** Modules a lazily loaded chunk holds, whose atoms the split moves into a sheet of their own. */
   lazy?: string[]
+  /** Run once the output's files are on disk, before the write is observed. */
+  beforeObserver?: () => Promise<unknown> | void
+  /** The entry chunk's file name, which a hashed one changes from build to build. */
+  entryName?: string
   /** The name Vite gives the sheet; it moves when what is extracted does. */
   sheetName?: string
 }
@@ -154,8 +158,8 @@ const createRun = async (cwd: string, watch: boolean, announced: string[] | fals
         viteMetadata: { importedCss: new Set<string>() },
       })
       const bundle: Record<string, Record<string, unknown>> = {
-        'entry.js': chunk(
-          'entry.js',
+        [behaviour.entryName ?? 'entry.js']: chunk(
+          behaviour.entryName ?? 'entry.js',
           true,
           modules.map((module) => module.id).filter((id) => !lazy.has(id)),
           imports === 'url' ? `export const href = "/${sheetName}"\n` : `export const x = 1\n`,
@@ -195,6 +199,7 @@ const createRun = async (cwd: string, watch: boolean, announced: string[] | fals
         mkdirSync(dirname(path), { recursive: true })
         writeFileSync(path, (entry.type === 'asset' ? entry.source : entry.code) as string)
       }
+      await behaviour.beforeObserver?.()
       await hookOf(observer.writeBundle).call(context, output, bundle)
       return bundle
     }
@@ -465,6 +470,168 @@ describe('a watch round with a sibling replacing its output', () => {
     await expect(finishStaleClient()).rejects.toThrow('NOT extracted')
     await run.round(client, clientModules, { imports: 'sheet' })
     expect(run.sheets('client')).toContain('.w_\\[88\\.2px\\]')
+  })
+
+  /**
+   * An edit makes SSR use a class nothing extracted before, and SSR writes while the client is
+   * still replacing its output: the client's sheet on disk, stood aside for, is from before the
+   * class, and its own round writes the rule. Pruned again then and checked for that rule, the
+   * sheet failed SSR's write.
+   */
+  test('a class the sibling adds does not fail its write for the sheet still on disk', async () => {
+    const cwd = createProject()
+    const widths = { kept: '93.1px', added: '93.2px' }
+    const clientId = join(cwd, 'src/client.tsx')
+    const serverId = join(cwd, 'src/server.tsx')
+    writeFileSync(clientId, source(`'virtual:bamboo.css'`, widths.kept))
+    writeFileSync(serverId, source(false, widths.kept))
+    const run = await createRun(cwd, true, ['client', 'ssr'])
+    const clientModules = [{ id: clientId, code: source(`'virtual:bamboo.css'`, widths.kept) }]
+    await run.round(client, clientModules, { imports: 'sheet' })
+    await run.round(ssr, [{ id: serverId, code: source(false, widths.kept) }])
+
+    writeFileSync(serverId, source(false, widths.kept, widths.added))
+    const finishClient = await run.start(client, clientModules, { imports: 'sheet' })
+    await run.round(ssr, [{ id: serverId, code: source(false, widths.kept, widths.added) }])
+    await finishClient()
+    expect(run.sheets('client')).toContain('.w_\\[93\\.2px\\]')
+  })
+
+  /**
+   * Held in memory, a sheet has no file to prune again, so it waits for nothing: a sibling's guard
+   * reads what it lost, as nothing else answers for it. Waiting for a sibling's replacement for
+   * good, it was read past on every rebuild after.
+   */
+  test('a sheet held in memory is read, on every rebuild of a sibling', async () => {
+    const cwd = createProject()
+    const widths = { kept: '91.1px', fresh: '91.2px', other: '91.3px' }
+    const clientId = join(cwd, 'src/client.tsx')
+    const serverId = join(cwd, 'src/server.tsx')
+    writeFileSync(clientId, source(`'virtual:bamboo.css'`, widths.kept))
+    writeFileSync(serverId, source(false, widths.kept, widths.fresh, widths.other))
+    const run = await createRun(cwd, true, ['client', 'ssr'])
+    const clientModules = [{ id: clientId, code: source(`'virtual:bamboo.css'`, widths.kept) }]
+    await run.round(client, clientModules, { imports: 'sheet', memory: true })
+    await run.round(ssr, [{ id: serverId, code: source(false, widths.kept) }], { memory: true })
+
+    const finishSsr = await run.start(ssr, [{ id: serverId, code: source(false, widths.kept, widths.other) }], {
+      memory: true,
+    })
+    await run.round(client, clientModules, { imports: 'sheet', memory: true })
+    await expect(finishSsr()).rejects.toThrow('w_\\[91\\.3px\\]')
+    await expect(
+      run.round(ssr, [{ id: serverId, code: source(false, widths.kept, widths.fresh) }], { memory: true }),
+    ).rejects.toThrow('w_\\[91\\.2px\\]')
+  })
+
+  /**
+   * A first build's sheet, held for the run, is finalized when its last environment completes it —
+   * against a sibling's old output, when that sibling is replacing it then. Stood aside for, it is
+   * pruned again once the sibling's new output is written.
+   */
+  test("a sheet held for the run is pruned again with a sibling's output written after the run completes", async () => {
+    const cwd = createProject()
+    const widths = { kept: '92.1px', later: '92.2px', edgeOnly: '92.3px' }
+    const clientId = join(cwd, 'src/client.tsx')
+    const serverId = join(cwd, 'src/server.tsx')
+    const edgeId = join(cwd, 'src/edge.tsx')
+    writeFileSync(clientId, source(`'virtual:bamboo.css'`, widths.kept))
+    writeFileSync(serverId, source(false, widths.kept, widths.later))
+    writeFileSync(edgeId, source(false, widths.edgeOnly))
+    const edge: EnvironmentSpec = { name: 'edge', consumer: 'server', build: { ssr: true, emitAssets: false } }
+    const run = await createRun(cwd, true, ['client', 'ssr', 'edge'])
+    await run.round(client, [{ id: clientId, code: source(`'virtual:bamboo.css'`, widths.kept) }], { imports: 'sheet' })
+    await run.round(ssr, [{ id: serverId, code: source(false, widths.kept) }])
+
+    await run.round(ssr, [{ id: serverId, code: source(false, widths.kept, widths.later) }], {
+      between: () => run.round(edge, [{ id: edgeId, code: source(false, widths.edgeOnly) }]),
+    })
+    expect(run.sheets('client')).toContain('.w_\\[92\\.2px\\]')
+  })
+
+  /**
+   * Its environment had written a file of the same name, not yet recorded as that output's, when a
+   * sibling's write made it due: pruned again then, the file the new output links was renamed from
+   * under it. That file is the newer output's to answer for, as its write is observed.
+   */
+  test('a sheet is not pruned again from under a newer output of its own name', async () => {
+    const cwd = createProject()
+    const widths = { kept: '89.1px', fresh: '89.2px' }
+    const appId = join(cwd, 'src/app.tsx')
+    const serverId = join(cwd, 'src/server.tsx')
+    writeFileSync(appId, source(`href from 'virtual:bamboo.css?url'`, widths.kept))
+    writeFileSync(serverId, source(false, widths.kept, widths.fresh))
+    const run = await createRun(cwd, true, ['client', 'ssr'])
+    const app = [{ id: appId, code: source(`href from 'virtual:bamboo.css?url'`, widths.kept) }]
+    await run.round(client, app, { imports: 'url' })
+    await run.round(ssr, [{ id: serverId, code: source(false, widths.kept) }])
+
+    // The client rebuilds to the same bytes, under the same name; SSR, newly using a class the
+    // sheet lost, stood aside for the client, and is written between the client's files and the
+    // client's write being observed.
+    const finishSsr = await run.start(ssr, [{ id: serverId, code: source(false, widths.kept, widths.fresh) }])
+    const finishClient = await run.start(client, app, {
+      imports: 'url',
+      beforeObserver: finishSsr,
+      entryName: 'entry-2.js',
+    })
+    await finishClient()
+    const linked = readFileSync(join(cwd, 'out-client/entry-2.js'), 'utf8').match(/assets\/[\w.-]+\.css/)![0]
+    expect(existsSync(join(cwd, 'out-client', linked)), `the client links ${linked}, which is not there`).toBe(true)
+    expect(readFileSync(join(cwd, 'out-client', linked), 'utf8')).toContain('.w_\\[89\\.2px\\]')
+  })
+
+  /**
+   * Pruned again as its own output is written, the sheet's new name reaches the bundle a later
+   * plugin's `writeBundle` reads, as it reaches the files on disk.
+   */
+  test('a sheet pruned again in its own write is renamed in the bundle later plugins read', async () => {
+    const cwd = createProject()
+    const widths = { kept: '90.1px', fresh: '90.2px' }
+    const appId = join(cwd, 'src/app.tsx')
+    const serverId = join(cwd, 'src/server.tsx')
+    writeFileSync(appId, source(`href from 'virtual:bamboo.css?url'`, widths.kept))
+    writeFileSync(serverId, source(false, widths.kept, widths.fresh))
+    const run = await createRun(cwd, true, ['client', 'ssr'])
+    const app = [{ id: appId, code: source(`href from 'virtual:bamboo.css?url'`, widths.kept) }]
+    await run.round(client, app, { imports: 'url' })
+    await run.round(ssr, [{ id: serverId, code: source(false, widths.kept) }])
+
+    // SSR is replacing as the client's output pass prunes its sheet, and is written before the
+    // client's own output is.
+    const finishSsr = await run.start(ssr, [{ id: serverId, code: source(false, widths.kept, widths.fresh) }])
+    const bundle = await run.round(client, app, { imports: 'url', between: finishSsr })
+    const sheet = Object.values(bundle).find((output) => output.type === 'asset')!.fileName as string
+    expect(bundle['entry.js']!.code).toContain(`/${sheet}`)
+    expect(readFileSync(join(cwd, 'out-client', sheet), 'utf8')).toContain('.w_\\[90\\.2px\\]')
+  })
+
+  /**
+   * Pruned again from a source extracted before a class was dropped from what is extracted, a
+   * sheet keeps that class's rule, which nothing names: no rule came back that anything needs, and
+   * the sheet keeps its name rather than being renamed for a dead rule.
+   */
+  test('a sheet is not renamed for a rule only a dropped class had', async () => {
+    const cwd = createProject()
+    const widths = { kept: '94.1px', dropped: '94.2px' }
+    const clientId = join(cwd, 'src/client.tsx')
+    const serverId = join(cwd, 'src/server.tsx')
+    const droppedId = join(cwd, 'src/dropped.tsx')
+    writeFileSync(clientId, source(`'virtual:bamboo.css'`, widths.kept))
+    writeFileSync(serverId, source(false, widths.kept))
+    // Extracted, and named by nothing: the client's sheet prunes it.
+    writeFileSync(droppedId, source(false, widths.dropped))
+    const run = await createRun(cwd, true, ['client', 'ssr'])
+    const clientModules = [{ id: clientId, code: source(`'virtual:bamboo.css'`, widths.kept) }]
+    await run.round(client, clientModules, { imports: 'sheet' })
+    await run.round(ssr, [{ id: serverId, code: source(false, widths.kept) }])
+    const written = readdirSync(join(cwd, 'out-client/assets'))
+
+    rmSync(droppedId)
+    const finishClient = await run.start(client, clientModules, { imports: 'sheet' })
+    await run.round(ssr, [{ id: serverId, code: source(false, widths.kept) }])
+    expect(readdirSync(join(cwd, 'out-client/assets'))).toEqual(written)
+    await finishClient()
   })
 })
 
