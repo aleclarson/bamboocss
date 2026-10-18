@@ -98,6 +98,14 @@ pub(crate) struct Partial {
     /// For an array opened after a spread of unknown length: how many elements came before it,
     /// which are still where they are held.
     known_prefix: usize,
+    /// For an array: the conditions each element carries, by index, where `elements_attributed`
+    /// says that is every element's. A read of one element takes its own and none of its
+    /// siblings': taken whole, a decided element carried their choices, and their rules.
+    element_conditions: HashMap<String, Vec<serde_json::Value>>,
+    /// Whether `element_conditions` says what every element carries: an element placed after a
+    /// spread of unknown length has no index, and an array spread without such a record says
+    /// nothing of which element carries what.
+    elements_attributed: bool,
 }
 
 impl Partial {
@@ -144,6 +152,10 @@ impl Partial {
         self.nullish.clear();
         self.children.clear();
         self.undefined.clear();
+        // Nor which element carries which choice: one may have been moved, `reverse(tones)`, and
+        // a read narrowed to the record dropped the rules of the values it may hold.
+        self.element_conditions.clear();
+        self.elements_attributed = false;
     }
 
     /// Code the evaluator could not follow ran after the value was made — `(track(), styles)` —
@@ -258,6 +270,10 @@ impl Partial {
                 into.write_nullish(&target);
                 continue;
             }
+            if let Some(conditions) = self.element_conditions.get(&key) {
+                into.element_conditions
+                    .insert(target.clone(), conditions.clone());
+            }
             let known = self.knows(&key);
             let child = self.children.get(&key).cloned();
             if !known || child.is_some() {
@@ -286,6 +302,7 @@ impl Partial {
             && self.children.is_empty()
             && self.nullish.is_empty()
             && self.undefined.is_empty()
+            && self.element_conditions.is_empty()
     }
 }
 
@@ -430,9 +447,10 @@ impl EvalResult {
 
     /// Whether it holds a value the build could not decide between: it is one of several, with none
     /// of its own, or an object with such a property, held beside it as a `{ key: value }` fragment
-    /// (`conditions`). Anything else with `conditions` was read off an array and carries its
-    /// siblings' choices as they are, for their rules — an object too, whose read keeps no
-    /// fragment of theirs — and is one value all the same, where it is whole (`converts`).
+    /// (`conditions`). Anything else with `conditions` was read off an array that cannot say which
+    /// element carries which (`elements_attributed`), and carries its siblings' choices as they
+    /// are, for their rules — an object too, whose read keeps no fragment of theirs — and is one
+    /// value all the same, where it is whole (`converts`).
     fn is_undecided(&self) -> bool {
         !self.conditions.is_empty()
             && match &self.value {
@@ -2080,10 +2098,20 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                 // After a spread of an unknown length nothing is where it is held, so the array is
                 // open.
                 let mut partial = Partial::default();
+                // Which element carries each condition, while the record can say so.
+                let mut attributed = true;
                 for element in &array.elements {
                     match element {
                         oxc_ast::ast::ArrayExpressionElement::SpreadElement(spread) => {
                             let value = self.evaluate(&spread.argument);
+                            // Its record is placed where its elements land, below.
+                            let placed = !partial.open
+                                && value.partial.as_deref().is_some_and(|spread| {
+                                    spread.elements_attributed && !spread.open
+                                });
+                            if !value.conditions.is_empty() && !placed {
+                                attributed = false;
+                            }
                             complete &= value.complete;
                             refusal = refusal.or(value.refusal);
                             conditions.extend(value.conditions);
@@ -2140,12 +2168,26 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                                     );
                                 }
                             }
+                            if !value.conditions.is_empty() {
+                                if partial.open {
+                                    attributed = false;
+                                } else {
+                                    partial
+                                        .element_conditions
+                                        .insert(output.len().to_string(), value.conditions.clone());
+                                }
+                            }
                             complete &= value.complete;
                             refusal = refusal.or(value.refusal);
                             conditions.extend(value.conditions);
                             output.push(value.value.unwrap_or(serde_json::Value::Null));
                         }
                     }
+                }
+                if attributed {
+                    partial.elements_attributed = true;
+                } else {
+                    partial.element_conditions.clear();
                 }
                 EvalResult {
                     value: Some(output.into()),
@@ -2534,11 +2576,22 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                         self.semantic.nodes().parent_kind(self.semantic.symbol_declaration(symbol).id()),
                         AstKind::VariableDeclaration(declaration) if declaration.declare
                     );
-                    let value = match declarator.init.as_ref() {
+                    let mut value = match declarator.init.as_ref() {
                         Some(expression) => self.evaluate(expression),
                         None if ambient => EvalResult::unknown(),
                         None => EvalResult::undefined(),
                     };
+                    // An array handed on — to a function, an alias, a `return` — may be reordered
+                    // where the build cannot see it, `flip(tones)`, or `list.reverse()` after
+                    // `list = theme.tones`, and an element read off it is then any of them: it
+                    // keeps carrying every element's choices, for their rules.
+                    if matches!(declarator.id, BindingPattern::BindingIdentifier(_))
+                        && let Some(record) = value.partial.as_deref()
+                        && let Some(record) =
+                            self.distrust_handed_on(symbol, record, &mut Vec::new())
+                    {
+                        value.partial = (!record.is_empty()).then(|| Arc::new(record));
+                    }
                     // A destructured symbol denotes its property, not the declarator's entire
                     // initializer. Binding every sibling at once also mirrors JavaScript's
                     // defaults and avoids re-evaluating the same static initializer.
@@ -2572,6 +2625,84 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         };
         self.evaluating.remove(&symbol);
         result
+    }
+
+    /// Whether code may reach what `symbol` holds at `path` other than by reading off it: some
+    /// reference takes the value whole — `symbol` itself, or a property on the way to `path` —
+    /// handing it to a function, an alias, a `return` or another literal, where a write the
+    /// build cannot see may reorder it (`is_mutated` sees only writes through the binding). An
+    /// element, the `length` or a method read off it, a spread's copy, or another property
+    /// hands nothing on.
+    pub(crate) fn hands_on(&self, symbol: SymbolId, path: &[&str]) -> bool {
+        let nodes = self.semantic.nodes();
+        self.scoping
+            .get_resolved_references(symbol)
+            .any(|reference| {
+                let mut node = reference.node_id();
+                let mut depth = 0;
+                loop {
+                    let span = nodes.kind(node).span();
+                    let parent = nodes.parent_id(node);
+                    let key = match nodes.kind(parent) {
+                        AstKind::StaticMemberExpression(member) if member.object.span() == span => {
+                            member.property.name.as_str()
+                        }
+                        AstKind::ComputedMemberExpression(member)
+                            if member.object.span() == span =>
+                        {
+                            match static_key(&member.expression) {
+                                Some(key) => key,
+                                // A key the build cannot name may be the one on the way.
+                                None => return true,
+                            }
+                        }
+                        AstKind::ParenthesizedExpression(_)
+                        | AstKind::TSAsExpression(_)
+                        | AstKind::TSSatisfiesExpression(_)
+                        | AstKind::TSNonNullExpression(_) => {
+                            node = parent;
+                            continue;
+                        }
+                        AstKind::SpreadElement(_) => return false,
+                        _ => return true,
+                    };
+                    if depth == path.len() || key != path[depth] {
+                        return false;
+                    }
+                    depth += 1;
+                    node = parent;
+                }
+            })
+    }
+
+    /// `record`, of what `symbol` holds at `path`, without what it says of which element carries
+    /// which choice wherever that array is handed on (`hands_on`); `None` where nothing changes.
+    fn distrust_handed_on(
+        &self,
+        symbol: SymbolId,
+        record: &Partial,
+        path: &mut Vec<String>,
+    ) -> Option<Partial> {
+        let mut changed = None;
+        if record.elements_attributed
+            && self.hands_on(symbol, &path.iter().map(String::as_str).collect::<Vec<_>>())
+        {
+            let mut copy = record.clone();
+            copy.elements_attributed = false;
+            copy.element_conditions.clear();
+            changed = Some(copy);
+        }
+        for (key, child) in &record.children {
+            path.push(key.clone());
+            if let Some(child) = self.distrust_handed_on(symbol, child, path) {
+                changed
+                    .get_or_insert_with(|| record.clone())
+                    .children
+                    .insert(key.clone(), Arc::new(child));
+            }
+            path.pop();
+        }
+        changed
     }
 
     /// Whether anything in the file can change what `symbol` holds after its declaration.
@@ -4401,11 +4532,26 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                     remainder.value = match remainder.value {
                         Some(serde_json::Value::Array(array)) => {
                             // What is not known of the elements the rest takes, where they land.
-                            remainder.partial = remainder.partial.take().and_then(|known| {
+                            let taken = remainder.partial.take().map(|known| {
                                 let mut rest = Partial::default();
                                 known.spread_into(&mut rest, skipped, 0, array.len());
-                                (!rest.is_empty()).then(|| Arc::new(rest))
+                                rest.elements_attributed = known.elements_attributed && !known.open;
+                                rest
                             });
+                            // Only what the elements it takes carry, where the array says which
+                            // carries what: their skipped siblings' choices stayed with it.
+                            if let Some(rest) =
+                                taken.as_ref().filter(|rest| rest.elements_attributed)
+                            {
+                                remainder.conditions = (0..array.len().saturating_sub(skipped))
+                                    .filter_map(|index| {
+                                        rest.element_conditions.get(&index.to_string())
+                                    })
+                                    .flatten()
+                                    .cloned()
+                                    .collect();
+                            }
+                            remainder.partial = taken.filter(|rest| !rest.is_empty()).map(Arc::new);
                             Some(array.into_iter().skip(skipped).collect::<Vec<_>>().into())
                         }
                         _ => None,
@@ -5340,7 +5486,22 @@ fn member_value(mut result: EvalResult, property: &str) -> EvalResult {
     let mut misattributable = false;
     // Whether any of its conditions are its own: what a fragment held under `property`.
     let mut own = false;
-    if result.conditions.iter().any(serde_json::Value::is_object) {
+    // An array saying which element carries which condition gives each read its element's own
+    // and none of its siblings': taken whole, a decided element carried their choices, and the
+    // stylesheet their rules.
+    if let Some(record) = partial.as_deref().filter(|record| {
+        is_array
+            && record.elements_attributed
+            && (!record.open
+                || array_index(property).is_some_and(|index| index < record.known_prefix))
+    }) {
+        result.conditions = record
+            .element_conditions
+            .get(property)
+            .cloned()
+            .unwrap_or_default();
+        own = !result.conditions.is_empty();
+    } else if result.conditions.iter().any(serde_json::Value::is_object) {
         result.conditions = std::mem::take(&mut result.conditions)
             .into_iter()
             .filter_map(|condition| match condition {
@@ -5459,6 +5620,26 @@ fn may_be_inherited(property: &str) -> bool {
         .chars()
         .next()
         .is_some_and(|first| first.is_ascii_alphabetic() || first == '_' || first == '$')
+}
+
+/// A member's key written as a literal, as the property it names: `o['w']`, `xs[1]` — not `1.0`
+/// or `0x1`, another spelling of the key read.
+fn static_key<'a>(expression: &'a Expression<'a>) -> Option<&'a str> {
+    match expression.get_inner_expression() {
+        Expression::StringLiteral(literal) => Some(literal.value.as_str()),
+        Expression::NumericLiteral(literal) => {
+            literal.raw.as_ref().map(|raw| raw.as_str()).filter(|raw| {
+                raw.bytes().all(|byte| byte.is_ascii_digit())
+                    && (*raw == "0" || !raw.starts_with('0'))
+            })
+        }
+        Expression::TemplateLiteral(template) if template.expressions.is_empty() => template
+            .quasis
+            .first()
+            .and_then(|quasi| quasi.value.cooked.as_ref())
+            .map(|cooked| cooked.as_str()),
+        _ => None,
+    }
 }
 
 /// A computed key's value, unless it is a `null` that may be `undefined`, whose name is not known.

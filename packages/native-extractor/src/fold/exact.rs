@@ -340,6 +340,10 @@ impl<'a> Exactness<'_, 'a, '_, '_> {
         mut receiver: &'a Expression<'a>,
         mut path: Vec<&'a str>,
     ) -> MemberSource<'a> {
+        // The binding the walk last followed, and the keys it read off that binding's value since:
+        // where an array reached that way is handed on (`hands_on`), it is read whole.
+        let mut root = None;
+        let mut walked: Vec<&'a str> = Vec::new();
         // Bindings that refer to each other cannot cycle in a module that runs, but the build
         // reads modules without running them; this bounds the walk regardless.
         for _ in 0..64 {
@@ -356,10 +360,38 @@ impl<'a> Exactness<'_, 'a, '_, '_> {
                     receiver = &member.object;
                 }
                 Expression::ObjectExpression(object) if !path.is_empty() => {
-                    let Some(value) = last_write(object, path.remove(0)) else {
+                    let key = path.remove(0);
+                    let Some(value) = last_write(object, key) else {
                         return MemberSource::Receiver;
                     };
+                    walked.push(key);
                     receiver = value;
+                }
+                // The element the literal places at the index read, with no spread at or before
+                // it to move it: what the read gives, whatever its siblings are — unless the array
+                // is handed on, to a function, an alias or a `return`, which may reorder it where
+                // the build cannot see: `flip(tones)`, or `list.reverse()` after
+                // `list = theme.tones`.
+                Expression::ArrayExpression(array) if !path.is_empty() => {
+                    if root.is_some_and(|symbol| self.evaluator.hands_on(symbol, &walked)) {
+                        return MemberSource::Receiver;
+                    }
+                    let Some(element) = path[0]
+                        .parse::<usize>()
+                        .ok()
+                        .filter(|index| index.to_string() == path[0])
+                        .filter(|&index| {
+                            !array.elements.iter().take(index + 1).any(|element| {
+                                matches!(element, ArrayExpressionElement::SpreadElement(_))
+                            })
+                        })
+                        .and_then(|index| array.elements.get(index))
+                        .and_then(ArrayExpressionElement::as_expression)
+                    else {
+                        return MemberSource::Receiver;
+                    };
+                    walked.push(path.remove(0));
+                    receiver = element;
                 }
                 Expression::Identifier(identifier) if !path.is_empty() => {
                     let semantic = self.evaluator.semantic();
@@ -394,6 +426,8 @@ impl<'a> Exactness<'_, 'a, '_, '_> {
                         taken.append(&mut path);
                         path = taken;
                     }
+                    root = Some(symbol);
+                    walked.clear();
                     receiver = init;
                 }
                 _ if path.is_empty() => return MemberSource::Property(receiver),
@@ -514,10 +548,17 @@ fn last_write<'a>(
     None
 }
 
-/// A property key written as a literal: `theme['w']`.
+/// A property key written as a literal: `theme['w']`, or an index as JavaScript names it,
+/// `sizes[1]` — not `1.0` or `0x1`, whose key is another spelling of it.
 fn literal_key<'a>(expression: &'a Expression<'a>) -> Option<&'a str> {
     match unwrap(expression) {
         Expression::StringLiteral(literal) => Some(literal.value.as_str()),
+        Expression::NumericLiteral(literal) => {
+            literal.raw.as_ref().map(|raw| raw.as_str()).filter(|raw| {
+                raw.bytes().all(|byte| byte.is_ascii_digit())
+                    && (*raw == "0" || !raw.starts_with('0'))
+            })
+        }
         Expression::TemplateLiteral(template) if template.expressions.is_empty() => template
             .quasis
             .first()

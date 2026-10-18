@@ -714,6 +714,88 @@ describe('what the build knows beside a guess', () => {
 })
 
 /**
+ * An element read off an array, with the choices it carries and none of its siblings'. An array
+ * held its elements' undecided values beside it with no index, so a read of one carried them all:
+ * a decided element emitted its siblings' rules, and failed the build where a value has to be
+ * decided — an array literal, a rest parameter — and one beside a key that is an index was not
+ * known at all.
+ */
+describe('an element read off an array', () => {
+  test('a decided element carries no rule of its undecided siblings', () => {
+    const { classes, css } = foldOf(
+      withImport(
+        "const tones = ['red.300', Math.random() > 0.5 ? 'blue.300' : 'green.300']\nexport const A = css({ color: tones[0] })",
+      ),
+    )
+
+    expect(classes).toEqual(['c_red.300'])
+    expect(css).not.toContain('--colors-blue-300')
+    expect(css).not.toContain('--colors-green-300')
+  })
+
+  test.each([
+    [
+      'given to a rest parameter, wrapped in an object',
+      "const m = [Math.random() > 0.5 ? 'blue.300' : 'green.300', 'red.300']\nconst first = (...xs) => xs[0]\nexport const A = css(first({ color: m[1] }))",
+      'c_red.300',
+    ],
+    [
+      'placed in an array literal',
+      "const m = [Math.random() > 0.5 ? 'blue.300' : 'green.300', 'red.300']\nexport const A = css({ color: [m[1]][0] })",
+      'c_red.300',
+    ],
+    [
+      'beside a sibling holding a key that is its index',
+      "const c = Math.random() > 0.5\nconst arr2 = [{ k: 1 }, { 0: { z: c ? 1 : 2 } }]\nconst x = [arr2[0]]\nexport const A = css({ zIndex: ('z' in x[0]) + 1 })",
+      'z_1',
+    ],
+  ])('a decided element %s is known', (_, body, className) => {
+    expect(foldOf(withImport(body)).classes).toEqual([className])
+  })
+
+  // Moved by a spread or taken by a rest element, it still carries its own and none of its
+  // siblings'. The compiler, which reads where an element is from the source, leaves a position a
+  // spread decides to the evaluation it does not replace.
+  test.each([
+    [
+      'past a spread of another array',
+      "const head = [Math.random() > 0.5 ? 'blue.300' : 'green.300']\nconst all = [...head, 'red.300']\nexport const A = css({ color: all[1] })",
+    ],
+    [
+      'taken by a rest element',
+      "const [, ...rest] = [Math.random() > 0.5 ? 'blue.300' : 'green.300', 'red.300']\nexport const A = css({ color: rest[0] })",
+    ],
+  ])('a decided element %s carries no rule of its siblings', (_, body) => {
+    const { css } = foldOf(withImport(body))
+
+    expect(css).toContain('--colors-red-300')
+    expect(css).not.toContain('--colors-blue-300')
+    expect(css).not.toContain('--colors-green-300')
+  })
+
+  // Handed on under another name, an array may be reordered where the build cannot see it, so an
+  // index says nothing of which element it reads: every element keeps all of the array's choices,
+  // and the compiler leaves the read to the runtime.
+  test.each([
+    [
+      'given to a function',
+      "const tones = ['red.300', Math.random() > 0.5 ? 'blue.300' : 'green.300']\nflip(tones)\nexport const A = css({ color: tones[0] })",
+    ],
+    [
+      'reversed through an alias of the object property holding it',
+      "const theme = { tones: ['red.300', Math.random() > 0.5 ? 'blue.300' : 'green.300'] }\nconst list = theme.tones\nlist.reverse()\nexport const A = css({ color: theme.tones[0] })",
+    ],
+  ])('an element of an array %s carries every rule of its siblings', (_, body) => {
+    const { classes, css } = foldOf(withImport(body))
+
+    expect(classes).toEqual([])
+    expect(css).toContain('--colors-red-300')
+    expect(css).toContain('--colors-blue-300')
+    expect(css).toContain('--colors-green-300')
+  })
+})
+
+/**
  * A choice spread before a method of the name, decided, is the branch it takes, as evaluated. Read
  * from its branches alone, 1.57.0 failed the call wherever a branch wrote the name, though 1.56.7
  * compiled it, and evaluated the branch not taken: `big ? heavy() : {}` failed for a recursion in
@@ -1382,10 +1464,6 @@ describe('what is still not known', () => {
       "const g = (t = '1fr 1fr') => ({ gridTemplateColumns: t === '1fr 1fr' ? 'auto' : t })\nexport const A = css(g())",
     ],
     // A fragment an array holds under the index read may be a sibling's, under a key that is it.
-    [
-      'a key of an element read where a sibling holds a key that is its index',
-      "const c = Math.random() > 0.5\nconst arr2 = [{ k: 1 }, { 0: { z: c ? 1 : 2 } }]\nconst x = [arr2[0]]\nexport const A = css({ zIndex: ('z' in x[0]) + 1 })",
-    ],
     // A default stands in for `undefined`, not for one of several values.
     [
       'a parameter default given one of two values',
