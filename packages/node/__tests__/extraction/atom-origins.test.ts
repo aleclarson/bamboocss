@@ -27,7 +27,7 @@ const extract = (userConfig?: Config, code = source) => {
 }
 
 const at = (line: number) => ({
-  filePath: expect.stringMatching(/app\/src\/origins\.tsx$/),
+  filePath: expect.stringMatching(/app[\\/]src[\\/]origins\.tsx$/),
   line,
   column: columnOf(line),
 })

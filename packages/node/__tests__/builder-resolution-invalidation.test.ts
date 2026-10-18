@@ -10,6 +10,9 @@ import { Builder } from '../src/builder'
 
 const roots: string[] = []
 
+/** A path spelled with `/`, as a resolution reports the files it read on every platform. */
+const slash = (path: string) => path.replaceAll('\\', '/')
+
 const project = (files: Record<string, string>) => {
   // Canonicalised, because the compiler canonicalises. On macOS `mkdtemp` hands back a path
   // under `/var`, which is a symlink to `/private/var`, and the paths that come back out of a
@@ -226,8 +229,8 @@ describe('Builder resolution-ledger invalidation', () => {
     const builder = await setup(fixture)
     const context = builder.getContextOrThrow()
     const parse = vi.spyOn(context, 'parseFile')
-    const primary = fixture.file('primary.ts')
-    const fallback = fixture.file('fallback.ts')
+    const primary = slash(fixture.file('primary.ts'))
+    const fallback = slash(fixture.file('fallback.ts'))
     const runtimeFallback = fixture.file('runtime-fallback.ts')
 
     expect(builder.toCss({ layerParams: true })).toContain('blue')
@@ -287,8 +290,8 @@ describe('Builder resolution-ledger invalidation', () => {
     const builder = await setup(fixture)
     const context = builder.getContextOrThrow()
     const parse = vi.spyOn(context, 'parseFile')
-    const primary = fixture.file('primary.ts')
-    const fallback = fixture.file('fallback.ts')
+    const primary = slash(fixture.file('primary.ts'))
+    const fallback = slash(fixture.file('fallback.ts'))
 
     expect(builder.toCss({ layerParams: true })).toContain('blue')
     expect(builder.getResolutionReadFiles()).toEqual([fallback, primary].sort())
@@ -363,7 +366,7 @@ describe('Builder resolution-ledger invalidation', () => {
       const builder = await setup(fixture)
       const context = builder.getContextOrThrow()
       const parse = vi.spyOn(context, 'parseFile')
-      const dependency = fixture.file('dependency.ts')
+      const dependency = slash(fixture.file('dependency.ts'))
       const cleanCss = async () => (await setup(fixture)).toCss({ layerParams: true })
 
       expect(builder.toCss({ layerParams: true })).toContain('blue')

@@ -317,9 +317,11 @@ describe('native extraction analysis', () => {
       )[2]
 
       expect(analysis.calls).toMatchObject([{ arguments: [{ background: 'blue', color: 'red' }], complete: true }])
-      expect(analysis.dependencies).toEqual([dependency, local].sort())
-      expect(analysis.configurationFiles).toEqual(
-        [join(cwd, 'package.json'), join(dependencyRoot, 'package.json')].sort(),
+      // Spelled with `/` on every platform, where `join` spells a path with `\` on Windows.
+      const slash = (path: string) => path.replaceAll('\\', '/')
+      expect(analysis.dependencies.map(slash)).toEqual([dependency, local].map(slash).sort())
+      expect(analysis.configurationFiles.map(slash)).toEqual(
+        [join(cwd, 'package.json'), join(dependencyRoot, 'package.json')].map(slash).sort(),
       )
     } finally {
       rmSync(root, { force: true, recursive: true })

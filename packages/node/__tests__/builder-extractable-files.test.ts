@@ -42,7 +42,8 @@ test('a cold Builder pass parses only files that can reach bamboo', async () => 
   expect(nativeCss).toContain('color: red')
   expect(nativeCss).toContain('background-color: blue')
   expect([...builder.getAtomOrigins().values()]).toContainEqual({
-    filePath: join(context.config.cwd, 'src/styles.ts'),
+    // As the glob spells it, with `/` on every platform.
+    filePath: join(context.config.cwd, 'src/styles.ts').replaceAll('\\', '/'),
     line: 3,
     column: 26,
   })

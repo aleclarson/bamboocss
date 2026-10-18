@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAll, describe, expect, test, vi } from 'vitest'
+import { afterAll, afterEach, describe, expect, test, vi } from 'vitest'
 import { assembleExtractedSheet } from '../src/assemble-sheet'
 import { Builder } from '../src/builder'
 import { collectSourceScans, createSourceScanCache } from '../src/token-references'
@@ -22,6 +22,15 @@ afterAll(() => {
   for (const directory of temporaryDirectories) rmSync(directory, { force: true, recursive: true })
   temporaryDirectories.clear()
 })
+
+// A spy a failed test left on the shared runtime counts every read the next test makes, and
+// fails that one for a cause it does not have.
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
+/** A path spelled with `/`, as the glob and the build spell a file on every platform. */
+const slash = (path: string) => path.replaceAll('\\', '/')
 
 const CONFIG =
   `export default {\n` +
@@ -219,7 +228,7 @@ describe('source-scan cache', () => {
         needsInventoryScan: true,
       },
     })
-    expect(builder.context!.explicitDeps).toContain(dependency)
+    expect(builder.context!.explicitDeps.map(slash)).toContain(slash(dependency))
     expect(configChange).toHaveBeenCalledTimes(1)
     builder.extract()
 
@@ -233,7 +242,7 @@ describe('source-scan cache', () => {
         needsInventoryScan: true,
       },
     })
-    expect(builder.context!.explicitDeps).not.toContain(dependency)
+    expect(builder.context!.explicitDeps.map(slash)).not.toContain(slash(dependency))
     expect(configChange).toHaveBeenCalledTimes(2)
   }, 120_000)
 
@@ -264,10 +273,10 @@ describe('source-scan cache', () => {
     const css = builder.toCss({ layerParams: true })
 
     expect(inventory, 'ordinary edits reuse the reconciled inventory').not.toHaveBeenCalled()
-    const stated = metadata.mock.calls.map(([file]) => file)
-    expect(stated).toContain(fixture)
-    expect(stated, 'the final snapshot reuses metadata for untouched files').not.toContain(untouched)
-    expect([...new Set(reads.mock.calls.map(([file]) => String(file)))]).toEqual([fixture])
+    const stated = metadata.mock.calls.map(([file]) => slash(file))
+    expect(stated).toContain(slash(fixture))
+    expect(stated, 'the final snapshot reuses metadata for untouched files').not.toContain(slash(untouched))
+    expect([...new Set(reads.mock.calls.map(([file]) => slash(String(file))))]).toEqual([slash(fixture)])
     expect(css).toContain('spin')
 
     inventory.mockRestore()

@@ -1,4 +1,4 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, type ExecFileSyncOptionsWithStringEncoding } from 'node:child_process'
 import {
   copyFileSync,
   existsSync,
@@ -11,13 +11,31 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, posix } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '..')
 const repositoryRoot = join(packageRoot, '../..')
-const tsc = join(repositoryRoot, 'node_modules/.bin/tsc')
+
+/**
+ * pnpm and tsc, each through the script behind it rather than the `.bin` shim: on Windows a shim is
+ * a `.cmd`, which `execFileSync` cannot start without a shell. pnpm names its own in `npm_execpath`
+ * for the scripts it runs, `pnpm test` among them — or its executable, where pnpm is one.
+ */
+const pnpm = (args: string[], options: ExecFileSyncOptionsWithStringEncoding) => {
+  const execpath = process.env.npm_execpath
+  if (process.platform !== 'win32') return execFileSync('pnpm', args, options)
+  if (!execpath) return execFileSync('pnpm', args, { ...options, shell: true })
+  return /\.exe$/i.test(execpath)
+    ? execFileSync(execpath, args, options)
+    : execFileSync(process.execPath, [execpath, ...args], options)
+}
+const tsc = (args: string[], options: ExecFileSyncOptionsWithStringEncoding) =>
+  execFileSync(process.execPath, [join(repositoryRoot, 'node_modules/@typescript/native/bin/tsc'), ...args], options)
+
+/** A path spelled with `/`, as the assertions below match one on every platform. */
+const slash = (path: string) => path.replaceAll('\\', '/')
 
 interface PackResult {
   filename: string
@@ -67,7 +85,7 @@ const withNativeBinary = <T>(run: () => T): T => {
 
 const pack = (name: string) => {
   const result = JSON.parse(
-    execFileSync('pnpm', ['--filter', name, 'pack', '--pack-destination', consumerRoot, '--json'], {
+    pnpm(['--filter', name, 'pack', '--pack-destination', consumerRoot, '--json'], {
       cwd: repositoryRoot,
       encoding: 'utf8',
       maxBuffer: 20 * 1024 * 1024,
@@ -78,7 +96,9 @@ const pack = (name: string) => {
 }
 
 beforeAll(() => {
-  consumerRoot = mkdtempSync(join(tmpdir(), 'bamboo-packed-consumer-'))
+  // Canonical, as pnpm names what it installs there: Windows' temporary folder is spelled with a
+  // short name (`RUNNER~1`) that a link's target is not.
+  consumerRoot = realpathSync.native(mkdtempSync(join(tmpdir(), 'bamboo-packed-consumer-')))
   const internalDependencies = new Map<string, string[]>()
   for (const entry of readdirSync(join(repositoryRoot, 'packages'), { withFileTypes: true })) {
     if (!entry.isDirectory()) continue
@@ -124,7 +144,7 @@ beforeAll(() => {
     return typeof types === 'string' && directory !== undefined && !existsSync(join(directory, types))
   })
   if (unbuilt.length > 0) {
-    execFileSync('pnpm', [...unbuilt.flatMap((name) => ['--filter', name]), 'build'], {
+    pnpm([...unbuilt.flatMap((name) => ['--filter', name]), 'build'], {
       cwd: repositoryRoot,
       encoding: 'utf8',
       maxBuffer: 20 * 1024 * 1024,
@@ -167,7 +187,7 @@ beforeAll(() => {
   // the store — `browserslist` reaching for a newer `electron-to-chromium` is what failed here.
   // Preferring the store keeps this fast and network-independent in the normal case, without
   // failing the build over a version the store was never going to have.
-  execFileSync('pnpm', ['install', '--prefer-offline', '--ignore-scripts', '--no-frozen-lockfile'], {
+  pnpm(['install', '--prefer-offline', '--ignore-scripts', '--no-frozen-lockfile'], {
     cwd: consumerRoot,
     encoding: 'utf8',
     env: { ...process.env, CI: 'true' },
@@ -229,7 +249,7 @@ const transform = typeof compiler.transform === 'function' ? compiler.transform 
 const result = await transform.call(
   { addWatchFile() {}, environment: { name: 'packed-consumer' } },
   ${JSON.stringify(source)},
-  ${JSON.stringify(fixture)} + '/src/__packed-package-consumer.tsx',
+  ${JSON.stringify(slash(fixture))} + '/src/__packed-package-consumer.tsx',
   {},
 )
 const code = typeof result === 'string' ? result : result && result.code
@@ -311,9 +331,9 @@ const runRuntimeConsumer = (format: 'cjs' | 'mjs', action: RuntimeAction) => {
 describe('packed and installed NodeNext consumers', () => {
   test('uses installed tarballs for the complete Bamboo runtime closure', () => {
     for (const name of ['vite', 'node']) {
-      const installed = realpathSync(join(consumerRoot, 'node_modules/@bamboocss', name))
-      expect(installed).toContain(`${consumerRoot}/node_modules/.pnpm/`)
-      expect(installed).not.toContain(`${repositoryRoot}/packages/`)
+      const installed = slash(realpathSync(join(consumerRoot, 'node_modules/@bamboocss', name)))
+      expect(installed).toContain(`${slash(consumerRoot)}/node_modules/.pnpm/`)
+      expect(installed).not.toContain(`${slash(repositoryRoot)}/packages/`)
       expect(existsSync(join(installed, 'src'))).toBe(false)
     }
   })
@@ -327,9 +347,8 @@ describe('packed and installed NodeNext consumers', () => {
       const consumer = join(consumerRoot, `consumer.${extension}`)
       writeFileSync(consumer, typeConsumer)
 
-      expect(execFileSync(tsc, ['--version'], { encoding: 'utf8' })).toMatch(/^Version 7\./)
-      const trace = execFileSync(
-        tsc,
+      expect(tsc(['--version'], { encoding: 'utf8' })).toMatch(/^Version 7\./)
+      const trace = tsc(
         [
           '--ignoreConfig',
           '--noEmit',
@@ -361,14 +380,14 @@ describe('packed and installed NodeNext consumers', () => {
     ['CommonJS', 'cjs', 'transform'],
     ['CommonJS', 'cjs', 'output'],
   ] as const)('%s %s installed consumer runs a format-pure %s path in isolation', (_, format, action) => {
-    const graph = runRuntimeConsumer(format, action).map((file) => fileURLToPath(file))
+    const graph = runRuntimeConsumer(format, action).map((file) => slash(fileURLToPath(file)))
     const bambooFiles = graph.filter((file) =>
       /\/node_modules\/(?:\.pnpm\/[^/]+\/node_modules\/)?@bamboocss\//.test(file),
     )
     const expectedExtension = format === 'mjs' ? '.mjs' : '.cjs'
     const oppositeExtension = format === 'mjs' ? '.cjs' : '.mjs'
 
-    expect(graph.filter((file) => file.startsWith(repositoryRoot))).toEqual([])
+    expect(graph.filter((file) => file.startsWith(slash(repositoryRoot)))).toEqual([])
     expect(bambooFiles.some((file) => file.endsWith(`/@bamboocss/vite/dist/index${expectedExtension}`))).toBe(true)
     expect(bambooFiles.filter((file) => file.endsWith(oppositeExtension))).toEqual([])
 
@@ -459,7 +478,7 @@ describe('packed and installed NodeNext consumers', () => {
             : specifier.endsWith('.cjs')
               ? `${specifier.slice(0, -4)}.d.cts`
               : specifier
-          expect(packed, name).toContain(join(dirname(declaration), dependency))
+          expect(packed, name).toContain(posix.join(posix.dirname(declaration), dependency))
         }
       }
 
@@ -471,7 +490,7 @@ describe('packed and installed NodeNext consumers', () => {
           // Extensionless requires inside bundled third-party code are runtime resolution
           // branches, not emitted chunks. Tsdown's own chunks always carry the target format.
           if (!/\.[cm]js$/.test(match[1])) continue
-          expect(packed, name).toContain(join(dirname(runtime), match[1]))
+          expect(packed, name).toContain(posix.join(posix.dirname(runtime), match[1]))
         }
       }
     }

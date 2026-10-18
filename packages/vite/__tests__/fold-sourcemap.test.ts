@@ -48,8 +48,9 @@ describe('source maps', () => {
       export const cls = css({ color: 'red.300' })
     `)
 
-    // The path the fold was handed, which the fixture resolves against the project's cwd.
-    expect(result.map!.sources).toEqual([pathOf(FILE_PATH)])
+    // The path the fold was handed, which the fixture resolves against the project's cwd, spelled
+    // with `/` as a source map names a file on every platform.
+    expect(result.map!.sources).toEqual([pathOf(FILE_PATH).replaceAll('\\', '/')])
     expect(result.map!.sourcesContent?.[0]).toContain(`css({ color: 'red.300' })`)
   })
 

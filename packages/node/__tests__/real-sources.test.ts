@@ -5,7 +5,7 @@ import { afterAll, expect, test } from 'vitest'
 import { nodeRuntime } from '../src/node-runtime'
 import { firstSpellingOfEachFile } from '../src/real-sources'
 
-const root = realpathSync(mkdtempSync(join(tmpdir(), 'bamboo-real-sources-')))
+const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'bamboo-real-sources-')))
 afterAll(() => rmSync(root, { force: true, recursive: true }))
 
 const spelled = (...segments: string[]) => join(root, ...segments).replaceAll('\\', '/')

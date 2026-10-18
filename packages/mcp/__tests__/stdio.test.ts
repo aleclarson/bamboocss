@@ -2,6 +2,7 @@
 import { LATEST_PROTOCOL_VERSION } from '@modelcontextprotocol/sdk/types.js'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -40,8 +41,10 @@ const serve = async () => {
     writeFileSync(join(cwd, file), contents)
   }
 
-  const tsx = join(root, '../../node_modules/.bin/tsx')
-  const child = spawn(tsx, ['--conditions=source', join(cwd, 'run.cts'), '--cwd', cwd], {
+  // tsx's script, run by this Node, rather than its `.bin` shim: on Windows that is a `.cmd`,
+  // which `spawn` cannot start without a shell.
+  const tsx = createRequire(import.meta.url).resolve('tsx/cli')
+  const child = spawn(process.execPath, [tsx, '--conditions=source', join(cwd, 'run.cts'), '--cwd', cwd], {
     cwd: root,
     stdio: ['pipe', 'pipe', 'pipe'],
   })

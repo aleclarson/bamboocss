@@ -25,6 +25,9 @@ const cwd = join(dirname(fileURLToPath(import.meta.url)), '../../../sandbox/code
 const hookOf = <T>(hook: T | { handler: T } | undefined): T | undefined =>
   typeof hook === 'function' ? hook : (hook as { handler: T } | undefined)?.handler
 
+/** A path spelled with `/`, as the plugin hands Vite a file to watch on every platform. */
+const slash = (path: string) => path.replaceAll('\\', '/')
+
 const load = async (id: string, command: 'build' | 'serve' = 'build') => {
   const plugin = bamboocssCss({ cwd, session: createStaticCompilationSession() })
   const resolvedConfig = hookOf(plugin.configResolved)
@@ -101,16 +104,16 @@ describe('the virtual stylesheet', () => {
     try {
       await hookOf(plugin.configResolved)?.call({} as never, { command: 'serve', build: { sourcemap: false } } as never)
       const resolved = hookOf(plugin.resolveId)!.call({} as never, VIRTUAL_CSS_ID, undefined, {} as never) as string
-      const context = { addWatchFile: (file: string) => watched.push(file) }
+      const context = { addWatchFile: (file: string) => watched.push(slash(file)) }
       const css = await hookOf(plugin.load)!.call(context as never, resolved, undefined as never)
       // A dev server registers them from `transform`, which Vite runs after every load.
       await hookOf(plugin.transform)!.call(context as never, css as string, resolved, undefined as never)
 
       expect(css).toContain('--colors-red-300')
-      expect(watched).toContain(entry)
-      expect(watched).toContain(dependency)
-      expect(watched).toContain(explicitDependency)
-      expect(watched).not.toContain(unrelated)
+      expect(watched).toContain(slash(entry))
+      expect(watched).toContain(slash(dependency))
+      expect(watched).toContain(slash(explicitDependency))
+      expect(watched).not.toContain(slash(unrelated))
 
       const listeners = new Map<string, (file: string) => void>()
       const reloaded: string[] = []
@@ -595,7 +598,7 @@ describe('the virtual stylesheet', () => {
  */
 describe('the folders a dev server watches beyond its root', () => {
   test('are each handed once to every watcher, where they really lie outside', async () => {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), 'bamboo-vite-watch-')))
+    const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'bamboo-vite-watch-')))
     onTestFinished(() => rmSync(root, { force: true, recursive: true }))
     const app = join(root, 'app')
     const link = process.platform === 'win32' ? 'junction' : 'dir'

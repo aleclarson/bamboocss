@@ -443,7 +443,7 @@ describe('load config', () => {
   const projects: string[] = []
 
   const project = (files: Record<string, string>) => {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), 'bamboo-config-')))
+    const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'bamboo-config-')))
     projects.push(root)
     for (const [file, contents] of Object.entries(files)) {
       mkdirSync(dirname(join(root, file)), { recursive: true })
@@ -1901,7 +1901,7 @@ describe('load config', () => {
     // config found through a symlinked directory.
     test('for an importer named by its real path', async () => {
       const root = solution({ include: ['src'], compilerOptions: { paths: { '@/*': ['./src/*'] } } })
-      const link = join(realpathSync(mkdtempSync(join(tmpdir(), 'bamboo-config-link-'))), 'project')
+      const link = join(realpathSync.native(mkdtempSync(join(tmpdir(), 'bamboo-config-link-'))), 'project')
       projects.push(dirname(link))
       symlinkSync(root, link, 'junction')
 

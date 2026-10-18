@@ -1,4 +1,5 @@
 import { createContext } from '@bamboocss/fixture'
+import { resolve } from 'node:path'
 import { describe, expect, test } from 'vitest'
 import { parseFile } from './fixture'
 
@@ -296,27 +297,29 @@ describe('cross-file: unresolvable names inside re-export cycles', () => {
 describe('cross-file: tsconfig path aliases', () => {
   test('folds a value imported through a tsconfig path alias', () => {
     // The upstream bug tracker flagged aliased imports specifically, so cover them
-    // as well as relative ones. `baseUrl` is resolved against the project root.
+    // as well as relative ones. `baseUrl` is resolved against the project root. The root is the
+    // platform's — on Windows a drive's, which a bare `/` is not to the native resolver.
+    const root = resolve('/').replaceAll('\\', '/')
     const ctx = createContext({
-      tsconfig: { compilerOptions: { baseUrl: '/', paths: { '~/*': ['./app/src/*'] } } },
+      tsconfig: { compilerOptions: { baseUrl: root, paths: { '~/*': ['./app/src/*'] } } },
     } as any)
     // Absolute, because the `baseUrl` above is: a `paths` target is resolved against the base
     // URL, so `~/styles` names `/app/src/styles.ts` and nothing else. Adding the file under a
     // relative path instead put it beside the process's working directory, where the alias
     // does not point.
     ctx.project.addSourceFile(
-      '/app/src/styles.ts',
+      `${root}app/src/styles.ts`,
       `${CSS_IMPORT}
        export const button = css.raw({ borderWidth: '2px' })`,
     )
     ctx.project.addSourceFile(
-      '/app/src/app.tsx',
+      `${root}app/src/app.tsx`,
       `${CSS_IMPORT}
        import { button } from '~/styles'
        export const App = () => <div className={css(button, { margin: '2' })} />`,
     )
 
-    const data = parseFile(ctx, '/app/src/app.tsx')!
+    const data = parseFile(ctx, `${root}app/src/app.tsx`)!
     expect([...data.css].map((c: any) => c.data)).toEqual([[{ borderWidth: '2px' }, { margin: '2' }]])
   })
 })

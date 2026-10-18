@@ -212,7 +212,10 @@ describe('CLI', () => {
       blue: path.resolve(testsCwd, 'src/unknown-command-blue.tsx'),
     }
     const run = (args: string) => {
-      const { status, stdout, stderr } = spawnSync(`node ${binPath} ${args} --cwd="${testsCwd}"`, {
+      // Quoted as the shell running it quotes: Windows' is `cmd.exe`, which reads `'` as part of an
+      // argument, and only `"` as a quote.
+      const quoted = process.platform === 'win32' ? args.replace(/'([^']*)'/g, '"$1"') : args
+      const { status, stdout, stderr } = spawnSync(`node ${binPath} ${quoted} --cwd="${testsCwd}"`, {
         cwd: testsCwd,
         shell: true,
         encoding: 'utf8',

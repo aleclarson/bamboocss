@@ -10,6 +10,12 @@ const repositoryRoot = join(packageRoot, '../..')
 const graphChild = join(packageRoot, '__tests__/built-entry-child.mjs')
 const transformCwd = join(repositoryRoot, 'sandbox/codegen')
 
+/**
+ * A loaded module's path, spelled with `/` as the assertions below match it. `fileURLToPath`
+ * answers with `\` on Windows, where no file matched, and every exclusion passed for nothing.
+ */
+const pathOf = (url: string) => fileURLToPath(url).replaceAll('\\', '/')
+
 const loadedFiles = (entry: string) => {
   const directory = mkdtempSync(join(tmpdir(), 'bamboo-vite-built-entry-'))
   const graphPath = join(directory, 'graph.json')
@@ -58,7 +64,7 @@ describe('built Vite entry boundaries', () => {
         expect(configAdapter).toContain('export * from "@bamboocss/config"')
       }
 
-      const graph = loadedFiles(entry).factoryFiles.map((file) => fileURLToPath(file))
+      const graph = loadedFiles(entry).factoryFiles.map(pathOf)
       expect(graph.some((file) => file.endsWith(`/packages/node/dist/${staticCompiler}`))).toBe(true)
       expect(graph.some((file) => file.endsWith(`/packages/vite/dist/${nodeChunk}`))).toBe(false)
       expect(graph.some((file) => file.endsWith(`/packages/vite/dist/${configChunk}`))).toBe(false)
@@ -88,8 +94,8 @@ describe('built Vite entry boundaries', () => {
     expect(chunk).toMatch(/(?:from|require\()\s*["']@bamboocss\/config\/ts-path["']/)
 
     const { factoryFiles, transformFiles } = loadedFiles(entry)
-    const factoryGraph = factoryFiles.map((file) => fileURLToPath(file))
-    const transformGraph = transformFiles.map((file) => fileURLToPath(file))
+    const factoryGraph = factoryFiles.map(pathOf)
+    const transformGraph = transformFiles.map(pathOf)
     const foldExclusive = (file: string) =>
       file.endsWith(`/packages/vite/dist/${foldChunk}`) ||
       /\/packages\/config\/dist\/resolve-ts-path-pattern\.(?:cjs|mjs)$/.test(file)
@@ -122,8 +128,8 @@ describe('built Vite entry boundaries', () => {
     expect(chunk).toMatch(/(?:from|require\()\s*["']@ampproject\/remapping["']/)
 
     const { factoryFiles, outputFiles } = loadedFiles(entry)
-    const factoryGraph = factoryFiles.map((file) => fileURLToPath(file))
-    const outputGraph = outputFiles.map((file) => fileURLToPath(file))
+    const factoryGraph = factoryFiles.map(pathOf)
+    const outputGraph = outputFiles.map(pathOf)
     const outputExclusive = (file: string) =>
       file.endsWith(`/packages/vite/dist/${outputChunk}`) ||
       /\/node_modules\/\.pnpm\/(?:postcss|postcss-selector-parser|source-map-js|magic-string)@/.test(file) ||

@@ -20,7 +20,8 @@ import { parseFile } from './fixture'
  */
 const build = () => {
   const ctx = createContext({})
-  const cwd = ctx.config.cwd
+  // With `/`, as the glob hands a file over and the dependencies come back on every platform.
+  const cwd = ctx.config.cwd.replaceAll('\\', '/')
   const file = (name: string) => `${cwd}/src/${name}.ts`
 
   ctx.project.addSourceFile(

@@ -4,7 +4,7 @@ import { join } from 'node:path'
 import { afterAll, expect, test, vi } from 'vitest'
 import { Builder } from '../src/builder'
 
-const root = realpathSync(mkdtempSync(join(tmpdir(), 'bamboo-builder-linked-')))
+const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'bamboo-builder-linked-')))
 afterAll(() => rmSync(root, { force: true, recursive: true }))
 
 /**

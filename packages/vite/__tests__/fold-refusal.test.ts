@@ -31,7 +31,7 @@ describe('a refused call says why', () => {
     )
 
     expect(refusal).toMatchObject({ kind: 'statement', subject: 'switch', helper: 'tone', line: 3, column: 3 })
-    expect(refusal?.filePath).toMatch(/app\/src\/test\.tsx$/)
+    expect(refusal?.filePath).toMatch(/app[\\/]src[\\/]test\.tsx$/)
   })
 
   test('a statement run for its effect, shown as written', () => {
@@ -592,7 +592,7 @@ describe('a recursion with no end the build can see', () => {
     )
 
     expect(refusal).toMatchObject({ kind: 'recursion', subject: 'depth', helper: 'walk', line: 3, column: 14 })
-    expect(refusal?.filePath).toMatch(/app\/src\/test\.tsx$/)
+    expect(refusal?.filePath).toMatch(/app[\\/]src[\\/]test\.tsx$/)
   })
 
   test('leaves no export it gave up on in the cache', () => {

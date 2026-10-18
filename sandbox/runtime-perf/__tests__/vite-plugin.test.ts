@@ -11,7 +11,7 @@ import {
   writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, join, posix } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { logger } from '@bamboocss/logger'
 import { esc } from '@bamboocss/shared'
@@ -34,6 +34,16 @@ import { cascadeOrder } from '../../../packages/core/__tests__/cascade-oracle'
  */
 const here = dirname(fileURLToPath(import.meta.url))
 const cwd = join(here, '..')
+
+/**
+ * A path spelled the way Vite spells module ids, source map sources and watch files: with `/` on
+ * every platform. `join` spells it with `\` on Windows, so a joined path compared with any of those
+ * directly never matches there.
+ */
+const slash = (path: string) => path.replaceAll('\\', '/')
+
+/** Whether a module id names this file: on Windows, a probe comparing them as spelled counts nothing. */
+const isModule = (id: string | null | undefined, path: string) => id != null && slash(id.split('?')[0]) === slash(path)
 
 /** Keep a watcher's extraction graph inside its own fixture instead of all scratch files. */
 const writeIsolatedBambooConfig = (path: string, include: string[]) =>
@@ -600,7 +610,7 @@ describe.sequential('vite plugin, real rebuild', () => {
       await nextBuild()
       expect(output('.js', '.mjs')).toContain('"c_blue600"')
       expect(output('.css')).toContain('blue600')
-      expect(watchedRuns.at(-1)).toContain(dependency)
+      expect(watchedRuns.at(-1)?.map(slash)).toContain(slash(dependency))
 
       const rebuilt = nextBuild()
       // Edited a beat after the first build rather than immediately. The watcher arms
@@ -617,7 +627,7 @@ describe.sequential('vite plugin, real rebuild', () => {
       expect(output('.js', '.mjs')).not.toContain('"c_blue600"')
       expect(output('.css')).toContain('red600')
       expect(output('.css')).not.toContain('blue600')
-      expect(watchedRuns.at(-1)).toContain(dependency)
+      expect(watchedRuns.at(-1)?.map(slash)).toContain(slash(dependency))
     } finally {
       await watcher.close()
     }
@@ -643,7 +653,7 @@ describe.sequential('vite plugin, real rebuild', () => {
         {
           name: 'bamboocss:test-cached-transform-probe',
           transform(_code: string, id: string) {
-            if (id.split('?')[0] === cachedEntry) transformCalls.push(id)
+            if (isModule(id, cachedEntry)) transformCalls.push(id)
           },
         },
       ],
@@ -739,7 +749,7 @@ describe.sequential('vite plugin, real rebuild', () => {
     const staleMetadata: VitePlugin = {
       name: 'bamboocss:test-stale-transform-metadata',
       transform(_code, id) {
-        if (id.split('?')[0] !== staleEntry) return
+        if (!isModule(id, staleEntry)) return
         transformCalls++
         return { meta: { 'bamboocss:transform': { version: 1 } } }
       },
@@ -829,7 +839,7 @@ describe.sequential('vite plugin, real rebuild', () => {
     const alteredMetadata: VitePlugin = {
       name: 'bamboocss:test-altered-transform-metadata',
       transform(code, id) {
-        if (id.split('?')[0] !== integrityEntry) return
+        if (!isModule(id, integrityEntry)) return
         transformCalls++
         compiledCode = code
 
@@ -955,7 +965,7 @@ describe.sequential('vite plugin, real rebuild', () => {
         }
       },
       transform(code, id) {
-        if (id.split('?')[0] !== accessorEntry) return
+        if (!isModule(id, accessorEntry)) return
         transformCalls++
 
         const artifact = this.getModuleInfo(id)?.meta['bamboocss:transform']
@@ -1077,8 +1087,8 @@ describe.sequential('vite plugin, real rebuild', () => {
       name: 'bamboocss:test-query-variants',
       enforce: 'pre',
       transform(_code, id) {
-        const [file, query] = id.split('?')
-        if (file !== dual || (query !== 'a' && query !== 'b')) return
+        const query = id.split('?')[1]
+        if (!isModule(id, dual) || (query !== 'a' && query !== 'b')) return
 
         transformCalls[query]++
         // Only `?a` depends on this file. Its edit must rerun that live module id while
@@ -1182,8 +1192,8 @@ describe.sequential('vite plugin, real rebuild', () => {
       name: 'bamboocss:test-query-survivor',
       enforce: 'pre',
       transform(_code, id) {
-        const [file, query] = id.split('?')
-        if (file !== dual || (query !== 'fresh' && query !== 'cached')) return
+        const query = id.split('?')[1]
+        if (!isModule(id, dual) || (query !== 'fresh' && query !== 'cached')) return
         transformCalls[query]++
 
         if (query === 'fresh') {
@@ -1748,7 +1758,7 @@ const runPartialEnvironmentWatchRebuild = async (
     enforce: 'pre',
     sharedDuringBuild: true,
     transform(_code, id) {
-      if (id.split('?')[0] !== envSharedModule) return
+      if (!isModule(id, envSharedModule)) return
 
       const environment = this.environment.name as keyof typeof calls
       calls[environment]++
@@ -1928,7 +1938,7 @@ const runClientFirstWatchRebuild = async (
     enforce: 'pre',
     sharedDuringBuild: true,
     transform(_code, id) {
-      if (id.split('?')[0] !== envSharedModule) return
+      if (!isModule(id, envSharedModule)) return
 
       const environment = this.environment.name as keyof typeof calls
       calls[environment]++
@@ -2076,7 +2086,7 @@ const runRejectedCompletionWatchRebuild = async (
     enforce: 'pre',
     sharedDuringBuild: true,
     transform(_code, id) {
-      if (id.split('?')[0] !== envSharedModule) return
+      if (!isModule(id, envSharedModule)) return
 
       const environment = this.environment.name as keyof typeof calls
       calls[environment]++
@@ -2201,7 +2211,7 @@ const runRejectedOutputWatchRebuild = async (
     enforce: 'pre',
     sharedDuringBuild: true,
     transform(_code, id) {
-      if (id.split('?')[0] !== clientEntry) return
+      if (!isModule(id, clientEntry)) return
       calls.client++
       this.addWatchFile(clientTrigger)
       const version = readFileSync(clientTrigger, 'utf8').trim()
@@ -2253,7 +2263,7 @@ const runRejectedOutputWatchRebuild = async (
           }
         }
         const isClientOutput = Object.values(bundle).some(
-          (output) => output.type === 'chunk' && output.facadeModuleId?.split('?')[0] === clientEntry,
+          (output) => output.type === 'chunk' && isModule(output.facadeModuleId, clientEntry),
         )
         if (!rejectClientOutput || !isClientOutput) return
         rejectedJs = Object.values(bundle)
@@ -2652,7 +2662,7 @@ const runMixedOutputEpochWatchRebuild = async (
     enforce: 'pre',
     sharedDuringBuild: true,
     transform(_code, id) {
-      if (id.split('?')[0] !== clientEntry) return
+      if (!isModule(id, clientEntry)) return
       calls.client++
       this.addWatchFile(clientTrigger)
       const generation = readFileSync(clientTrigger, 'utf8').trim()
@@ -3337,14 +3347,13 @@ const runSiblingReplacementWatchRebuild = async (
     sharedDuringBuild: true,
     async transform(code, id) {
       if (this.environment.name !== 'ssr') return
-      const file = id.split('?')[0]
       // Held until the client's cycle has ended, so SSR is replacing its output throughout.
-      if (file === serverOnly && holding) {
+      if (isModule(id, serverOnly) && holding) {
         await holding
         if (failSsr) throw new Error(`SSR replacement failed by a test plugin (${label})`)
       }
       // An edit only SSR sees: its entry starts using a class the client's sheet pruned.
-      if (file === ssrEntry) {
+      if (isModule(id, ssrEntry)) {
         this.addWatchFile(ssrTrigger)
         if (readFileSync(ssrTrigger, 'utf8').trim() === 'pruned') {
           return { code: `${code}export { pruned } from './__sibling-unused-${label}'\n`, map: null }
@@ -3865,7 +3874,7 @@ export default defineConfig({
       enforce: 'pre',
       sharedDuringBuild: true,
       transform(_code, id) {
-        if (id.split('?')[0] !== sharedModule) return
+        if (!isModule(id, sharedModule)) return
 
         const environment = this.environment.name as keyof EnvironmentCalls
         calls[environment]++
@@ -5000,7 +5009,7 @@ describe('a file added under an include outside the root', () => {
 
   for (const [label, createDevServer, port] of cases) {
     test(`${label} reaches the dev stylesheet`, async () => {
-      const root = realpathSync(mkdtempSync(join(tmpdir(), 'bamboo-outside-root-')))
+      const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'bamboo-outside-root-')))
       onTestFinished(() => rmSync(root, { force: true, recursive: true }))
       const app = join(root, 'app')
       const shared = join(root, 'shared')
@@ -5066,7 +5075,7 @@ describe('a source include reached through a link', () => {
     `import { css } from '../../../app/styled-system/css'\nexport const card = css({ width: '[${width}]' })\n`
 
   const project = (packages = 'node_modules/@acme/ui/src/**/*.tsx') => {
-    const root = realpathSync(mkdtempSync(join(tmpdir(), 'bamboo-linked-include-')))
+    const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'bamboo-linked-include-')))
     onTestFinished(() => rmSync(root, { force: true, recursive: true }))
     const app = join(root, 'app')
     const ui = join(root, 'packages/ui')
@@ -5158,7 +5167,7 @@ describe('a source include reached through a link', () => {
       try {
         expect(await sheet()).toContain('w_\\\\[744\\\\.1px\\\\]')
         // The module as Vite names it, by where it really is.
-        await server.environments.client.transformRequest(`/@fs${join(ui, 'src/card.tsx')}`)
+        await server.environments.client.transformRequest(posix.join('/@fs', slash(join(ui, 'src/card.tsx'))))
 
         // Before any edit, so only the first pass can have watched its folder: where it really is,
         // since Vite's watcher passes over `node_modules`. A fresh file each second until one is
@@ -5244,14 +5253,14 @@ export const second = css({ width: '[913.1px]', height: '[913.2px]' })
         const sheet = direct!.code
 
         const width = originalPositionFor(tracer, positionOf(sheet, '.w_\\[913\\.1px\\]'))
-        expect(width.source, 'the file').toBe(consumer)
+        expect(width.source, 'the file').toBe(slash(consumer))
         expect({ line: width.line, column: width.column }).toEqual({ line: 3, column: columnOf(3) })
 
         const height = originalPositionFor(tracer, positionOf(sheet, '.h_\\[913\\.2px\\]'))
         expect({ line: height.line, column: height.column }).toEqual({ line: 4, column: columnOf(4) })
 
         // Vite read the source in for DevTools, since a dev server serves no raw `.tsx`.
-        expect(map.sourcesContent?.[map.sources.indexOf(consumer)]).toBe(source)
+        expect(map.sourcesContent?.[map.sources.indexOf(slash(consumer))]).toBe(source)
 
         // And the module the browser actually fetches inlines it.
         const module = await server.environments.client.transformRequest('virtual:bamboo.css')

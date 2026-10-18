@@ -2,7 +2,7 @@ import { logger } from '@bamboocss/logger'
 import { isStaticCompilerActive } from '@bamboocss/node/static-compiler'
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, test, vi } from 'vitest'
 import { VIRTUAL_CSS_ID } from '../src/css'
@@ -29,6 +29,9 @@ const callTransform = async (plugin: { transform?: unknown }, code: string, id: 
 
 const hookOf = <T>(hook: T | { handler: T } | undefined): T | undefined =>
   typeof hook === 'function' ? hook : (hook as { handler: T } | undefined)?.handler
+
+/** A path spelled with `/`, as the plugin hands Vite a file to watch on every platform. */
+const slash = (path: string) => path.replaceAll('\\', '/')
 
 const SOURCE = `import { css } from 'styled-system/css'\nexport const cls = css({ color: 'red.300' })\n`
 
@@ -367,15 +370,19 @@ describe('file filtering', () => {
  * question is where the boundary sits, not whether one exists.
  */
 describe('generated output', () => {
-  const ctx = (cwd: string, outdir: string) => ({ config: { cwd, outdir } })
+  // Rooted as the platform roots a path, which on Windows gives `/app` the drive every id there
+  // carries: without it, the file stayed `/app/…` while the outdir resolved to `D:\app\…`.
+  const ctx = (cwd: string, outdir: string) => ({ config: { cwd: resolve(cwd), outdir } })
 
   test('the default outdir is recognised', () => {
-    expect(isGeneratedOutput('/app/styled-system/css/css.mjs', ctx('/app', 'styled-system'))).toBe(true)
-    expect(isGeneratedOutput('/app/src/Button.tsx', ctx('/app', 'styled-system'))).toBe(false)
+    expect(isGeneratedOutput(resolve('/app/styled-system/css/css.mjs'), ctx('/app', 'styled-system'))).toBe(true)
+    expect(isGeneratedOutput(resolve('/app/src/Button.tsx'), ctx('/app', 'styled-system'))).toBe(false)
   })
 
   test('a nested outdir is recognised', () => {
-    expect(isGeneratedOutput('/app/src/styled-system/jsx/index.mjs', ctx('/app', 'src/styled-system'))).toBe(true)
+    expect(isGeneratedOutput(resolve('/app/src/styled-system/jsx/index.mjs'), ctx('/app', 'src/styled-system'))).toBe(
+      true,
+    )
   })
 
   /**
@@ -386,19 +393,19 @@ describe('generated output', () => {
   test('a directory sharing the outdir name elsewhere in the tree is user source', () => {
     const config = ctx('/app', 'src/styles')
 
-    expect(isGeneratedOutput('/app/src/styles/css/css.mjs', config)).toBe(true)
-    expect(isGeneratedOutput('/app/packages/ui/styles/Button.tsx', config)).toBe(false)
-    expect(isGeneratedOutput('/app/src/features/styles/theme.ts', config)).toBe(false)
+    expect(isGeneratedOutput(resolve('/app/src/styles/css/css.mjs'), config)).toBe(true)
+    expect(isGeneratedOutput(resolve('/app/packages/ui/styles/Button.tsx'), config)).toBe(false)
+    expect(isGeneratedOutput(resolve('/app/src/features/styles/theme.ts'), config)).toBe(false)
   })
 
   test('a sibling whose name merely starts with the outdir is user source', () => {
     // `styled-system-static` sits next to `styled-system` and is not it.
-    expect(isGeneratedOutput('/app/styled-system-static/app.tsx', ctx('/app', 'styled-system'))).toBe(false)
+    expect(isGeneratedOutput(resolve('/app/styled-system-static/app.tsx'), ctx('/app', 'styled-system'))).toBe(false)
   })
 
   test('an absolute outdir is honoured rather than appended to the cwd', () => {
-    expect(isGeneratedOutput('/generated/css/css.mjs', ctx('/app', '/generated'))).toBe(true)
-    expect(isGeneratedOutput('/app/generated/css/css.mjs', ctx('/app', '/generated'))).toBe(false)
+    expect(isGeneratedOutput(resolve('/generated/css/css.mjs'), ctx('/app', '/generated'))).toBe(true)
+    expect(isGeneratedOutput(resolve('/app/generated/css/css.mjs'), ctx('/app', '/generated'))).toBe(false)
   })
 })
 
@@ -864,7 +871,7 @@ describe('compiler', () => {
 
     const plugin = plugins({ cwd, reportSummary: false }).fold
     const watched: string[] = []
-    const context = { addWatchFile: (file: string) => watched.push(file), environment: { name: 'client' } }
+    const context = { addWatchFile: (file: string) => watched.push(slash(file)), environment: { name: 'client' } }
 
     try {
       await hookOf(plugin.buildStart)?.call(context as never, {} as never)
@@ -872,7 +879,7 @@ describe('compiler', () => {
       const code = typeof result === 'string' ? result : result?.code
 
       expect(code).toContain('c_red.300')
-      expect(watched.sort()).toEqual([bridge, dependency].sort())
+      expect(watched.sort()).toEqual([bridge, dependency].map(slash).sort())
     } finally {
       rmSync(dependency, { force: true })
       rmSync(bridge, { force: true })
@@ -903,7 +910,7 @@ describe('compiler', () => {
     const plugin = plugins({ cwd, reportSummary: false }).fold
     const watched: string[] = []
     const environment = { name: 'client' }
-    const context = { addWatchFile: (file: string) => watched.push(file), environment }
+    const context = { addWatchFile: (file: string) => watched.push(slash(file)), environment }
     const transform = hookOf(plugin.transform)!
     const transformed = { id: entry }
     const invalidated: string[] = []
@@ -919,8 +926,8 @@ describe('compiler', () => {
       const firstCode = typeof first === 'string' ? first : first?.code
 
       expect(firstCode).toContain('c_red.300')
-      expect(watched.sort()).toEqual([helper, leaf].sort())
-      expect(watched).not.toContain(unrelated)
+      expect(watched.sort()).toEqual([helper, leaf].map(slash).sort())
+      expect(watched).not.toContain(slash(unrelated))
 
       writeFileSync(leaf, tone('blue.500'))
       hookOf(plugin.watchChange)?.call({} as never, leaf, { event: 'update' } as never)
@@ -937,7 +944,9 @@ describe('compiler', () => {
       const secondCode = typeof second === 'string' ? second : second?.code
       expect(secondCode).toContain('c_blue.500')
       expect(secondCode).not.toContain('c_red.300')
-      expect(watched.sort(), 'the authoritative transform retains the evaluated closure').toEqual([helper, leaf].sort())
+      expect(watched.sort(), 'the authoritative transform retains the evaluated closure').toEqual(
+        [helper, leaf].map(slash).sort(),
+      )
 
       invalidated.length = 0
       writeFileSync(leaf, tone('red.300'))
@@ -997,7 +1006,7 @@ describe('compiler', () => {
     const hotUpdate = hookOf(plugin.hotUpdate)!
     const watched = { client: [] as string[], ssr: [] as string[] }
     const context = (name: keyof typeof watched) => ({
-      addWatchFile: (file: string) => watched[name].push(file),
+      addWatchFile: (file: string) => watched[name].push(slash(file)),
       environment: { name },
     })
     const clientModule = { id: clientId }
@@ -1018,8 +1027,10 @@ describe('compiler', () => {
 
       expect(codeOf(client)).toContain('c_red.300')
       expect(codeOf(ssr)).toContain('c_red.300')
-      expect(watched.client.sort()).toEqual([helper, leaf].sort())
-      expect(watched.ssr.sort(), 'the global cache hit replays reads into SSR').toEqual([helper, leaf].sort())
+      expect(watched.client.sort()).toEqual([helper, leaf].map(slash).sort())
+      expect(watched.ssr.sort(), 'the global cache hit replays reads into SSR').toEqual(
+        [helper, leaf].map(slash).sort(),
+      )
 
       writeFileSync(leaf, tone('blue.500'))
       watchChange.call({} as never, leaf, { event: 'update' } as never)
@@ -1043,8 +1054,8 @@ describe('compiler', () => {
       const nextSsr = await transform.call(context('ssr') as never, source, ssrId, {} as never)
       expect(codeOf(nextClient)).toContain('c_blue.500')
       expect(codeOf(nextSsr)).toContain('c_blue.500')
-      expect(watched.client.sort()).toEqual([helper, leaf].sort())
-      expect(watched.ssr.sort()).toEqual([helper, leaf].sort())
+      expect(watched.client.sort()).toEqual([helper, leaf].map(slash).sort())
+      expect(watched.ssr.sort()).toEqual([helper, leaf].map(slash).sort())
     } finally {
       rmSync(leaf, { force: true })
       rmSync(helper, { force: true })

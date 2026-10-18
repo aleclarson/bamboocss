@@ -2,7 +2,7 @@ import { createContext, fixtureDefaults } from '@bamboocss/fixture'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterAll, expect, test, vi } from 'vitest'
+import { afterAll, expect, onTestFinished, test, vi } from 'vitest'
 import { Builder } from '../src/builder'
 import { BambooContext } from '../src/create-context'
 
@@ -126,7 +126,8 @@ test('parser hooks can introduce Bamboo calls and receive native results', () =>
   const cwd = mkdtempSync(join(tmpdir(), 'bamboo-native-parser-hook-'))
   temporaryDirectories.add(cwd)
   mkdirSync(join(cwd, 'src'))
-  const sourceFile = join(cwd, 'src/component.custom')
+  // As the glob spells it, and so the build: with `/` on every platform.
+  const sourceFile = join(cwd, 'src/component.custom').replaceAll('\\', '/')
   writeFileSync(sourceFile, 'custom component source')
   const after = vi.fn()
   const ctx = new BambooContext({
@@ -336,6 +337,10 @@ test('compiling many modules reads each auxiliary file once', () => {
     reads.set(filePath, (reads.get(filePath) ?? 0) + 1)
     return readFileSync(filePath)
   }
+  // The runtime is shared: left counting, it would count for every test after this one.
+  onTestFinished(() => {
+    ctx.runtime.fs.readFileSync = readFileSync
+  })
 
   for (const file of modules)
     ctx.compileModules([{ filename: file, source: readFileSync(file) }], { references: false })
