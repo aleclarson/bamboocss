@@ -157,3 +157,54 @@ describe('a local module the inventory never matched', () => {
     expect(selection(sources).auxiliary).toEqual([])
   })
 })
+
+/**
+ * A project on Windows: the root as `path.resolve` spells it, with `\`, and the inventory as
+ * fast-glob does, with `/`. Every candidate was built with `path.resolve` and checked against
+ * `${cwd}/`, so no local import matched there, and a file reaching bamboo only through a local
+ * module was never parsed — its classes shipped with no rule. Spelled out here, the same graph is
+ * checked on every platform, not only in the Windows job.
+ */
+describe('a project with a Windows root', () => {
+  const windows = (sources: Record<string, string>, options?: Partial<ExtractableOptions>) =>
+    selectExtractable(Object.keys(sources), {
+      cwd: 'C:\\repo',
+      entrypoints: ENTRYPOINTS,
+      fileExists: (filePath) => filePath in sources,
+      readFile: (filePath) => sources[filePath],
+      ...options,
+    })
+
+  test('follows a relative import to the module carrying the binding', () => {
+    const sources = {
+      'C:/repo/src/styles.ts': `import { css } from 'styled-system/css'\nexport const className = css({})`,
+      'C:/repo/src/consumer.ts': `import { className } from './styles'\nexport const c = className`,
+      'C:/repo/src/unrelated.ts': `export const u = 1`,
+    }
+
+    expect(windows(sources).extractable).toEqual(['C:/repo/src/styles.ts', 'C:/repo/src/consumer.ts'])
+  })
+
+  test('follows a path mapping and a parent directory', () => {
+    const sources = {
+      'C:/repo/src/theme/recipe.ts': `import { cva } from 'styled-system/css'\nexport const button = cva({})`,
+      'C:/repo/src/app/Button.tsx': `import { button } from '@/theme/recipe'\nexport const B = button`,
+      'C:/repo/src/app/Card.tsx': `import { button } from '../theme/recipe'\nexport const C = button`,
+    }
+
+    expect(windows(sources, { paths: { '@/*': ['src/*'] } }).extractable).toEqual([
+      'C:/repo/src/theme/recipe.ts',
+      'C:/repo/src/app/Button.tsx',
+      'C:/repo/src/app/Card.tsx',
+    ])
+  })
+
+  test('names a local module outside the inventory for installing', () => {
+    const sources = {
+      'C:/repo/src/a.tsx': `import { css } from 'styled-system/css'\nimport { icon } from './generated/icon'\nexport const a = css({})`,
+    }
+    const exists = (filePath: string) => filePath in sources || filePath === 'C:/repo/src/generated/icon.ts'
+
+    expect(windows(sources, { fileExists: exists }).auxiliary).toEqual(['C:/repo/src/generated/icon.ts'])
+  })
+})

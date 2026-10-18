@@ -405,8 +405,9 @@ describe('generated output', () => {
 describe('compiler', () => {
   // A project of its own, outside the checkout: these tests write modules into its `src`, which
   // written into the codegen sandbox's were globbed by `css.test.ts` running beside them. Real, as
-  // the plugin knows a file by where it really is (`/var` is a link on macOS).
-  const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'bamboo-compiler-')))
+  // the plugin knows a file by where it really is: `/var` is a link on macOS, and only the native
+  // call expands Windows' short names (`RUNNER~1`).
+  const cwd = realpathSync.native(mkdtempSync(join(tmpdir(), 'bamboo-compiler-')))
   mkdirSync(join(cwd, 'src'))
   writeFileSync(
     join(cwd, 'bamboo.config.ts'),

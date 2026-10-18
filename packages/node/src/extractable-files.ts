@@ -1,5 +1,5 @@
 import { existsSync } from 'node:fs'
-import { dirname, isAbsolute, resolve } from 'node:path'
+import { isAbsolute, posix } from 'node:path'
 
 /**
  * Which of the files `include` matched an extraction pass actually has to read.
@@ -81,6 +81,36 @@ const scanSpecifiers = (text: string): string[] | undefined => {
   return /\b(?:import|require)\b/.test(text) ? undefined : found
 }
 
+/** `path` with `/` for every separator, as fast-glob spells the inventory on every platform. */
+const slash = (path: string) => (path.includes('\\') ? path.replaceAll('\\', '/') : path)
+
+/** Whether a path is absolute on any platform: `/x`, `C:/x` or `C:\x`. */
+const absolute = (path: string) => path.startsWith('/') || /^[A-Za-z]:[\\/]/.test(path) || isAbsolute(path)
+
+/** `path` without a trailing `/`, as `path.resolve` leaves none. */
+const trimmed = (path: string) => {
+  let end = path.length
+  while (end > 1 && path.charCodeAt(end - 1) === 47) end--
+  return end === path.length ? path : path.slice(0, end)
+}
+
+/**
+ * `path` resolved onto the `/`-spelled `base` as `path.resolve` does, spelled with `/`.
+ * `resolve` spells its result with `\` on Windows, where the inventory and every key here use
+ * `/`, so no local import matched there: each file reaching bamboo through a local module went
+ * unparsed, and its classes shipped with no rule.
+ */
+const resolveSlashed = (base: string, path: string) =>
+  trimmed(absolute(path) ? slash(path) : posix.join(base, slash(path)))
+
+/** The project every candidate is held up against, resolved once for a whole selection. */
+interface Project {
+  cwd: string
+  /** `cwd` with a trailing `/`, so a sibling sharing its name as a prefix is not inside it. */
+  root: string
+  baseUrl: string | undefined
+}
+
 /** A candidate path with every extension a specifier may have omitted. */
 const candidatesFor = (base: string): string[] => {
   const emitted = EMITTED.find(([suffix]) => base.endsWith(suffix))
@@ -98,13 +128,18 @@ const candidatesFor = (base: string): string[] => {
  * bamboo's own resolution stops at the same boundary: a target outside the project reads as
  * non-local, so nothing it exports is ever extracted from.
  */
-const localTargetOf = (specifier: string, importer: string, options: ExtractableOptions): string | undefined => {
+const localTargetOf = (
+  specifier: string,
+  directory: string,
+  options: ExtractableOptions,
+  project: Project,
+): string | undefined => {
   const bases: string[] = []
 
   if (specifier.startsWith('.')) {
-    bases.push(resolve(dirname(importer), specifier))
-  } else if (isAbsolute(specifier)) {
-    bases.push(specifier)
+    bases.push(trimmed(posix.join(directory, slash(specifier))))
+  } else if (absolute(specifier)) {
+    bases.push(trimmed(slash(specifier)))
   } else {
     // `paths` is what lets a bare or `#`-prefixed specifier name local source, and a config may
     // map `*` wholesale — so every pattern is tried rather than only the ones that look like
@@ -113,22 +148,21 @@ const localTargetOf = (specifier: string, importer: string, options: Extractable
       const star = pattern.indexOf('*')
       if (star === -1) {
         if (pattern !== specifier) continue
-        for (const target of targets) bases.push(resolve(options.cwd, target))
+        for (const target of targets) bases.push(resolveSlashed(project.cwd, target))
         continue
       }
       const head = pattern.slice(0, star)
       const tail = pattern.slice(star + 1)
       if (!specifier.startsWith(head) || !specifier.endsWith(tail)) continue
       const filled = specifier.slice(head.length, specifier.length - tail.length)
-      for (const target of targets) bases.push(resolve(options.cwd, target.replace('*', filled)))
+      for (const target of targets) bases.push(resolveSlashed(project.cwd, target.replace('*', filled)))
     }
-    if (options.baseUrl) bases.push(resolve(options.cwd, options.baseUrl, specifier))
+    if (project.baseUrl) bases.push(resolveSlashed(project.baseUrl, specifier))
   }
 
   const exists = options.fileExists ?? existsSync
-  const root = options.cwd.endsWith('/') ? options.cwd : `${options.cwd}/`
   for (const base of bases) {
-    if (!base.startsWith(root)) continue
+    if (!base.startsWith(project.root)) continue
     for (const candidate of candidatesFor(base)) {
       if (exists(candidate)) return candidate
     }
@@ -166,13 +200,22 @@ export interface ExtractableSelection {
  * virtual or transformed sources the native source map may need — see `auxiliary`.
  */
 export const selectExtractable = (files: readonly string[], options: ExtractableOptions): ExtractableSelection => {
+  // Every file is known here by its `/` spelling, as an edge names it (`localTargetOf`), and
+  // handed back by the caller's.
   const keep = new Set<string>()
   const importers = new Map<string, string[]>()
+  const cwd = trimmed(slash(options.cwd))
+  const project: Project = {
+    cwd,
+    root: cwd.endsWith('/') ? cwd : `${cwd}/`,
+    baseUrl: options.baseUrl === undefined ? undefined : resolveSlashed(cwd, options.baseUrl),
+  }
 
   for (const file of files) {
+    const key = slash(file)
     const text = options.readFile(file)
     if (text === undefined) {
-      keep.add(file)
+      keep.add(key)
       continue
     }
 
@@ -185,20 +228,21 @@ export const selectExtractable = (files: readonly string[], options: Extractable
     // `auxiliary` is built from the edges — and a file that names an entrypoint is exactly the
     // one likely to import a generated module the inventory never matched. Returning early here
     // left those edges unrecorded and `auxiliary` empty on the codebases that needed it most.
-    if (options.entrypoints.some((entrypoint) => text.includes(entrypoint))) keep.add(file)
+    if (options.entrypoints.some((entrypoint) => text.includes(entrypoint))) keep.add(key)
 
     const specifiers = scanSpecifiers(text)
     if (specifiers === undefined) {
-      keep.add(file)
+      keep.add(key)
       continue
     }
 
+    const directory = posix.dirname(key)
     for (const specifier of specifiers) {
-      const target = localTargetOf(specifier, file, options)
+      const target = localTargetOf(specifier, directory, options, project)
       if (!target) continue
       const seen = importers.get(target)
-      if (seen) seen.push(file)
-      else importers.set(target, [file])
+      if (seen) seen.push(key)
+      else importers.set(target, [key])
     }
   }
 
@@ -217,8 +261,8 @@ export const selectExtractable = (files: readonly string[], options: Extractable
 
   // Everything an edge pointed at that the inventory does not already hold. Ordered by first
   // sighting, so a build reads them in the order the walk would have asked for them.
-  const inventory = new Set(files)
+  const inventory = new Set(files.map(slash))
   const auxiliary = [...importers.keys()].filter((target) => !inventory.has(target))
 
-  return { auxiliary, extractable: files.filter((file) => keep.has(file)) }
+  return { auxiliary, extractable: files.filter((file) => keep.has(slash(file))) }
 }

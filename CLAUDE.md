@@ -210,18 +210,20 @@ pnpm build-fast               # Fast build without type definitions
 
 Perf-sensitive code has Vitest benchmarks in `{packages,sandbox}/*/__tests__/**/*.bench.ts`:
 
-| bench                                           | covers                                                        |
-| ----------------------------------------------- | ------------------------------------------------------------- |
-| `core/static-css-perf`, `static-css-real-world` | static css generation, up to `getCssRuleObjects`              |
-| `core/optimize-css`                             | the postcss pipeline after the sheet is built                 |
-| `core/encode-atomic`                            | encoding extracted `css()` calls, mixins written out included |
-| `core/prune`                                    | keyframe and token pruning                                    |
-| `core/sort-style-rules`                         | rule ordering                                                 |
-| `generator/css-fn`                              | the generated runtime, cached path                            |
-| `generator/css-fn-miss`                         | the uncached path; kept in its own file so ordering can't lie |
-| `native-extractor/analyze`                      | batched Rust parsing, analysis and compact result transfer    |
-| `shared/split-props`, `shared/leaf-class`       | runtime helpers on the per-render path                        |
-| `vite/fold`                                     | native analysis per module, and the JS fold on top of it      |
+| bench                                           | covers                                                          |
+| ----------------------------------------------- | --------------------------------------------------------------- |
+| `core/static-css-perf`, `static-css-real-world` | static css generation, up to `getCssRuleObjects`                |
+| `core/optimize-css`                             | the postcss pipeline after the sheet is built                   |
+| `core/encode-atomic`                            | encoding extracted `css()` calls, mixins written out included   |
+| `core/prune`                                    | keyframe and token pruning                                      |
+| `core/sort-style-rules`                         | rule ordering                                                   |
+| `generator/css-fn`                              | the generated runtime, cached path                              |
+| `generator/css-fn-miss`                         | the uncached path; kept in its own file so ordering can't lie   |
+| `native-extractor/analyze`                      | batched Rust parsing, analysis and compact result transfer      |
+| `node/source-glob`                              | the source glob every inventory scan runs                       |
+| `node/extractable-files`                        | which files a cold extraction pass parses (`selectExtractable`) |
+| `shared/split-props`, `shared/leaf-class`       | runtime helpers on the per-render path                          |
+| `vite/fold`                                     | native analysis per module, and the JS fold on top of it        |
 
 Nothing measures what the compiled output costs to _render_. `sandbox/runtime-perf/render.bench.ts` did, and went with
 `13ce729fc` — it drove the old `foldSource` signature over fixtures that commit deleted. Compilation now runs on every

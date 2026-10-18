@@ -173,7 +173,10 @@ test('excluded dependencies use virtual runtime bytes', async () => {
     fs: {
       ...ctx.runtime.fs,
       readFileSync: (filePath: string) =>
-        filePath === dependency ? `export const shared = { background: '#f00' }\n` : readFileSync(filePath),
+        // As the product spells it, `/` on Windows too.
+        filePath.replaceAll('\\', '/') === dependency.replaceAll('\\', '/')
+          ? `export const shared = { background: '#f00' }\n`
+          : readFileSync(filePath),
     },
   }
 
