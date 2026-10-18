@@ -7,7 +7,7 @@ import type { ImportMapOutput } from '@bamboocss/types'
 import { truncateList } from '@bamboocss/shared'
 import { markStaticCompilerActive } from '@bamboocss/node/static-compiler'
 import type { Plugin } from 'vite'
-import { asError, bamboocssCss, bamboocssCssEarly, VIRTUAL_CSS_ID } from './css'
+import { asError, bamboocssCss, bamboocssCssEarly, isStylesheetUrl, VIRTUAL_CSS_ID } from './css'
 import { extractedFileKey, normalizeFsPath } from './fs-path'
 import { bare } from './class-name'
 import { createCompilationHost, type CompilationGeneration } from './compilation-host'
@@ -617,7 +617,10 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
   }
 
   type EnvironmentContext = {
-    environment?: { name?: string; config?: { build?: { emitAssets?: boolean } } }
+    environment?: {
+      name?: string
+      config?: { consumer?: string; build?: { emitAssets?: boolean; ssr?: unknown } }
+    }
   }
   // The configured name is Vite's stable identity across hook contexts. Vite 5 has no
   // environment object and runs one graph, which deliberately shares the `default` state.
@@ -723,6 +726,18 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
   const outputStageByOptions = new WeakMap<object, { stage: OutputStage; epoch: number }>()
   const environmentOf = (context: unknown) => (context as EnvironmentContext).environment
   const environmentName = (context: unknown) => environmentOf(context)?.name ?? 'default'
+  /**
+   * Whether an environment's output runs in a browser or on a server, as Vite resolved it — off
+   * its `ssr` flag where there is no `consumer`, as on Vite 5, whose one config says it for the run.
+   */
+  const consumerOf = (context: unknown): 'client' | 'server' => {
+    const config = environmentOf(context)?.config
+    if (config?.consumer === 'client' || config?.consumer === 'server') return config.consumer
+    if (config?.build) return config.build.ssr ? 'server' : 'client'
+    return defaultConsumer
+  }
+  /** Each environment's consumer, as its last generation began, for a sibling's guard to read. */
+  const consumerByEnvironment = new Map<string, 'client' | 'server'>()
   const newEnvironmentState = (): EnvironmentTransformState => ({
     transformArtifactsByModule: new Map(),
     usedClassCounts: new Map(),
@@ -1124,7 +1139,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
   }
 
   /**
-   * What the live outputs' sheets pruned out: every environment's, or every one's but `except`'s.
+   * What the live outputs' sheets pruned out: every environment's, or those `counts` says.
    *
    * The loss history the guard reads, computed from the outputs whenever it is read and kept
    * nowhere. A set kept beside them was also the set a prune records into, and went stale where
@@ -1132,10 +1147,10 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
    * back a set still holding the sheet's provisional losses, which only that output being written
    * rebuilt — so the environment's next rebuild failed naming a class the sheet on disk holds.
    */
-  const livePrunedClasses = (except?: string) => {
+  const livePrunedClasses = (counts: (environment: string) => boolean = () => true) => {
     const pruned = new Set<string>()
     for (const [environment, slots] of liveOutputSlotsByEnvironment) {
-      if (environment === except) continue
+      if (!counts(environment)) continue
       for (const slot of slots.values()) {
         for (const className of slot.prunedClasses ?? []) pruned.add(className)
       }
@@ -1878,6 +1893,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
   let styleCompiler: StaticStyleSetCompiler | undefined
   let command: 'build' | 'serve' = 'build'
   let defaultEmitAssets = true
+  let defaultConsumer: 'client' | 'server' = 'client'
   let exitWarningInstalled = false
 
   /** Which context the published derivations below were built from. */
@@ -2141,6 +2157,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
       host.setCommand(config.command)
       host.setWatch(config.command === 'build' && config.build.watch != null)
       defaultEmitAssets = config.build?.emitAssets ?? (!config.build?.ssr || config.build?.ssrEmitAssets === true)
+      defaultConsumer = config.build?.ssr ? 'server' : 'client'
 
       // A sheet written for a run that never completes stays pruned against what the run knew when
       // it was written, without a rule only an environment that compiled after it reaches, and
@@ -2197,6 +2214,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
       // either graph has loaded; the fast environment must not run whole-run guards while the
       // other is paused here with `cssLoaded: false`.
       const environment = environmentName(this)
+      consumerByEnvironment.set(environment, consumerOf(this))
       const state = beginEnvironmentGeneration(environment)
 
       // Normalized here too. `ensureContext` loads and evaluates the user's config file and
@@ -2390,24 +2408,25 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
       try {
         replayCachedTransformArtifacts(this)
 
-        let currentWillEmitCss = false
         let writesOwnSheet = false
+        let linksOwnSheet = false
         if (typeof this.getModuleIds === 'function') {
+          const moduleIds = [...this.getModuleIds()]
           // `load` writes the shared flag, but only the finished module graph can attribute it to
           // an environment. Keep that ownership so a later partial rebuild can preserve a client
           // stylesheet while replacing SSR, or retract the client flag if its import disappears.
-          state.cssLoaded = [...this.getModuleIds()].some((id) => id.split('?')[0] === `\0${VIRTUAL_CSS_ID}`)
+          state.cssLoaded = moduleIds.some((id) => id.split('?')[0] === `\0${VIRTUAL_CSS_ID}`)
 
-          // A sheet this environment is about to emit supersedes its previous generation. Old
-          // prune history must not make a newly reachable class fail before generateBundle can
-          // restore its rule. An SSR graph may load CSS while Vite deliberately suppresses its
-          // assets, so use Vite's resolved per-environment decision rather than the `ssr` flag.
-          currentWillEmitCss = state.cssLoaded && (this.environment?.config?.build?.emitAssets ?? defaultEmitAssets)
-          // A sheet Vite writes all the same (`lateSheetEnvironments`) supersedes this
-          // environment's own, and no other: a class the client's sheet lost is still lost to the
-          // page that links it, whatever this one writes.
+          // A sheet this environment writes itself — one it emits, or one Vite writes all the same
+          // (`lateSheetEnvironments`) — supersedes the one it wrote last. An SSR graph may load CSS
+          // while Vite deliberately suppresses its assets, so use Vite's resolved per-environment
+          // decision rather than the `ssr` flag.
           writesOwnSheet =
-            state.cssLoaded && !currentWillEmitCss && staticSession.lateSheetEnvironments.has(environment)
+            state.cssLoaded &&
+            ((this.environment?.config?.build?.emitAssets ?? defaultEmitAssets) ||
+              staticSession.lateSheetEnvironments.has(environment))
+          // `?url`: what the markup links is this environment's own copy.
+          linksOwnSheet = moduleIds.some(isStylesheetUrl)
         }
 
         // This candidate is complete enough to judge, but is not published until every
@@ -2445,11 +2464,22 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
         // its output is what restores a rule this environment reached. The guard is for the runs that
         // have no finalization coming — an in-memory build, or one that never announced its
         // environments.
-        const pruned = livePrunedClasses(writesOwnSheet ? environment : undefined)
-        const lost =
-          currentWillEmitCss || staticSession.deferredSheets.length
-            ? []
-            : [...staticSession.usedClasses].filter((className) => pruned.has(bare(className)))
+        //
+        // A sheet this environment writes itself answers for nothing it lost before: the new one
+        // keeps every rule this generation reaches. A browser environment's is the sheet its pages
+        // load, so nothing is read for it. A server environment's is not, unless the markup links
+        // that copy through `?url`: its pages are styled by the browser environments' sheets, and
+        // a class one of those lost stays lost to them whatever this one writes — it passed, the
+        // page unstyled until the browser's environment built again.
+        const consumer = consumerByEnvironment.get(environment) ?? consumerOf(this)
+        const pruned = !writesOwnSheet
+          ? livePrunedClasses()
+          : consumer === 'client' || linksOwnSheet
+            ? new Set<string>()
+            : livePrunedClasses((other) => other !== environment && consumerByEnvironment.get(other) !== 'server')
+        const lost = staticSession.deferredSheets.length
+          ? []
+          : [...staticSession.usedClasses].filter((className) => pruned.has(bare(className)))
         if (lost.length) {
           throw new Error(
             `bamboocss: ${lost.length} class(es) in use as the ${JSON.stringify(environment)} environment finished ` +

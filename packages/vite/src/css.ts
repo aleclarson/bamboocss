@@ -47,6 +47,12 @@ const queryOf = (id: string) => {
 /** `?url`, tested the way Vite's asset plugin tests it — the plugin a dev server leaves it to. */
 const URL_QUERY = /(?:\?|&)url(?:&|$)/
 
+/** Whether a module id is the stylesheet asked for where it is served: `virtual:bamboo.css?url`. */
+export const isStylesheetUrl = (id: string) => {
+  const query = queryOf(id)
+  return id.slice(0, id.length - query.length) === RESOLVED_ID && URL_QUERY.test(query)
+}
+
 /** Whether some chunk of the bundle bundled the stylesheet module itself. */
 const bundleHoldsStylesheetModule = (bundle: object) =>
   Object.values(bundle).some(

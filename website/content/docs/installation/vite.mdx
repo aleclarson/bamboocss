@@ -307,8 +307,11 @@ stylesheet emitted by an earlier one, and elements carrying them would render un
 ```
 
 A watch rebuild ends the same way when an environment builds again after the sheet was pruned against its last output —
-rebuilt alone, or finishing first in a rebuild of every environment, before the one emitting the sheet writes a new one
-— unless the environment emits assets and imports the stylesheet itself, so the sheet it writes supersedes its last.
+rebuilt alone, or finishing first in a rebuild of every environment, before the one emitting the sheet writes a new one.
+A browser environment that imports the stylesheet itself is the exception, since the sheet it writes supersedes its
+last, and so is a server environment that links its own copy through `?url`. A server environment emitting a sheet of
+its own otherwise still answers for the browser environments' sheets, in every kind of run: those are what its pages
+link.
 
 Write the build's output and configure `builder` so the run announces itself, restart a watch the error came from, or
 set `pruneCss: false` to ship the whole extracted stylesheet. A run that declares an environment and never builds it is

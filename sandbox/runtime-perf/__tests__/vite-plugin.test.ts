@@ -1528,7 +1528,7 @@ const envSharedModule = join(cwd, 'src/__env-shared.tsx')
  * one environment configures. It is the signal the plugin reads to know the run has more
  * environments coming, so the omitting case is a test of its own below.
  */
-const twoEnvironmentBuilder = (announced: boolean) =>
+const twoEnvironmentBuilder = (announced: boolean, ssrBuild: Record<string, unknown> = {}) =>
   createBuilder({
     root: cwd,
     logLevel: 'silent',
@@ -1538,7 +1538,7 @@ const twoEnvironmentBuilder = (announced: boolean) =>
     ...(announced ? { builder: {} } : {}),
     environments: {
       client: { build: { lib: { entry: envClientEntry, formats: ['es'], fileName: 'env-client' } } },
-      ssr: { build: { ssr: true, lib: { entry: envSsrEntry, formats: ['es'], fileName: 'env-ssr' } } },
+      ssr: { build: { ssr: true, ...ssrBuild, lib: { entry: envSsrEntry, formats: ['es'], fileName: 'env-ssr' } } },
     },
   })
 
@@ -1728,6 +1728,12 @@ const runPartialEnvironmentWatchRebuild = async (
   create: (config: Record<string, unknown>) => Promise<unknown>,
   label: string,
   widths: { cachedSsr: string; freshClient: string; freshSsr: string },
+  /**
+   * Whether SSR imports the stylesheet and emits its assets, writing a sheet of its own. That sheet
+   * supersedes the one it wrote last and no other, so its rebuild fails on the client's losses as
+   * one writing none does: it passed, though the page links the client's sheet.
+   */
+  ssrEmitsSheet = false,
 ) => {
   const clientTrigger = join(cwd, `src/__partial-client-${label}.txt`)
   const ssrTrigger = join(cwd, `src/__partial-ssr-${label}.txt`)
@@ -1769,7 +1775,10 @@ const runPartialEnvironmentWatchRebuild = async (
   writeWatchTrigger(clientTrigger, 'first')
   writeWatchTrigger(ssrTrigger, 'first')
   writeFileSync(envClientEntry, `import 'virtual:bamboo.css'\nexport { className } from './__env-shared'\n`)
-  writeFileSync(envSsrEntry, `export { className } from './__env-shared'\n`)
+  writeFileSync(
+    envSsrEntry,
+    `${ssrEmitsSheet ? `import 'virtual:bamboo.css'\n` : ''}export { className } from './__env-shared'\n`,
+  )
   writeIsolatedBambooConfig(configPath, ['./src/__env-shared.tsx', './src/__env-client.tsx', './src/__env-ssr.tsx'])
   // Before the watchers start, so a late event for one of these writes cannot start a rebuild
   // the counts below would read as the edit's.
@@ -1798,6 +1807,7 @@ const runPartialEnvironmentWatchRebuild = async (
         build: {
           ssr: true,
           outDir: ssrOutDir,
+          ...(ssrEmitsSheet ? { emitAssets: true } : {}),
           lib: { entry: envSsrEntry, formats: ['es'], fileName: `partial-ssr-${label}` },
         },
       },
@@ -2339,7 +2349,10 @@ const runRejectedOutputWatchRebuild = async (
           lib: { entry: clientEntry, formats: ['es'], fileName: `output-transaction-client-${label}` },
         },
       },
+      // A second environment serving a sheet of its own, as a browser one does. Vite takes any
+      // environment but `client` for a server, whose markup the client's sheet styles.
       sibling: {
+        consumer: 'client',
         build: {
           emitAssets: true,
           outDir: siblingOutDir,
@@ -2532,6 +2545,7 @@ const runRejectedOutputWatchRebuild = async (
           },
         },
         sibling: {
+          consumer: 'client',
           build: {
             emitAssets: true,
             lib: { entry: siblingEntry, formats: ['es'], fileName: `output-transaction-memory-sibling-${label}` },
@@ -2762,6 +2776,7 @@ const runMixedOutputEpochWatchRebuild = async (
         },
       },
       sibling: {
+        consumer: 'client',
         build: {
           emitAssets: true,
           outDir: siblingOutDir,
@@ -2951,6 +2966,7 @@ const runMixedOutputEpochWatchRebuild = async (
           },
         },
         sibling: {
+          consumer: 'client',
           build: {
             emitAssets: true,
             lib: { entry: siblingEntry, formats: ['es'], fileName: `multi-output-clean-sibling-${label}` },
@@ -2981,6 +2997,7 @@ const runMixedOutputEpochWatchRebuild = async (
           },
         },
         sibling: {
+          consumer: 'client',
           build: {
             emitAssets: true,
             lib: { entry: siblingEntry, formats: ['es'], fileName: `multi-output-memory-sibling-${label}` },
@@ -3163,6 +3180,7 @@ const runRemovedLiveRuleWatchRebuild = async (
         },
       },
       sibling: {
+        consumer: 'client',
         build: {
           emitAssets: true,
           outDir: siblingOutDir,
@@ -3940,6 +3958,24 @@ export default defineConfig({
     )
   }, 180_000)
 
+  test('Vite 7 refuses an SSR rebuild emitting its own sheet for a class the client sheet lost', async () => {
+    await runPartialEnvironmentWatchRebuild(
+      (config) => createVite7Builder(config as Parameters<typeof createVite7Builder>[0]),
+      'vite7-emitting',
+      { cachedSsr: '47.811px', freshClient: '47.822px', freshSsr: '47.833px' },
+      true,
+    )
+  }, 180_000)
+
+  test('Vite 8 refuses an SSR rebuild emitting its own sheet for a class the client sheet lost', async () => {
+    await runPartialEnvironmentWatchRebuild(
+      (config) => createBuilder(config as Parameters<typeof createBuilder>[0]),
+      'vite8-emitting',
+      { cachedSsr: '48.911px', freshClient: '48.922px', freshSsr: '48.933px' },
+      true,
+    )
+  }, 180_000)
+
   test('Vite 7 keeps no first pruning past a client-first rebuild', async () => {
     await runClientFirstWatchRebuild(
       (config) => createVite7Builder(config as Parameters<typeof createVite7Builder>[0]),
@@ -4072,6 +4108,36 @@ export default defineConfig({
     const builder = await twoEnvironmentBuilder(true)
 
     await expect(buildBothEnvironments(builder)).rejects.toThrow(/already pruned out of a stylesheet/)
+  }, 180_000)
+
+  /**
+   * The same with an SSR environment that imports the stylesheet and emits its assets. The sheet
+   * it emits supersedes the one it emitted last, and no other: a page links the client's, which
+   * lost the server-only rules, so the build fails as it does when SSR discards its assets. It
+   * passed, the client's sheet shipping without them.
+   */
+  test('a class only an SSR environment emitting its own sheet reaches fails an in-memory build', async () => {
+    writeFileSync(envSsrEntry, `import 'virtual:bamboo.css'\n${readFileSync(envSsrEntry, 'utf8')}`)
+    const builder = await twoEnvironmentBuilder(true, { emitAssets: true })
+
+    const failure = await buildBothEnvironments(builder).then(
+      () => undefined,
+      (error: Error) => error.message,
+    )
+    expect(failure).toContain('already pruned out of a stylesheet')
+    expect(failure).toContain(esc('h_[31.3px]'))
+  }, 180_000)
+
+  /** Linked through `?url`, the sheet a page loads for SSR's markup is SSR's own, which holds its rules. */
+  test('an SSR environment linking its own copy of the sheet through ?url is not refused', async () => {
+    writeFileSync(
+      envSsrEntry,
+      `import href from 'virtual:bamboo.css?url'\nexport { href }\n${readFileSync(envSsrEntry, 'utf8')}`,
+    )
+    const builder = await twoEnvironmentBuilder(true, { emitAssets: true })
+
+    const css = await buildBothEnvironments(builder)
+    expect(css).toContain(esc('h_[31.3px]'))
   }, 180_000)
 
   /**
