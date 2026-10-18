@@ -70,6 +70,8 @@ export interface EmittedSheet {
   extracted?: string
   /** Escape-free classes its emission moved into chunk sheets of their own. */
   moved?: ReadonlySet<string>
+  /** Escape-free classes the prune it was written with removed, where its output recorded them. */
+  lost?: ReadonlySet<string>
   sourcemap?: StaticCompilationSession['sourcemap']
   /**
    * Environments whose output, written, it has to be pruned again against, in a watch: those
@@ -402,13 +404,15 @@ export const commitWrittenSheets = (
   session: StaticCompilationSession,
   written: { environment: string; dir?: string; files: readonly string[]; slot?: number },
   bundle: Record<string, { type: string; fileName: string; code?: string; source?: unknown }>,
+  /** What the output's prune removed from the sheets it carries. */
+  lost?: ReadonlySet<string>,
 ) => {
   const key = writtenOutputKey({ environment: written.environment, dir: written.dir ?? '', slot: written.slot })
   const files = new Set(written.files)
   const named = session.pendingSheets.get(written.environment) ?? []
   const emitted = named
     .filter((sheet) => !sheet.discarded && files.has(sheet.fileName))
-    .map(({ discarded: _discarded, ...sheet }) => ({ ...sheet, dir: written.dir }))
+    .map(({ discarded: _discarded, ...sheet }) => ({ ...sheet, dir: written.dir, lost }))
   // Moved to the end, so the sheet an output wrote last is the last one `emittedSheetFor` meets.
   session.emittedSheets.delete(key)
   if (emitted.length) session.emittedSheets.set(key, emitted)

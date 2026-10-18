@@ -1203,6 +1203,12 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     /** The bundle being generated as this runs, whose references are not on disk yet. */
     bundle?: object,
     sourcemap?: StaticCompilationSession['sourcemap'],
+    /**
+     * Whether a class live output names that the sheet's source has no rule for fails the run: so
+     * for a sheet pruned against the extraction that is current. One extracted rounds ago predates
+     * a class added since, which its own environment's next build answers for, not this prune.
+     */
+    validate = true,
   ) => {
     const { finalizeDeferredSheets } = await loadCssOutputModule()
 
@@ -1214,7 +1220,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
     try {
       finalized = finalizeDeferredSheets(sheets, staticSession, {
         prune: pruneCss,
-        requiredClasses: currentRequiredClasses(),
+        requiredClasses: validate ? currentRequiredClasses() : new Set(),
         outputs: staticSession.writtenOutputs,
         bundle,
         sourcemap,
@@ -1275,8 +1281,27 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
       if (settled) due.push(sheet)
     }
     if (!due.length) return
+    const { pruneStaticCss } = await loadCssOutputModule()
+
+    // Only a sheet a rule comes back to, pruned from its source as the run reaches it now. One it
+    // would only lose rules from, or none it can restore — a class added to what is extracted since
+    // its source was, which its own environment's next build writes — stays as it is on disk.
+    const restoring: Array<{ sheet: EmittedSheet; lost: Set<string> }> = []
+    for (const sheet of due) {
+      const outer = staticSession.prunedClasses
+      staticSession.prunedClasses = new Set()
+      let lost: Set<string>
+      try {
+        pruneStaticCss(sheet.extracted!, staticSession, { prune: pruneCss, requiredClasses: new Set() })
+      } finally {
+        lost = staticSession.prunedClasses
+        staticSession.prunedClasses = outer
+      }
+      if (!sheet.lost || [...sheet.lost].some((className) => !lost.has(className))) restoring.push({ sheet, lost })
+    }
+    if (!restoring.length) return
     await finalizeSheets(
-      due.map((sheet) => ({
+      restoring.map(({ sheet }) => ({
         environment: sheet.environment,
         dir: sheet.dir!,
         originalFileName: sheet.original,
@@ -1287,7 +1312,11 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
         moved: sheet.moved,
       })),
       'once the environments it awaited had settled',
+      undefined,
+      undefined,
+      false,
     )
+    for (const { sheet, lost } of restoring) sheet.lost = lost
   }
   /** `settleAwaiting` from a hook that cannot wait for it: a rollback, an output given up on. */
   const settleAwaitingLater = () => {
@@ -2188,7 +2217,12 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
       // Held in memory, the output has nothing to write: what it carries counts as it finishes
       // generating, for a copy another environment discards to take its name from.
       const files = Object.values(bundle as Record<string, { fileName: string }>).map((output) => output.fileName)
-      commitWrittenSheets(staticSession, { environment, files, slot: outputSlot }, bundle as never)
+      commitWrittenSheets(
+        staticSession,
+        { environment, files, slot: outputSlot },
+        bundle as never,
+        stage?.prunedClasses,
+      )
       publishPreparedOutput(environment, outputToken, outputSlot, false)
     }
     return Object.assign(
@@ -3018,7 +3052,8 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
           if (previous === -1) staticSession.writtenOutputs.push(written)
           else staticSession.writtenOutputs[previous] = written
           // The sheets it carries, and the discarded copies it links, are only now on disk.
-          commitWrittenSheets(staticSession, written, bundle as never)
+          const stage = outputStageByBundle.get(bundle) ?? outputStageByOptions.get(outputOptions)?.stage
+          commitWrittenSheets(staticSession, written, bundle as never, stage?.prunedClasses)
         }
 
         // Reaching any write hook proves the bundler has already replaced every file for this

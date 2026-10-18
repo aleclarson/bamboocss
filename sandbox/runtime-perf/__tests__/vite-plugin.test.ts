@@ -6,6 +6,7 @@ import {
   readFileSync,
   realpathSync,
   rmSync,
+  statSync,
   symlinkSync,
   writeFileSync,
 } from 'node:fs'
@@ -3428,6 +3429,7 @@ const runSiblingReplacementWatchRebuild = async (
       failSsr ? 'SSR replacement failed by a test plugin' : undefined,
     )
     await new Promise((settle) => setTimeout(settle, 800))
+    const clientBuilds = cyclesStartedBy(clientWatcher)
     if (shape === 'a class extracted before') {
       writeFileSync(serverOnly, `${server(widths.kept)}export { pruned } from './__sibling-unused-${label}'\n`)
     } else {
@@ -3441,9 +3443,16 @@ const runSiblingReplacementWatchRebuild = async (
     await watchersQuiet([clientWatcher, ssrWatcher])
 
     // Pruned again from source once SSR's replacement was settled, and renamed only if that
-    // restored a rule: one sheet either way.
-    expect(clientSheets()).toHaveLength(1)
-    const css = readOutputFiles(clientOutDir, '.css')
+    // restored a rule, the sheet it replaces gone: one sheet a client build. A watcher can see one
+    // write twice, and a second build's sheet is written beside the first's, as Vite leaves every
+    // asset of an output it does not empty; the newest is the one its output is.
+    const builds = clientBuilds()
+    expect(clientSheets().length).toBeGreaterThanOrEqual(1)
+    expect(clientSheets().length).toBeLessThanOrEqual(Math.max(builds, 1))
+    const css = clientSheets()
+      .map((file) => join(clientOutDir, file))
+      .sort((left, right) => statSync(right).mtimeMs - statSync(left).mtimeMs)
+      .map((path) => readFileSync(path, 'utf8'))[0]!
     if (shape === 'a failed replacement') {
       expect(ssrError?.message).toContain('SSR replacement failed by a test plugin')
       expect(css).not.toContain(widths.fresh)

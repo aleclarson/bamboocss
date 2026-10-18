@@ -438,6 +438,34 @@ describe('a watch round with a sibling replacing its output', () => {
     await finishSsr()
     expect(run.sheets('client')).toContain('.w_\\[84\\.2px\\]')
   })
+
+  /**
+   * The sheet SSR's guard stood aside for was extracted before SSR's class was: pruned again from
+   * that source, it can restore nothing for it, which the client's own build writes. Checked for a
+   * rule it cannot have, the prune failed SSR's write — in an output that did nothing wrong.
+   */
+  test("a sheet stood aside for, extracted before the class the sibling adds, does not fail the sibling's write", async () => {
+    const cwd = createProject()
+    const widths = { kept: '88.1px', added: '88.2px' }
+    const clientId = join(cwd, 'src/client.tsx')
+    const serverId = join(cwd, 'src/server.tsx')
+    writeFileSync(clientId, source(`'virtual:bamboo.css'`, widths.kept))
+    writeFileSync(serverId, source(false, widths.kept))
+    const run = await createRun(cwd, true, ['client', 'ssr'])
+    const clientModules = [{ id: clientId, code: source(`'virtual:bamboo.css'`, widths.kept) }]
+    await run.round(client, clientModules, { imports: 'sheet' })
+    await run.round(ssr, [{ id: serverId, code: source(false, widths.kept) }])
+
+    // The client starts replacing its output, and an edit adds a class only SSR's output names. The
+    // client's round read its sheet before the edit, and is refused for that class in its own output
+    // pass; the edit's own client round writes its rule.
+    const finishStaleClient = await run.start(client, clientModules, { imports: 'sheet' })
+    writeFileSync(serverId, source(false, widths.kept, widths.added))
+    await run.round(ssr, [{ id: serverId, code: source(false, widths.kept, widths.added) }])
+    await expect(finishStaleClient()).rejects.toThrow('NOT extracted')
+    await run.round(client, clientModules, { imports: 'sheet' })
+    expect(run.sheets('client')).toContain('.w_\\[88\\.2px\\]')
+  })
 })
 
 describe("a server's link to its discarded copy of the sheet", () => {
