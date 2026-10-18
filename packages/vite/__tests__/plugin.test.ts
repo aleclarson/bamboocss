@@ -1,9 +1,10 @@
 import { logger } from '@bamboocss/logger'
 import { isStaticCompilerActive } from '@bamboocss/node/static-compiler'
-import { rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, test, vi } from 'vitest'
+import { afterAll, describe, expect, test, vi } from 'vitest'
 import { VIRTUAL_CSS_ID } from '../src/css'
 import { bamboocss, compilerParsePath, describeRefusal, isGeneratedOutput, shouldTransform } from '../src/plugin'
 
@@ -402,7 +403,16 @@ describe('generated output', () => {
 })
 
 describe('compiler', () => {
-  const cwd = join(dirname(fileURLToPath(import.meta.url)), '../../../sandbox/codegen')
+  // A project of its own, outside the checkout: these tests write modules into its `src`, which
+  // written into the codegen sandbox's were globbed by `css.test.ts` running beside them. Real, as
+  // the plugin knows a file by where it really is (`/var` is a link on macOS).
+  const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'bamboo-compiler-')))
+  mkdirSync(join(cwd, 'src'))
+  writeFileSync(
+    join(cwd, 'bamboo.config.ts'),
+    `export default { include: ['./src/**/*.{js,jsx,ts,tsx}'], outdir: 'styled-system' }\n`,
+  )
+  afterAll(() => rmSync(cwd, { recursive: true, force: true }))
 
   const fold = async (options: Parameters<typeof bamboocss>[0], code: string, file: string) => {
     const plugin = plugins({ cwd, reportSummary: false, ...options }).fold
