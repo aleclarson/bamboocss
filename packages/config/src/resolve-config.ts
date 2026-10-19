@@ -90,6 +90,10 @@ export async function resolveConfig(result: BundleConfigResult, cwd: string): Pr
   const loadConfigResult = {
     ...result,
     config: mergedConfig as any,
+    // A preset named by path is bundled on its own, so its files are not the config bundle's. They
+    // are the config's all the same: whatever reloads on an edit to the config — a dev server, a
+    // watch, the MCP server — has to on an edit to one of them.
+    dependencies: [...new Set([...result.dependencies, ...externalPresets.flatMap((preset) => preset.dependencies)])],
   } as LoadConfigResult
 
   // This allows editing the config before the context is created
