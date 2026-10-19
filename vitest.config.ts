@@ -1,7 +1,10 @@
+import { fileURLToPath } from 'node:url'
 import { configDefaults, defineConfig } from 'vitest/config'
 import tsconfigPaths from 'vite-tsconfig-paths'
 
-const resolve = (val: string) => new URL(val, import.meta.url).pathname
+// A path, not a URL's: `pathname` is `/D:/a/…` on Windows, which resolved only through Vite's
+// root-relative fallback, and keeps a space in the checkout's path as `%20`, which resolved nowhere.
+const resolve = (val: string) => fileURLToPath(new URL(val, import.meta.url))
 
 // Packs the Vite and Node packages into a consumer, and first builds any of them whose `dist` has
 // no declarations — in a CI shard, where `prepare` only ran `build-fast`, that is every one. tsdown
