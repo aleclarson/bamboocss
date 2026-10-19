@@ -102,3 +102,86 @@ describe('analyze --unused', () => {
     expect((await unused(source, {}, ['recipes'])).recipes).toContain('cardStyle')
   })
 })
+
+/**
+ * The reports that speak of use say what `--unused` says. Counted from source alone, a token read
+ * only through a semantic token was reported unused, and one written only in a config recipe
+ * nothing calls was reported used — the opposite of what the build does with each. Keyframes
+ * reached through a semantic animation token read `usedCount: 0`, and an agent reading the
+ * report could delete them.
+ */
+describe('the usage reports agree with --unused', () => {
+  const analyzed = async (code: string, config: Config = {}) => {
+    const ctx = createContext({
+      ...config,
+      theme: {
+        tokens: {
+          colors: {
+            brand: { 500: { value: '#0a0' } },
+            accent: { 500: { value: '#00a' } },
+            spare: { 500: { value: '#a00' } },
+            recipeOnly: { 500: { value: '#aa0' } },
+            globalOnly: { 500: { value: '#0aa' } },
+          },
+          blurs: { idle: { value: '1px' } },
+          animations: { pulse: { value: 'pulse 2s infinite' } },
+        },
+        semanticTokens: {
+          colors: {
+            primary: { value: 'token(colors.brand.500)' },
+            secondary: { value: 'token(colors.accent.500)' },
+          },
+          animations: { motion: { value: { base: 'token(animations.pulse)', _dark: 'slide 1s, fade 1s' } } },
+        },
+        keyframes: {
+          pulse: { to: { opacity: 1 } },
+          slide: { to: { transform: 'none' } },
+          fade: { to: { opacity: 1 } },
+          idle: { to: { opacity: 0 } },
+        },
+        recipes: { ghost: { className: 'ghost', base: { color: 'recipeOnly.500' } } },
+      },
+      global: { css: { body: { color: 'globalOnly.500' } } },
+    } as Config) as any
+    ctx.project.addSourceFile('code.tsx', code)
+    ctx.getFiles = () => ['code.tsx']
+    return analyze(ctx)
+  }
+
+  const source = `
+    import { css } from 'styled-system/css'
+    export const a = css({ color: 'primary', bg: 'secondary', animation: 'motion' })
+  `
+
+  test('a token counts as used exactly when the build keeps it', async () => {
+    const result = await analyzed(source)
+    expect(result.getUnused(['tokens']).tokens).toEqual(['blurs.idle', 'colors.recipeOnly.500', 'colors.spare.500'])
+
+    const summary = result.getTokenReport('json').report.getSummary()
+    const colors = summary.find((entry) => entry.category === 'colors')!
+    // brand.500 and accent.500 through the semantic tokens, globalOnly.500 in global css, and the
+    // two semantic tokens; not recipeOnly.500, which only a recipe nothing calls writes.
+    expect(colors.usedCount).toBe(5)
+    // Still the names written directly.
+    expect([...colors.mostUsedNames].sort()).toEqual(['globalOnly.500', 'primary', 'recipeOnly.500', 'secondary'])
+  })
+
+  test('a category nothing names directly still has a row', async () => {
+    const summary = (await analyzed(source)).getTokenReport('json').report.getSummary()
+    expect(summary).toContainEqual(expect.objectContaining({ category: 'blurs', usedCount: 0 }))
+  })
+
+  test('keyframes reached through a semantic token are not unused, at a count of nothing', async () => {
+    const keyframes = (await analyzed(source)).getKeyframeReport()
+    for (const name of ['pulse', 'slide', 'fade']) {
+      expect(keyframes).toContainEqual(expect.objectContaining({ keyframe: name, unused: false }))
+    }
+    expect(keyframes).toContainEqual(expect.objectContaining({ keyframe: 'idle', usedCount: 0, unused: true }))
+  })
+
+  test('a pattern staticCss emits is not unused, at a count of nothing', async () => {
+    const patterns = (await analyzed(source, { staticCss: { patterns: { grid: ['*'] } } } as Config)).getPatternReport()
+    expect(patterns).toContainEqual(expect.objectContaining({ patternName: 'grid', usedCount: 0, unused: false }))
+    expect(patterns).toContainEqual(expect.objectContaining({ patternName: 'flex', usedCount: 0, unused: true }))
+  })
+})

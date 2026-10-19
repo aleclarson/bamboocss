@@ -75,8 +75,8 @@ describe('the usage report', () => {
   test('counts each pattern called, and lists the ones never called', async () => {
     const { patterns } = await usage('pattern')
 
-    expect(patterns).toContainEqual({ patternName: 'flex', usedCount: 1, usedInXFiles: 1 })
-    expect(patterns).toContainEqual(expect.objectContaining({ patternName: 'grid', usedCount: 0 }))
+    expect(patterns).toContainEqual({ patternName: 'flex', usedCount: 1, usedInXFiles: 1, unused: false })
+    expect(patterns).toContainEqual(expect.objectContaining({ patternName: 'grid', usedCount: 0, unused: true }))
   })
 
   // A value keyed by a condition is as much a use, and a shorthand is the property it stands for.
@@ -106,14 +106,27 @@ describe('the usage report', () => {
           ['bounce', 2],
           ['ping', 1],
           ['pulse', 1],
-        ].map(([keyframe, usedCount]) => ({ keyframe, usedCount, usedInXFiles: 1 })),
+        ].map(([keyframe, usedCount]) => ({ keyframe, usedCount, usedInXFiles: 1, unused: false })),
       ),
     )
-    expect(keyframes).toContainEqual({ keyframe: 'fade', usedCount: 0, usedInXFiles: 0 })
+    expect(keyframes).toContainEqual({ keyframe: 'fade', usedCount: 0, usedInXFiles: 0, unused: true })
+  })
+
+  /**
+   * The build's own answer, beside counts that see only direct uses: a token or keyframes reached
+   * through another token, a mixin or global css is used at a count of nothing, and an agent
+   * reading that count as unused deleted keyframes a semantic token still reached.
+   */
+  test('lists what the build keeps nothing for, of the kinds asked', async () => {
+    const { unused } = await usage('keyframe')
+
+    expect(Object.keys(unused)).toEqual(['keyframes'])
+    expect(unused.keyframes).toContain('fade')
+    for (const name of ['spin', 'bounce', 'ping', 'pulse']) expect(unused.keyframes).not.toContain(name)
   })
 
   // Recipes too, for a config that has any; this one does not.
   test('covers all of them by default', async () => {
-    expect(Object.keys(await usage()).sort()).toEqual(['keyframes', 'patterns', 'tokens', 'utilities'])
+    expect(Object.keys(await usage()).sort()).toEqual(['keyframes', 'patterns', 'tokens', 'unused', 'utilities'])
   })
 })

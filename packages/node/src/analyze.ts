@@ -52,121 +52,152 @@ export async function analyze(ctx: BambooContext, options: AnalysisOptions = {})
     return ctx.runtime.fs.writeFile(filePath, JSON.stringify(value, replacer, 2))
   }
 
+  /**
+   * The tokens and keyframes the build's own prune removes, worked out once and shared by every
+   * report that speaks of use, so none of them can call a name unused that `getUnused` does not,
+   * or the other way round.
+   *
+   * Run with every prune on, whatever the config says, so a name here is one the stylesheet ships
+   * without. Anything the prune keeps for a reader it cannot follow — a `token()` path built at
+   * runtime, a theme, a `keepTokens` pattern — is kept here too: being told a token is unused when
+   * something still asks for it is worse than not being told at all.
+   *
+   * Read off a sheet of its own. The prune's settings are laid over the context's while it is
+   * built, and `unresolvedPath` is off for it: that one only decides how loudly the prune says what
+   * it could not read, and a project that does not prune tokens never hears it.
+   */
+  let pruned: { tokens: string[]; keyframes: string[]; judged: Set<string> } | undefined
+  const prunedNames = () => {
+    if (pruned) return pruned
+
+    const prune = { ...ctx.config.prune, keyframes: true, unresolvedPath: 'off' as const }
+    if (prune.tokens === false) delete prune.tokens
+    const configured = ctx.config.prune
+    ctx.config.prune = prune
+    let sheet: ReturnType<typeof assembleExtractedSheet>
+    try {
+      sheet = assembleExtractedSheet(ctx, {
+        parserResults: parserResults as ParserResult[],
+        prunePreflight: false,
+      })
+    } finally {
+      ctx.config.prune = configured
+    }
+
+    const declared = new Set<string>()
+    const keyframes = new Set<string>()
+    sheet.layers.tokens.walkDecls((decl) => {
+      if (decl.prop.startsWith('--')) declared.add(decl.prop)
+    })
+    // As the name, which css may quote or escape: `"fade in"`, `fade\.in`.
+    sheet.layers.tokens.walkAtRules(/keyframes$/, (rule) => {
+      keyframes.add(
+        rule.params
+          .trim()
+          .replace(/^(["'])(.*)\1$/, '$2')
+          .replace(/\\(.)/g, '$1'),
+      )
+    })
+
+    const declarable = new Set<string>()
+    for (const vars of ctx.tokens.view.vars.values()) for (const name of vars.keys()) declarable.add(name)
+    const judged = new Set<string>()
+    const tokens: string[] = []
+    for (const token of ctx.tokens.allTokens) {
+      // Generated rather than configured: a palette's virtual tokens and a theme's, the negatives
+      // of a scale, and the tokens each breakpoint is written as, which a condition reads by value.
+      const { isVirtual, isNegative, category } = token.extensions
+      if (isVirtual || isNegative || category === 'breakpoints' || token.name.startsWith('sizes.breakpoint-')) continue
+      const name = token.extensions.var
+      if (!declarable.has(name)) continue
+      judged.add(token.name)
+      if (!declared.has(name)) tokens.push(token.name)
+    }
+
+    pruned = {
+      tokens: [...new Set(tokens)].sort(),
+      keyframes: Object.keys(ctx.config.theme?.keyframes ?? {})
+        .filter((name) => !keyframes.has(name))
+        .sort(),
+      judged,
+    }
+    return pruned
+  }
+
+  // Emitted for a consumer outside `include`, which no scan here can see calling them.
+  const { staticCss } = ctx.config
+  const emitted = (rules: unknown) => (name: string) =>
+    rules === '*' || (rules != null && typeof rules === 'object' && name in rules)
+
+  const unusedPatterns = () => {
+    const kept = emitted(staticCss?.patterns)
+    return reporter
+      .getPatternReport()
+      .filter((entry) => !entry.usedCount && !kept(entry.patternName))
+      .map((entry) => entry.patternName)
+      .sort()
+  }
+
+  /**
+   * The configured names no source uses, of the kinds asked for.
+   *
+   * Tokens and keyframes are what the build's own prune removes; see `prunedNames`. A recipe or a
+   * pattern is one no source calls and `staticCss` does not emit regardless.
+   */
+  const getUnused = (
+    kinds: ReadonlyArray<keyof UnusedNames> = ['tokens', 'recipes', 'patterns', 'keyframes'],
+  ): UnusedNames => {
+    const unused: UnusedNames = { tokens: [], recipes: [], patterns: [], keyframes: [] }
+
+    if (kinds.includes('tokens')) unused.tokens = prunedNames().tokens
+    if (kinds.includes('keyframes')) unused.keyframes = prunedNames().keyframes
+
+    if (kinds.includes('recipes')) {
+      const called = new Set(reporter.getRecipeReport().map((entry) => entry.recipeName))
+      const inConfig = emitted(staticCss?.recipes)
+      // And by its own `staticCss`, as a recipe's config can ask.
+      const { recipes = {}, slotRecipes = {} } = ctx.config.theme ?? {}
+      const ofItself = (name: string) => Boolean((recipes[name] ?? slotRecipes[name])?.staticCss?.length)
+      unused.recipes = [...ctx.recipes.keys]
+        .filter((name) => !called.has(name) && !inConfig(name) && !ofItself(name))
+        .sort()
+    }
+    if (kinds.includes('patterns')) unused.patterns = unusedPatterns()
+
+    return unused
+  }
+
   return {
     getRecipeReport(format: ReportFormat = 'table') {
       const report = reporter.getRecipeReport()
       return { report, formatted: formatRecipeReport(report, format) }
     },
+    /** Each category's tokens, counted as used exactly when the build keeps them. */
     getTokenReport(format: ReportFormat = 'table') {
-      const report = reporter.getTokenReport()
+      const { judged, tokens } = prunedNames()
+      const report = reporter.getTokenReport({ judged, unused: new Set(tokens) })
       return { report, formatted: formatTokenReport(report.getSummary(), format) }
     },
-    /** Every pattern the config defines, and how often each is called. */
-    getPatternReport: () => reporter.getPatternReport(),
+    /** Every pattern the config defines, how often each is called, and whether anything uses it. */
+    getPatternReport: () => {
+      const unused = new Set(unusedPatterns())
+      return reporter.getPatternReport().map((entry) => ({ ...entry, unused: unused.has(entry.patternName) }))
+    },
     /** Every style property written, and how often. */
     getUtilityReport: () => reporter.getUtilityReport(),
-    /** Every keyframe the theme defines, and how often an animation names it. */
-    getKeyframeReport: () => reporter.getKeyframeReport(),
-    /**
-     * The configured names no source uses, of the kinds asked for.
-     *
-     * Tokens and keyframes are what the build's own prune removes, run with every prune on
-     * whatever the config says, so a name here is one the stylesheet already ships without.
-     * Anything the prune keeps for a reader it cannot follow — a `token()` path built at runtime,
-     * a theme, a `keepTokens` pattern — is kept here too, and not listed: being told a token is
-     * unused when something still asks for it is worse than not being told at all. A recipe or a
-     * pattern is one no source calls and `staticCss` does not emit regardless.
-     *
-     * Read off a sheet of its own. The prune's settings are laid over the context's while it is
-     * built, and `unresolvedPath` is off for it: that one only decides how loudly the prune says
-     * what it could not read, and a project that does not prune tokens never hears it.
-     */
-    getUnused(kinds: ReadonlyArray<keyof UnusedNames> = ['tokens', 'recipes', 'patterns', 'keyframes']): UnusedNames {
-      const unused: UnusedNames = { tokens: [], recipes: [], patterns: [], keyframes: [] }
-
-      if (kinds.includes('tokens') || kinds.includes('keyframes')) {
-        const prune = { ...ctx.config.prune, keyframes: true, unresolvedPath: 'off' as const }
-        if (prune.tokens === false) delete prune.tokens
-        const configured = ctx.config.prune
-        ctx.config.prune = prune
-        let sheet: ReturnType<typeof assembleExtractedSheet>
-        try {
-          sheet = assembleExtractedSheet(ctx, {
-            parserResults: parserResults as ParserResult[],
-            prunePreflight: false,
-          })
-        } finally {
-          ctx.config.prune = configured
-        }
-
-        const declared = new Set<string>()
-        const keyframes = new Set<string>()
-        sheet.layers.tokens.walkDecls((decl) => {
-          if (decl.prop.startsWith('--')) declared.add(decl.prop)
-        })
-        // As the name, which css may quote or escape: `"fade in"`, `fade\.in`.
-        sheet.layers.tokens.walkAtRules(/keyframes$/, (rule) => {
-          keyframes.add(
-            rule.params
-              .trim()
-              .replace(/^(["'])(.*)\1$/, '$2')
-              .replace(/\\(.)/g, '$1'),
-          )
-        })
-
-        const declarable = new Set<string>()
-        for (const vars of ctx.tokens.view.vars.values()) for (const name of vars.keys()) declarable.add(name)
-        const tokens = new Set<string>()
-        for (const token of ctx.tokens.allTokens) {
-          // Generated rather than configured: a palette's virtual tokens and a theme's, the negatives
-          // of a scale, and the tokens each breakpoint is written as, which a condition reads by value.
-          const { isVirtual, isNegative, category } = token.extensions
-          if (isVirtual || isNegative || category === 'breakpoints' || token.name.startsWith('sizes.breakpoint-'))
-            continue
-          const name = token.extensions.var
-          if (declarable.has(name) && !declared.has(name)) tokens.add(token.name)
-        }
-
-        if (kinds.includes('tokens')) unused.tokens = [...tokens].sort()
-        if (kinds.includes('keyframes')) {
-          unused.keyframes = Object.keys(ctx.config.theme?.keyframes ?? {})
-            .filter((name) => !keyframes.has(name))
-            .sort()
-        }
-      }
-
-      // Emitted for a consumer outside `include`, which no scan here can see calling them.
-      const { staticCss } = ctx.config
-      const emitted = (rules: unknown) => (name: string) =>
-        rules === '*' || (rules != null && typeof rules === 'object' && name in rules)
-
-      if (kinds.includes('recipes')) {
-        const called = new Set(reporter.getRecipeReport().map((entry) => entry.recipeName))
-        const inConfig = emitted(staticCss?.recipes)
-        // And by its own `staticCss`, as a recipe's config can ask.
-        const { recipes = {}, slotRecipes = {} } = ctx.config.theme ?? {}
-        const ofItself = (name: string) => Boolean((recipes[name] ?? slotRecipes[name])?.staticCss?.length)
-        unused.recipes = [...ctx.recipes.keys]
-          .filter((name) => !called.has(name) && !inConfig(name) && !ofItself(name))
-          .sort()
-      }
-      if (kinds.includes('patterns')) {
-        const kept = emitted(staticCss?.patterns)
-        unused.patterns = reporter
-          .getPatternReport()
-          .filter((entry) => !entry.usedCount && !kept(entry.patternName))
-          .map((entry) => entry.patternName)
-          .sort()
-      }
-
-      return unused
+    /** Every keyframe the theme defines, how often an animation names it, and whether the build keeps it. */
+    getKeyframeReport: () => {
+      const unused = new Set(prunedNames().keyframes)
+      return reporter.getKeyframeReport().map((entry) => ({ ...entry, unused: unused.has(entry.keyframe) }))
     },
+    getUnused,
     /** The names as JSON, of the kinds `getUnused` was asked for. */
     writeUnused(filePath: string, unused: Partial<UnusedNames>) {
       return writeJson(filePath, unused)
     },
+    /** The extraction report, with what `getUnused` makes of it, so the file cannot be read as calling a kept name unused. */
     writeReport(filePath: string) {
-      return writeJson(filePath, reporter.report)
+      return writeJson(filePath, { ...reporter.report, unused: getUnused() })
     },
   }
 }

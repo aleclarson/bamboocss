@@ -11,9 +11,41 @@ const getPercent = (used: number, total: number) => {
   return Number(formatter.format((used / (total || 1)) * 100))
 }
 
-export function analyzeTokens(ctx: ParserOptions, result: AnalysisReport): TokenAnalysisReport {
+/**
+ * What the build's own prune makes of the configured tokens, so the report can agree with it.
+ *
+ * Counted from source alone, a token read only through a semantic token, another token's value,
+ * a mixin, `staticCss` or a `token()` call was reported unused, beside `analyze --unused` saying it
+ * was not; and one read only by a config recipe nothing calls was reported used, beside it saying
+ * it was.
+ */
+export interface TokenReachability {
+  /** The configured tokens the prune judges, by name: not a palette's virtual ones, nor a scale's negatives. */
+  judged: ReadonlySet<string>
+  /** Those of them it removes. */
+  unused: ReadonlySet<string>
+}
+
+export function analyzeTokens(
+  ctx: ParserOptions,
+  result: AnalysisReport,
+  reachability?: TokenReachability,
+): TokenAnalysisReport {
   const categoryMap = result.derived.globalMaps.byTokenType
   const categoryEntries = Array.from(categoryMap.entries())
+
+  // A category nothing names directly still has a row once the prune has an opinion about it:
+  // one read only through other tokens, and one that is entirely unused, which is the row an
+  // audit is looking for.
+  if (reachability) {
+    const listed = new Set(categoryMap.keys())
+    for (const name of reachability.judged) {
+      const category = name.slice(0, name.indexOf('.'))
+      if (listed.has(category)) continue
+      listed.add(category)
+      categoryEntries.push([category, new Set()])
+    }
+  }
 
   const usageMap: Map<string, TokenUsageItem[]> = new Map()
   const totalMap: Map<string, number> = new Map()
@@ -48,8 +80,16 @@ export function analyzeTokens(ctx: ParserOptions, result: AnalysisReport): Token
   const percentMap = usageEntries.reduce((map, [category, usage]) => {
     const total = totalMap.get(category) ?? 0
     const tokens = usage.reduce((acc, item) => {
-      return item.type === 'token' ? acc.add(item.value) : acc
+      // A configured token is the prune's to judge: written in a config recipe nothing calls is
+      // not a use, and read through another token is one.
+      return item.type === 'token' && !reachability?.judged.has(`${category}.${item.value}`) ? acc.add(item.value) : acc
     }, new Set<string>())
+    if (reachability) {
+      const prefix = `${category}.`
+      for (const name of reachability.judged) {
+        if (name.startsWith(prefix) && !reachability.unused.has(name)) tokens.add(name.slice(prefix.length))
+      }
+    }
 
     const percent = getPercent(tokens.size, total)
     return map.set(category, {

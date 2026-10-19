@@ -214,6 +214,11 @@ keyframe is listed when the build's own prune removes it, with every prune on wh
 is one the stylesheet already ships without. One the prune keeps for a reader it cannot follow — a `token()` path built
 at runtime, a theme, a [`keepTokens`](/docs/references/config#prune) pattern — is not listed.
 
+The token table agrees with that list: a token counts as used exactly when the build keeps it, so one read only through
+a semantic token, another token's value, a mixin or `global.css` is used, and one written only in a config recipe
+nothing calls is not. Its "Most used" column still ranks the names written directly. `--outfile` writes the same verdict
+beside the report, under `unused`.
+
 | Flag                   | Description                                                             | Related |
 | ---------------------- | ----------------------------------------------------------------------- | ------- |
 | `--outfile [filepath]` | Output analyze report in given JSON filepath                            | -       |

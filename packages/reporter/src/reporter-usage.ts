@@ -12,6 +12,11 @@ export interface PatternReportEntry {
   patternName: string
   usedCount: number
   usedInXFiles: number
+  /**
+   * Whether nothing uses it, `staticCss` included, which a count of calls cannot say: a pattern
+   * `staticCss` emits is used with no call at all. Set when the report is read through `analyze`.
+   */
+  unused?: boolean
 }
 
 export interface UtilityReportEntry {
@@ -26,9 +31,15 @@ export interface UtilityReportEntry {
 
 export interface KeyframeReportEntry {
   keyframe: string
-  /** How many `animation` and `animationName` values name it, directly or through a token. */
+  /** How many `animation` and `animationName` values name it, directly or through an `animations` token. */
   usedCount: number
   usedInXFiles: number
+  /**
+   * Whether the build's prune removes it, which a count of values cannot say: keyframes reached
+   * through a semantic token, a mixin or `global.css` are used at a count of nothing. Set when the
+   * report is read through `analyze`.
+   */
+  unused?: boolean
 }
 
 const byUse = <T extends { usedCount: number }>(entries: T[]) => entries.sort((a, b) => b.usedCount - a.usedCount)

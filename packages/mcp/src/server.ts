@@ -129,7 +129,7 @@ export function createMcpServer(options: CreateMcpServerOptions) {
     'get_usage_report',
     {
       description:
-        'Get a usage report of the design system across the codebase: design tokens, recipes, patterns, utilities and keyframes. Shows which are used and how often, and which are defined but unused. Useful for auditing, cleanup, and identifying dead code.',
+        'Get a usage report of the design system across the codebase: design tokens, recipes, patterns, utilities and keyframes. Shows which are used and how often, and which are defined but unused. Useful for auditing, cleanup, and identifying dead code. `unused` lists the names the build keeps nothing for, the ones safe to remove; a `usedCount` counts direct uses only, so a token or keyframes reached through another token, a mixin or global css can be used at a count of 0.',
       inputSchema: {
         scope: z
           .enum(['all', 'token', 'recipe', 'pattern', 'utility', 'keyframe'])
@@ -162,6 +162,17 @@ export function createMcpServer(options: CreateMcpServerOptions) {
       if (includes('keyframe')) {
         const keyframes = result.getKeyframeReport()
         if (keyframes.length) report.keyframes = keyframes
+      }
+
+      // The build's own answer, beside counts that only see direct uses. An agent reading
+      // `usedCount: 0` as unused deleted keyframes a semantic token still reached.
+      // Only the kinds asked for: an empty list under a kind nobody asked about reads as "none".
+      const kinds = (['tokens', 'recipes', 'patterns', 'keyframes'] as const).filter((kind) =>
+        includes(kind.slice(0, -1)),
+      )
+      if (kinds.length) {
+        const unused = result.getUnused(kinds)
+        report.unused = Object.fromEntries(kinds.map((kind) => [kind, unused[kind]]))
       }
 
       return json(report)

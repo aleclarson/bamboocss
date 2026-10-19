@@ -132,6 +132,10 @@ The `get_usage_report` tool is particularly useful for auditing your design syst
 recipe, pattern, utility and keyframe is used, lists the tokens, recipes, patterns and keyframes nothing uses, and finds
 missing definitions.
 
+The names under `unused` are the build's own answer, the ones the stylesheet ships without, and are what is safe to
+remove. A count can be 0 for something the build still keeps, such as keyframes reached through a semantic animation
+token or a mixin, so each pattern and keyframe entry also says `unused: true` or `false`.
+
 ## Generated Configuration
 
 When you run `bamboo init-mcp`, the following configuration is generated for each selected client:

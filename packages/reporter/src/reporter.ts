@@ -5,7 +5,7 @@ import type { AnalysisReport, ParserResultInterface } from '@bamboocss/types'
 import { version } from '../package.json'
 import { classifyProject } from './classify'
 import { analyzeRecipes, type RecipeReportEntry } from './reporter-recipe'
-import { analyzeTokens, type TokenAnalysisReport } from './reporter-token'
+import { analyzeTokens, type TokenAnalysisReport, type TokenReachability } from './reporter-token'
 import {
   analyzeKeyframes,
   analyzePatterns,
@@ -84,7 +84,9 @@ export class Reporter {
     }
   }
 
-  getTokenReport = (): TokenAnalysisReport => analyzeTokens(this.options.parserOptions, this.#report)
+  /** With the prune's verdict, a token counts as used exactly when the build keeps it. */
+  getTokenReport = (reachability?: TokenReachability): TokenAnalysisReport =>
+    analyzeTokens(this.options.parserOptions, this.#report, reachability)
 
   getRecipeReport = (): RecipeReportEntry[] => analyzeRecipes(this.options.parserOptions, this.#report)
 

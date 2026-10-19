@@ -1,5 +1,5 @@
 export * from './report-format'
 export * from './reporter'
 export type { RecipeReportEntry } from './reporter-recipe'
-export type { TokenAnalysisReport, TokenReportEntry } from './reporter-token'
+export type { TokenAnalysisReport, TokenReachability, TokenReportEntry } from './reporter-token'
 export type { KeyframeReportEntry, PatternReportEntry, UtilityReportEntry } from './reporter-usage'
