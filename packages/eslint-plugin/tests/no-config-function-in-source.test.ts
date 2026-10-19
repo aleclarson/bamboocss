@@ -42,6 +42,36 @@ eslintTester.run(RULE_NAME, rule, {
       ],
       filename: 'App.tsx',
     },
+    // Each config function, not only the ones the rule first knew.
+    ...['defineConditions', 'defineGlobalFontface', 'definePlugin', 'defineThemeVariant'].map((name) => ({
+      code: multiLine`
+        import { ${name} } from '@bamboocss/dev';
+        import { css } from './bamboo/css';
+
+        const value = ${name}({});
+
+        const styles = css({ color: 'red' });
+      `,
+      errors: [
+        {
+          messageId: 'configFunction' as const,
+          suggestions: [
+            {
+              messageId: 'delete' as const,
+              output: multiLine`
+            import {  } from '@bamboocss/dev';
+            import { css } from './bamboo/css';
+
+
+
+            const styles = css({ color: 'red' });
+          `,
+            },
+          ],
+        },
+      ],
+      filename: 'App.tsx',
+    })),
   ],
   valid: [
     {

@@ -6,16 +6,21 @@ import { type TSESTree } from '@typescript-eslint/utils'
 export const RULE_NAME = 'no-config-function-in-source'
 
 const CONFIG_FUNCTIONS = new Set([
+  'defineConditions',
   'defineConfig',
+  'defineGlobalFontface',
   'defineGlobalStyles',
   'defineKeyframes',
   'defineMixins',
   'definePattern',
+  'definePlugin',
   'definePreset',
   'defineRecipe',
   'defineSemanticTokens',
   'defineSlotRecipe',
   'defineStyles',
+  'defineThemeContract',
+  'defineThemeVariant',
   'defineTokens',
   'defineUtility',
 ])

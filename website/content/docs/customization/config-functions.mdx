@@ -152,6 +152,22 @@ export const keyframes = defineKeyframes({
 })
 ```
 
+### `defineConditions`
+
+Function for [conditions](/docs/customization/conditions) definitions, for a config or a preset to keep in a module of
+its own.
+
+```ts
+import { defineConditions } from '@bamboocss/dev'
+
+export const conditions = defineConditions({
+  extend: {
+    groupHover: '.group:is(:hover, [data-hover]) &',
+    highContrast: '@media (forced-colors: active)',
+  },
+})
+```
+
 ### `defineGlobalStyles`
 
 Function for [global styles](/docs/concepts/writing-styles#global-styles) definitions.

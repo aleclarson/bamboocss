@@ -2,6 +2,7 @@ import type {
   CompositionStyles,
   Config,
   CssKeyframes,
+  ExtendableConditions,
   GlobalFontface,
   GlobalStyleObject,
   HooksApiInterface,
@@ -49,6 +50,11 @@ export function definePreset(preset: Preset): Preset {
 
 export function defineKeyframes(keyframes: CssKeyframes) {
   return keyframes
+}
+
+/** The conditions of a config, or of a preset: `conditions: defineConditions({ dark: '.dark &' })`. */
+export function defineConditions(definition: ExtendableConditions) {
+  return definition
 }
 
 export function defineGlobalStyles(definition: GlobalStyleObject) {
@@ -109,6 +115,7 @@ export type {
   CompositionStyles,
   Config,
   CssKeyframes,
+  ExtendableConditions,
   GlobalStyleObject,
   HooksApiInterface,
   Mixins,
