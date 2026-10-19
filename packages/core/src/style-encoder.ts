@@ -2163,6 +2163,15 @@ export class StyleEncoder {
    * Normalize one inline registration and refresh same-name state only when this owner is
    * the sole holder of the previous config. Two live files cannot give one class name two
    * meanings, so that case is rejected instead of becoming traversal-order dependent.
+   *
+   * Two `cva`s writing the same variants in another order, or the same values of one variant in
+   * another order, are one recipe by name — the name is derived with keys sorted — and the build
+   * failed on them as a conflict, though both programs were valid. So where it used to throw,
+   * configs are compared without their key order: a second call in one owner is the recipe that
+   * owner already registered, and another owner joins the registration it finds. What the
+   * registration emits does not depend on that order, since its atoms are a set of declarations
+   * and a call's classes come from the call's own config. A sole owner reordering its own config
+   * still replaces it, as before.
    */
   private registerInlineRecipe = (
     name: string,
@@ -2173,12 +2182,15 @@ export class StyleEncoder {
     const scoped = this.activeScope?.inline_recipes?.get(name)
     if (
       scoped &&
-      (scoped.kind !== kind || !sameJson(scoped.config, config) || !sameJson(scoped.identitySlots, identitySlots))
+      (scoped.kind !== kind ||
+        !sameJsonIgnoringObjectOrder(scoped.config, config) ||
+        !sameJson(scoped.identitySlots, identitySlots))
     ) {
       throw new StyleContributionError(
         `inline recipe ${JSON.stringify(name)} has conflicting declarations in one owner`,
       )
     }
+    if (scoped) return
     if (Object.hasOwn(this.context.recipes.config, name)) {
       throw new StyleContributionError(`inline recipe ${JSON.stringify(name)} conflicts with a configured recipe`)
     }
@@ -2189,7 +2201,11 @@ export class StyleEncoder {
       return
     }
     if (changed && !this.canReplaceInlineRecipe(name, existing)) {
-      throw new StyleContributionError(`inline recipe ${JSON.stringify(name)} conflicts with another owner`)
+      if (!sameJsonIgnoringObjectOrder(existing, config)) {
+        throw new StyleContributionError(`inline recipe ${JSON.stringify(name)} conflicts with another owner`)
+      }
+      this.ownInlineRecipe(name, kind, config, identitySlots)
+      return
     }
 
     // Preparation runs the complete normalization against detached maps. A malformed config
@@ -2225,7 +2241,8 @@ export class StyleEncoder {
     if (!this.inlineRecipeRefs.hasOwner(name)) return true
     if (owner === null || !this.inlineRecipeRefs.isSoleOwner(name)) return false
     const previous = this.owners.get(owner)?.inline_recipes?.get(name)
-    return !!previous && sameJson(previous.config, existing)
+    // An owner that joined another's registration holds the recipe in its own key order.
+    return !!previous && sameJsonIgnoringObjectOrder(previous.config, existing)
   }
 
   /** Reconcile payloads whose key is stable even though an inline config changed. */
@@ -3062,7 +3079,10 @@ const sameJson = (left: unknown, right: unknown): boolean => {
   )
 }
 
-/** `viewTransitionClassName` sorts object keys recursively but preserves array/value order. */
+/**
+ * Equal as a name derived from the value sees it: object keys in any order, arrays and values in
+ * theirs. `viewTransitionClassName` and an inline recipe's name both sort keys that way.
+ */
 const sameJsonIgnoringObjectOrder = (left: unknown, right: unknown): boolean => {
   if (Object.is(left, right)) return true
   if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return false

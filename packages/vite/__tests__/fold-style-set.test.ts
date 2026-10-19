@@ -343,3 +343,104 @@ describe('a responsive or conditional selection', () => {
     expect(result.skipped).toEqual([])
   })
 })
+
+/**
+ * An inline recipe's name is a hash of its config with object keys sorted, so two configs writing
+ * the same variants in another order share one name. Registering the second compared the two
+ * configs key order and all, and failed the build as a conflict — `could not be extracted` — over
+ * two valid programs. The order does decide precedence between variants that set the same property,
+ * but each call's classes come from its own config, so it still does.
+ */
+describe('inline recipes that differ only in key order', () => {
+  const solidFirst = `cva({ variants: { visual: { solid: { padding: '1px' } }, size: { sm: { padding: '4px' } } } })`
+  const sizeFirst = `cva({ variants: { size: { sm: { padding: '4px' } }, visual: { solid: { padding: '1px' } } } })`
+
+  test('compile in one file, each call by its own config order', () => {
+    const fixture = createFoldFixture()
+    const result = fixture.foldStrict(`
+      import { cva } from 'styled-system/css'
+      const a = ${solidFirst}
+      const b = ${sizeFirst}
+      export const x = a({ visual: 'solid', size: 'sm' })
+      export const y = b({ visual: 'solid', size: 'sm' })
+    `)
+
+    // What the build asserts before it emits anything: the fold alone named the right classes
+    // while the stylesheet pass failed on the file.
+    expect(() => fixture.ctx.assertExtracted(fixture.ctx.parseFailures.keys())).not.toThrow()
+    expect(result.skipped).toEqual([])
+    expect(result.code).toContain('export const x = "p_4px"')
+    expect(result.code).toContain('export const y = "p_1px"')
+    const css = fixture.getStyleSetCss()
+    expect(css).toMatch(/\.p_1px \{\s*padding: 1px/)
+    expect(css).toMatch(/\.p_4px \{\s*padding: 4px/)
+  })
+
+  test('compile across two files', () => {
+    const fixture = createFoldFixture()
+    const first = fixture.foldStrict(
+      `
+      import { cva } from 'styled-system/css'
+      const a = ${solidFirst}
+      export const x = a({ visual: 'solid', size: 'sm' })
+    `,
+      'src/first.tsx',
+    )
+    const second = fixture.foldStrict(
+      `
+      import { cva } from 'styled-system/css'
+      const b = ${sizeFirst}
+      export const y = b({ visual: 'solid', size: 'sm' })
+    `,
+      'src/second.tsx',
+    )
+
+    expect(() => fixture.ctx.assertExtracted(fixture.ctx.parseFailures.keys())).not.toThrow()
+    expect(first.skipped).toEqual([])
+    expect(second.skipped).toEqual([])
+    expect(first.code).toContain('export const x = "p_4px"')
+    expect(second.code).toContain('export const y = "p_1px"')
+  })
+
+  // Key order aside, one name still has one meaning: a declared name with other styles is a conflict.
+  test('a different recipe under the same declared name still fails', () => {
+    const fixture = createFoldFixture()
+    fixture.foldStrict(
+      `
+      import { cva } from 'styled-system/css'
+      const a = cva({ className: 'btn', base: { color: 'red' } })
+      export const x = a()
+    `,
+      'src/first.tsx',
+    )
+    fixture.foldStrict(
+      `
+      import { cva } from 'styled-system/css'
+      const b = cva({ className: 'btn', base: { color: 'blue' } })
+      export const y = b()
+    `,
+      'src/second.tsx',
+    )
+
+    expect(() => fixture.ctx.assertExtracted(fixture.ctx.parseFailures.keys())).toThrowError(
+      /inline recipe "btn" conflicts with another owner/,
+    )
+  })
+
+  // Values of one variant are exclusive, so their order decides nothing at all.
+  test('compile when only the values of one variant are reordered', () => {
+    const fixture = createFoldFixture()
+    const result = fixture.foldStrict(`
+      import { cva } from 'styled-system/css'
+      const a = cva({ variants: { size: { sm: { padding: '4px' }, md: { padding: '8px' } } } })
+      const b = cva({ variants: { size: { md: { padding: '8px' }, sm: { padding: '4px' } } } })
+      export const x = a({ size: 'md' })
+      export const y = b({ size: 'sm' })
+    `)
+
+    expect(() => fixture.ctx.assertExtracted(fixture.ctx.parseFailures.keys())).not.toThrow()
+    expect(result.skipped).toEqual([])
+    expect(result.code).toContain('export const x = "p_8px"')
+    expect(result.code).toContain('export const y = "p_4px"')
+  })
+})
