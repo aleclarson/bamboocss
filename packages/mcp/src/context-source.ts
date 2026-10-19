@@ -30,7 +30,7 @@ export function createContextSource(load: () => Promise<BambooContext>): () => P
       const next = await load()
       ctx = next
       stamps = new Map(configFiles(next).map((file) => [file, before.get(file) ?? stampSince(file, started)]))
-      members = matched(next)
+      members = matchedSince(next, started)
       return next
     } finally {
       pending = undefined
@@ -38,7 +38,7 @@ export function createContextSource(load: () => Promise<BambooContext>): () => P
   }
 
   return async () => {
-    if (ctx && !changed(stamps) && matched(ctx) === members) return ctx
+    if (ctx && !changed(stamps) && matched(ctx)?.join('\n') === members) return ctx
     // One load for the calls that find the change together.
     return (pending ??= reload())
   }
@@ -79,5 +79,15 @@ const matched = (ctx: BambooContext) => {
     .glob({ include: dependencies, cwd })
     .map((file) => resolve(cwd, file))
     .sort()
-    .join('\n')
+}
+
+/**
+ * What `dependencies` matched once a load had finished, read as changed already when a match was
+ * written since the load began: one that appeared while it ran may be missing from what it read.
+ */
+const matchedSince = (ctx: BambooContext, started: number) => {
+  const files = matched(ctx)
+  if (!files) return undefined
+  const fresh = files.some((file) => (statSync(file, { throwIfNoEntry: false })?.mtimeMs ?? 0) >= started)
+  return fresh ? 'changed' : files.join('\n')
 }

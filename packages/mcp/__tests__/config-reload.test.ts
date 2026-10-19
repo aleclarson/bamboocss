@@ -157,6 +157,38 @@ export default { preflight: false, include: ['src/**/*.tsx'], outdir: 'styled-sy
     expect(await tokens()).toContain('beta')
   })
 
+  // Globbed once the load had finished, a match that appeared while it ran was recorded as seen.
+  test('a file that starts to match `dependencies` while a reload runs', async () => {
+    const { root, write } = project()
+    mkdirSync(join(root, 'tokens'))
+    write('tokens/a.json', JSON.stringify({ alpha: { value: '#111' } }))
+    write(
+      'bamboo.config.ts',
+      `import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+const dir = join(__dirname, 'tokens')
+const colors = Object.assign({}, ...readdirSync(dir).map((file) => JSON.parse(readFileSync(join(dir, file), 'utf8'))))
+export default { preflight: false, include: ['src/**/*.tsx'], outdir: 'styled-system', dependencies: ['tokens/*.json'], theme: { extend: { tokens: { colors } } } }
+`,
+    )
+    let duringLoad: (() => void) | undefined
+    const current = createContextSource(async () => {
+      const ctx = await loadConfigAndCreateContext({ cwd: root })
+      duringLoad?.()
+      duringLoad = undefined
+      return ctx
+    })
+    await current()
+
+    write('tokens/b.json', JSON.stringify({ beta: { value: '#222' } }))
+    // Written clearly before the reload starts, so only the file written during it is fresh.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    duringLoad = () => write('tokens/c.json', JSON.stringify({ gamma: { value: '#333' } }))
+    await current()
+    const after = await current()
+    expect(after.tokens.getByName('colors.gamma')).toBeDefined()
+  })
+
   // Stamped once the load had finished, an edit landing while it ran was recorded as seen.
   test('an edit that lands while a reload runs', async () => {
     const { root, write } = project()
