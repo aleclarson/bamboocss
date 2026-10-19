@@ -21,6 +21,7 @@ import type {
 import merge from 'lodash.merge'
 import type { RecipeNode } from './types'
 import { transformStyles, type SerializeContext } from './serialize'
+import type { UnresolvedTokenRef } from './utility'
 
 /** The slot every other slot nests inside, by convention. */
 const ROOT_SLOT = 'root'
@@ -72,6 +73,8 @@ export interface PreparedInlineRecipe {
   slotScopes: Map<string, Array<{ anchorVariantClasses: string[]; anchorClass: string; slotClass: string }>>
   compoundSelectors: Map<string, string[][]>
   keys: Set<string>
+  /** The unresolved tokens in its styles, kept as long as the registration. */
+  unresolvedTokens: Map<string, UnresolvedTokenRef>
 }
 
 const sharedState = {
@@ -142,6 +145,7 @@ export class Recipes {
     slots: new Map<string, Map<string, RecipeConfig>>(),
     slotScopes: new Map<string, Array<{ anchorVariantClasses: string[]; anchorClass: string; slotClass: string }>>(),
     compoundSelectors: new Map<string, string[][]>(),
+    unresolvedTokens: new Map<string, Map<string, UnresolvedTokenRef>>(),
   }
 
   private context!: SerializeContext
@@ -529,33 +533,40 @@ export class Recipes {
       compoundSelectors: new Map(),
     }
     let slots: Map<string, RecipeConfig> | undefined
-    if ('slots' in config && Array.isArray(config.slots) && config.slots.length > 0) {
-      const slotConfig = config as SlotRecipeDefinition
-      const anchors = Recipes.getScopeRoots(slotConfig)
-      const anchorClassNames = anchors.map((slot) => this.getSlotKey(slotConfig.className ?? name, slot))
-      slots = new Map<string, RecipeConfig>()
+    // Kept with the registration, and dropped with it when its last owner lets go or an edit
+    // replaces it, so a typo fixed in a `cva` stops failing the build. @see Utility.serializedUnresolvedTokens
+    const unresolvedTokens = new Map<string, UnresolvedTokenRef>()
+    const { utility } = this.context
+    utility.withinSerializedStyles(() => {
+      if ('slots' in config && Array.isArray(config.slots) && config.slots.length > 0) {
+        const slotConfig = config as SlotRecipeDefinition
+        const anchors = Recipes.getScopeRoots(slotConfig)
+        const anchorClassNames = anchors.map((slot) => this.getSlotKey(slotConfig.className ?? name, slot))
+        slots = new Map<string, RecipeConfig>()
 
-      // The identity has to be the className before the split. `getSlotRecipes` builds each
-      // slot's class as `className__slot`, and with no className that collapses to the bare
-      // slot name — `root` rather than `sva_hAcRla__root`, which would collide with every
-      // other anonymous recipe that happens to have a slot called `root`. The runtime's
-      // `sva` injects it the same way, for the same reason.
-      const withName = { ...slotConfig, className: slotConfig.className ?? name }
+        // The identity has to be the className before the split. `getSlotRecipes` builds each
+        // slot's class as `className__slot`, and with no className that collapses to the bare
+        // slot name — `root` rather than `sva_hAcRla__root`, which would collide with every
+        // other anonymous recipe that happens to have a slot called `root`. The runtime's
+        // `sva` injects it the same way, for the same reason.
+        const withName = { ...slotConfig, className: slotConfig.className ?? name }
 
-      Object.entries(getSlotRecipes(withName as SlotRecipeConfig)).forEach(([slot, slotRecipe]) => {
-        const slotName = this.getSlotKey(name, slot)
-        this.normalize(slotName, slotRecipe, anchors.includes(slot) ? [] : anchorClassNames, state)
-        slots!.set(slotName, slotRecipe)
-      })
-    } else {
-      this.normalize(name, config as RecipeConfig, undefined, state)
-    }
+        Object.entries(getSlotRecipes(withName as SlotRecipeConfig)).forEach(([slot, slotRecipe]) => {
+          const slotName = this.getSlotKey(name, slot)
+          this.normalize(slotName, slotRecipe, anchors.includes(slot) ? [] : anchorClassNames, state)
+          slots!.set(slotName, slotRecipe)
+        })
+      } else {
+        this.normalize(name, config as RecipeConfig, undefined, state)
+      }
+    }, unresolvedTokens)
 
     const prepared = {
       name,
       config,
       ...state,
       slots,
+      unresolvedTokens,
       keys: new Set([
         ...state.classNames.keys(),
         ...state.styles.keys(),
@@ -660,6 +671,7 @@ export class Recipes {
     else this.inlineState.slots.delete(name)
 
     this.inlineState.inlineConfigs.set(name, prepared.config)
+    this.inlineState.unresolvedTokens.set(name, prepared.unresolvedTokens)
     this.inlineState.inlineKeys.set(name, prepared.keys)
     prepared.keys.forEach((key) => this.inlineState.keyOwners.set(key, name))
     prepared.classNames.forEach((className) => this.inlineState.classOwners.set(className, name))
@@ -710,8 +722,14 @@ export class Recipes {
     })
     this.inlineState.inlineKeys.delete(name)
     this.inlineState.inlineConfigs.delete(name)
+    this.inlineState.unresolvedTokens.delete(name)
     this.inlineState.slots.delete(name)
     return true
+  };
+
+  /** The unresolved tokens in the inline recipes registered now. */
+  *inlineUnresolvedTokens(): Generator<[string, UnresolvedTokenRef]> {
+    for (const findings of this.inlineState.unresolvedTokens.values()) yield* findings
   }
 
   /**

@@ -531,3 +531,94 @@ describe('styles that never reach the decoder', () => {
     expect(error?.message).toMatch(/color: brand\.fg/)
   })
 })
+
+/**
+ * A finding lives as long as what holds it. Kept for the life of the context, one in a source
+ * `cva`, a `keyframes()` call or a view transition went on failing every rebuild of a dev server
+ * after the typo was fixed — and now that a `token()` reference fails the build by default, the
+ * reference too. Driven through the sheet a build ships, with recipes atomized.
+ */
+describe('a finding outlives nothing that held it', () => {
+  const shipped = (ctx: any) => () => {
+    ctx.parseFiles()
+    ctx.encoder.atomizeObservedRecipes()
+    const sheet = ctx.createSheet()
+    ctx.appendBaselineCss(sheet, { atomizeRecipes: true })
+    return ctx.getCss(sheet)
+  }
+
+  const fixedInSource = {
+    'a cva reference': `
+      import { cva } from 'styled-system/css'
+      const r = cva({ base: { border: '1px solid token(colors.nope)' } })
+      export const App = () => <div className={r()} />
+    `,
+    'a cva value': `
+      import { cva } from 'styled-system/css'
+      const r = cva({ base: { background: 'accent.default' } })
+      export const App = () => <div className={r()} />
+    `,
+    'an sva reference': `
+      import { sva } from 'styled-system/css'
+      const r = sva({ slots: ['root'], base: { root: { border: '1px solid token(colors.nope)' } } })
+      export const App = () => <div className={r().root} />
+    `,
+    'a keyframes() reference': `
+      import { css, keyframes } from 'styled-system/css'
+      const k = keyframes({ from: { color: 'token(colors.nope)' }, to: { color: 'red' } })
+      export const App = () => <div className={css({ animationName: k })} />
+    `,
+    'a view transition reference': `
+      import { viewTransition } from 'styled-system/css'
+      export const slide = viewTransition({ group: { border: '1px solid token(colors.nope)' } })
+    `,
+  }
+
+  for (const [name, broken] of Object.entries(fixedInSource)) {
+    test(`${name} fixed in the same context goes green on the next build`, () => {
+      const { ctx, write } = build(undefined, broken)
+      const run = shipped(ctx)
+
+      expect(() => run()).toThrow()
+      write(broken.replace('token(colors.nope)', 'token(colors.red.300)').replace('accent.default', 'red.300'))
+      expect(() => run()).not.toThrow()
+    })
+  }
+
+  // A mixin is config, and its styles are cached after the first use: a record kept by the sheet
+  // that first used it would lose the finding from every later build.
+  test('a mixin used from global css fails every rebuild', () => {
+    const { ctx } = build(undefined, styled('red.300'), {
+      theme: { extend: { mixins: { broken: { value: { border: '1px solid token(colors.nope)' } } } } },
+      global: { css: { body: { mixin: 'broken' } } },
+    })
+    const run = shipped(ctx)
+
+    for (let i = 0; i < 3; i++) expect(() => run()).toThrowError(/token\(colors\.nope\)/)
+  })
+
+  test('a config recipe fails every rebuild', () => {
+    const { ctx } = build(undefined, styled('red.300'), {
+      theme: { extend: { recipes: { card: { className: 'card', base: { border: '1px solid token(colors.nope)' } } } } },
+    })
+    const run = shipped(ctx)
+
+    for (let i = 0; i < 3; i++) expect(() => run()).toThrowError(/token\(colors\.nope\)/)
+  })
+
+  // The emitted-sheet check leaves a reference's own declaration to this one, and only that one.
+  test("a reference does not hide another declaration's grammar warning", () => {
+    const spy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const { run } = build(
+      'warn',
+      `
+      import { css } from 'styled-system/css'
+      export const A = () => <div className={css({ border: '1px solid token(red)' })} />
+      export const B = () => <div className={css({ border: '2px dashd red' })} />
+    `,
+    )
+
+    run()
+    expect(messages(spy)).toMatch(/dashd/)
+  })
+})

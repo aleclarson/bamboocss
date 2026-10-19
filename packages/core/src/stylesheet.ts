@@ -26,6 +26,7 @@ import {
 import { stringify } from './stringify'
 import type { StyleDecoder } from './style-decoder'
 import type { CssOptions, LayerName, ProcessOptions, StylesheetContext } from './types'
+import type { UnresolvedTokenRef } from './utility'
 import { findInvalidDeclarations, type InvalidDeclaration } from './validate-declarations'
 
 /**
@@ -90,6 +91,13 @@ export class Stylesheet {
    */
   invalidDeclarations: InvalidDeclaration[] = []
 
+  /**
+   * The unresolved tokens in what this sheet serialized: its reset, global css, keyframes and view
+   * transitions, transformed afresh for each sheet. Read by `Generator.getCss` with the sheet, so
+   * one fixed in source is gone from the next. @see Utility.serializedUnresolvedTokens
+   */
+  unresolvedTokens = new Map<string, UnresolvedTokenRef>()
+
   get layers() {
     return this.context.layers
   }
@@ -120,7 +128,10 @@ export class Stylesheet {
   }
 
   serialize = (styles: Dict) => {
-    return serializeStyles(this.context, styles)
+    return this.context.utility.withinSerializedStyles(
+      () => serializeStyles(this.context, styles),
+      this.unresolvedTokens,
+    )
   }
 
   processResetCss = (styles: Dict) => {

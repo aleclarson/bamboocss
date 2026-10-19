@@ -390,6 +390,17 @@ export const isInJSXProp = (node: TSESTree.Property, context: RuleContext<any, a
   return true
 }
 
+/**
+ * Whether a key sits in a bamboo call or a bamboo JSX prop at all — `isBambooAttribute` without
+ * asking what the key is. Answered from the tree and the file's imports, so a rule can ask it of
+ * every key before anything costs a worker call.
+ */
+export const isInBambooStyle = (node: TSESTree.Property, context: RuleContext<any, any>) => {
+  return getAncestor(isCallExpression, node)
+    ? Boolean(isInBambooFunction(node, context))
+    : Boolean(isInJSXProp(node, context))
+}
+
 /** A property key as written, when it is a name rather than a computed expression. */
 const getKeyName = (key: TSESTree.Property['key']) => {
   if (isIdentifier(key)) return key.name

@@ -149,11 +149,12 @@ const filterDeprecatedTokens = (context: Generator, tokens: DeprecatedToken[]): 
 }
 
 /**
- * The `token()` paths that name no token, by the build's own resolution, so the squiggle and the
- * build agree about a colour's opacity — `token(colors.red.300/50)` — as about everything else.
+ * The `token()` paths the build would not take, by its own resolution, so the squiggle and the
+ * build agree about a colour's opacity — `token(colors.red.300/50)` resolves, `/hlaf` does not —
+ * as about everything else.
  */
 const filterInvalidTokens = (context: Generator, paths: string[]): string[] => {
-  return paths.filter((path) => !context.utility.tokens.resolvesReference(path.trim()))
+  return paths.filter((path) => !context.utility.tokens.isValidReference(path.trim()))
 }
 
 /** Whether a key is a condition, `base` included, rather than a property. */

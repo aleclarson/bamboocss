@@ -6,6 +6,7 @@ import {
   getTaggedTemplateCaller,
   isBambooAttribute,
   isBambooProp as isBambooProperty,
+  isInBambooStyle,
   isRecipeVariant,
   isStyledTaggedTemplate,
 } from '../utils/helpers'
@@ -95,7 +96,11 @@ const rule = createRule({
       },
 
       Property(node: TSESTree.Property) {
-        if (!isNodeOfTypes([AST_NODE_TYPES.Literal, AST_NODE_TYPES.TemplateLiteral])(node.value)) {
+        // The tree first: this runs for every key in every file, and most are nothing of bamboo's.
+        if (
+          !isNodeOfTypes([AST_NODE_TYPES.Literal, AST_NODE_TYPES.TemplateLiteral])(node.value) ||
+          !isInBambooStyle(node, context)
+        ) {
           return
         }
 

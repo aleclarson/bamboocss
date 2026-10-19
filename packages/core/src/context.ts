@@ -323,8 +323,14 @@ export class Context {
         layer: 'compositions',
         className: key,
         values: Object.keys(flatValues),
+        // Into the context's own record whatever is being serialized when a mixin is first used:
+        // it is config, and its styles are cached by value after that first use, so a sheet that
+        // kept the finding would lose it from every later build.
         transform: (value) => {
-          return transformStyles(stylesheetCtx, flatValues[value], key + '.' + value)
+          return this.utility.withinSerializedStyles(
+            () => transformStyles(stylesheetCtx, flatValues[value], key + '.' + value),
+            this.utility.serializedUnresolvedTokens,
+          )
         },
       }
 

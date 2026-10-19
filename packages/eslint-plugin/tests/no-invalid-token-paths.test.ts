@@ -87,6 +87,15 @@ eslintTester.run(RULE_NAME, rule, {
       errors: [{ messageId: 'noInvalidTokenPaths' }],
     },
 
+    // An opacity the build cannot read fails it, so the rule says so, as it does of the colour.
+    {
+      code: multiline`
+  import { css } from './bamboo/css';
+
+  const styles = css({ color: 'token(colors.red.300/hlaf)' })`,
+      errors: [{ messageId: 'noInvalidTokenPaths' }],
+    },
+
     // A value under a condition is judged against the property holding it, not the condition.
     {
       code: multiline`

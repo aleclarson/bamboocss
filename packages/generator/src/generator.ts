@@ -393,7 +393,7 @@ export class Generator extends Context {
       css = this.hooks['cssgen:done']({ artifact: 'styles.css', content: css }) ?? css
     }
 
-    this.assertNoUnresolvedTokens()
+    this.assertNoUnresolvedTokens(sheet)
     this.reportRawValues()
     this.reportInvalidDeclarations(sheet)
 
@@ -512,11 +512,15 @@ export class Generator extends Context {
   /** The raw values `warn` has already reported, keyed `property:value`, for the life of the context. */
   private reportedRawValues = new Set<string>()
 
-  assertNoUnresolvedTokens = () => {
+  assertNoUnresolvedTokens = (sheet?: Stylesheet) => {
     const severity = this.utility.unresolvedToken
     if (severity.token !== 'error' && severity.grammar !== 'error') return
 
+    // Each kept as long as what holds it: the config for the context, the sheet's own serialized
+    // styles, the inline recipes registered now. @see Utility.serializedUnresolvedTokens
     const found = new Map<string, UnresolvedTokenRef>(this.utility.serializedUnresolvedTokens)
+    if (sheet) for (const [id, ref] of sheet.unresolvedTokens) found.set(id, ref)
+    for (const [id, ref] of this.recipes.inlineUnresolvedTokens()) found.set(id, ref)
 
     for (const atom of this.decoder.atomic) {
       const { prop, value } = atom.entry
@@ -591,29 +595,16 @@ export class Generator extends Context {
     if (severity === 'off') return
 
     const owned = new Set<string>()
-    // A reference is not the whole value, so it owns any declaration of its property holding the
-    // text it was written into the css as: `1px solid colors\.nope`.
-    const references = new Map<string, string[]>()
     for (const ref of this.utility.unresolvedTokens.values()) {
-      const property = this.utility.cssPropertyOf(ref.prop)
-      if (!ref.reference) {
-        owned.add(`${property}:${ref.value}`)
-        continue
-      }
-      const slash = ref.value.indexOf('/')
-      const paths = references.get(property) ?? []
-      paths.push(slash === -1 ? ref.value : ref.value.slice(0, slash))
-      references.set(property, paths)
+      // A reference owns the declaration it was written into, which is not the path alone:
+      // `1px solid colors\.nope`. Exactly that one, since text shared with another declaration
+      // is no evidence the two are one mistake.
+      const value = ref.reference ? ref.emitted : ref.value
+      if (value !== undefined) owned.add(`${this.utility.cssPropertyOf(ref.prop)}:${value}`)
     }
 
     const id = (finding: InvalidDeclaration) => `${finding.prop}:${finding.value}`
-    const referenced = (finding: InvalidDeclaration) => {
-      const paths = references.get(finding.prop)
-      if (!paths) return false
-      const text = finding.value.replaceAll('\\', '')
-      return paths.some((path) => text.includes(path))
-    }
-    const findings = sheet.invalidDeclarations.filter((finding) => !owned.has(id(finding)) && !referenced(finding))
+    const findings = sheet.invalidDeclarations.filter((finding) => !owned.has(id(finding)))
     if (!findings.length) return
 
     const describe = ({ prop, value, selector, layer, count }: InvalidDeclaration) => {

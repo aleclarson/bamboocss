@@ -111,6 +111,11 @@ export interface UnresolvedTokenRef {
   reference?: true
   /** For a reference, the paths that do resolve one slip away: the category left out or misspelled. */
   suggestions?: string[]
+  /**
+   * For a reference, the value as it reaches the declaration, reference written in as text, so
+   * the emitted-sheet check can leave exactly that declaration to this one.
+   */
+  emitted?: string
 }
 
 const NO_FINDINGS: ReadonlyArray<[string, UnresolvedTokenRef]> = []
@@ -844,32 +849,37 @@ export class Utility {
   unresolvedTokens = new Map<string, UnresolvedTokenRef>()
 
   /**
-   * The findings in styles serialized through `transformStyles`: the half of what
-   * `unresolvedToken: 'error'` fails on that the finished sheet cannot show.
+   * The findings in config-derived styles, transformed once for the life of the context: the
+   * half of what `unresolvedToken: 'error'` fails on that the finished sheet cannot show.
    *
-   * `globalCss`, the reset, config recipes, mixins, view transitions and `keyframes()` stops all
-   * decode into a *clone* of the decoder, so nothing they contain ever reaches `decoder.atomic`,
-   * and transforming them is the only moment they are visible. Most of them are transformed
-   * once, when the context is built, so a record cleared per build would report them on the
-   * first build and pass every build after it. A config edit builds a whole new context, so
-   * nothing config-derived outlives the config it describes. A view transition or a
-   * `keyframes()` call fixed in source does stay recorded until the process restarts.
+   * Config recipes and mixins decode into a *clone* of the decoder, so nothing they contain ever
+   * reaches `decoder.atomic`, and transforming them is the only moment they are visible. They are
+   * transformed once, a mixin then cached by value, so a record cleared per build would report them
+   * on the first build and pass every build after it. A config edit builds a whole new context, so
+   * nothing here outlives the config it describes.
    *
-   * Source styles are kept out of this on purpose. `decoder.atomic` is what the sheet is built
-   * from, so the error pass reads them off it, statelessly, on every build.
+   * Everything else keeps its findings as long as what holds them: a sheet, for the reset, global
+   * css, keyframes and view transitions it serializes afresh each build; an inline recipe, for its
+   * registration; and source styles none at all, since `decoder.atomic` is what the sheet is built
+   * from and the error pass reads them off it. Recording those here too kept a typo fixed in a
+   * `cva` failing every rebuild until the process restarted.
    */
   serializedUnresolvedTokens = new Map<string, UnresolvedTokenRef>()
 
-  /** How deep inside `transformStyles` the current transform is. @see serializedUnresolvedTokens */
-  private serializing = 0
+  /** Where the styles being serialized keep their findings, innermost last. */
+  private sinks: Array<Map<string, UnresolvedTokenRef>> = []
 
-  /** Run `transform` calls as part of a serialized style, so their findings are kept. */
-  withinSerializedStyles = <T>(fn: () => T): T => {
-    this.serializing++
+  /**
+   * Run `transform` calls as part of a serialized style, keeping their findings in `sink`: one
+   * with the lifetime of what is being serialized, or, without one, wherever the serialization
+   * this one is nested in keeps them, and `serializedUnresolvedTokens` outside any.
+   */
+  withinSerializedStyles = <T>(fn: () => T, sink?: Map<string, UnresolvedTokenRef>): T => {
+    this.sinks.push(sink ?? this.sinks[this.sinks.length - 1] ?? this.serializedUnresolvedTokens)
     try {
       return fn()
     } finally {
-      this.serializing--
+      this.sinks.pop()
     }
   }
 
@@ -1074,8 +1084,9 @@ export class Utility {
     const found = fallbackValues ? this.unresolvedIn(key, fallbackValues) : this.unresolvedInValue(key, value)
     if (found === NO_FINDINGS) return
 
+    const sink = this.sinks[this.sinks.length - 1]
     for (const [id, ref] of found) {
-      if (this.serializing) this.serializedUnresolvedTokens.set(id, ref)
+      sink?.set(id, ref)
       if (this.unresolvedTokens.has(id)) continue
       this.unresolvedTokens.set(id, ref)
 
@@ -1126,7 +1137,7 @@ export class Utility {
 
     if (value.includes('token(')) {
       for (const path of this.tokens.unresolvedReferences(value)) {
-        ;(found ??= []).push([`${key}:token(${path})`, this.unresolvedReferenceRef(key, path)])
+        ;(found ??= []).push([`${key}:token(${path})`, this.unresolvedReferenceRef(key, path, value)])
       }
     }
 
@@ -1206,7 +1217,7 @@ export class Utility {
    * alone: `color: 'red.300'` but `border: '1px solid token(colors.red.300)'`. Writing the
    * reference the bare way, or misspelling its category, are the slips worth naming.
    */
-  unresolvedReferenceRef = (key: string, path: string): UnresolvedTokenRef => {
+  unresolvedReferenceRef = (key: string, path: string, written?: string): UnresolvedTokenRef => {
     // A colour's opacity rides along, and the colour is what has to resolve.
     const slash = path.indexOf('/')
     const name = slash === -1 ? path : path.slice(0, slash)
@@ -1224,12 +1235,20 @@ export class Utility {
       }
     }
 
+    // What the transform hands on. A value that cannot be expanded at all throws in the transform
+    // itself, with its own message, so there is no declaration to speak for.
+    let emitted: unknown
+    try {
+      emitted = written === undefined ? undefined : this.resolveStyleValue(written)
+    } catch {}
+
     return {
       prop: key,
       value: path,
       kind: 'token',
       reference: true,
       ...(suggestions.size ? { suggestions: [...suggestions].slice(0, 2) } : {}),
+      ...(isString(emitted) ? { emitted } : {}),
     }
   }
 

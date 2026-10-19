@@ -521,6 +521,16 @@ export class TokenDictionary {
   }
 
   /**
+   * Whether `expandReferenceInValue` takes a `token()` path without complaint: it resolves, and a
+   * colour's opacity is a number or an `opacity` token, which `colorMix` fails the build on
+   * otherwise. For a lint rule, which has nothing else to say it.
+   */
+  isValidReference(path: string) {
+    if (!this.resolvesReference(path)) return false
+    return !path.includes('/') || !this.colorMix(path, this.view.getVar.bind(this.view)).invalid
+  }
+
+  /**
    * The `token()` paths in a value that name no token.
    *
    * `expandReferenceInValue` writes each one into the css as the escaped path, so
