@@ -39,33 +39,50 @@ export const artifactsGenerated = (ctx: Pick<Context, 'config' | 'recipes' | 'pa
       .join('\n')
 }
 
+/** `cmd` runs a package's binary in the project's package manager: `npx`, `pnpm`, `yarn` or `bun`. */
 export const configExists = (cmd: string) => outdent`
       \n
-      It looks like you already have bamboo created\`.
+      A Bamboo config already exists here, so init left it as it is.
 
-      You can now run ${quote(cmd, ' bamboo --watch')}.
+      To replace it with a new one, run ${quote(cmd, ' bamboo init --force')}.
 
       `
 
 export const thankYou = () => outdent`
 
-  🚀 Thanks for choosing ${colors.cyan('Bamboo')})} to write your css.
+  🚀 Thanks for choosing ${colors.cyan('Bamboo')} to write your css.
 
   You are set up to start using Bamboo!
 
   `
 
+/**
+ * What a project needs after `bamboo init`, which is the Vite setup: the plugin is what compiles
+ * and emits the styles, and the stylesheet declares its own layers, so there is no `@layer`
+ * statement to write.
+ */
 export const codegenComplete = () =>
   outdent`
 
   ${colors.bold().cyan('Next steps:')}
 
-  [1] Create a ${quote('index.css')} file in your project that contains:
+  [1] Add the plugin to your Vite config:
 
-      @layer reset, base, tokens, recipes, utilities;
+      import bamboocss from '@bamboocss/vite'
 
+      plugins: [bamboocss()]
 
-  [2] Import the ${quote('index.css')} file at the root of your project.
+  [2] Import the stylesheet once, from your entry module:
+
+      import 'virtual:bamboo.css'
+
+      With TypeScript, reference its types beside vite/client:
+
+      /// <reference types="@bamboocss/vite/client" />
+
+  [3] Add ${quote('"prepare": "bamboo codegen"')} to your package.json scripts.
+
+  See https://bamboocss.com/docs/installation/vite
 
   `
 

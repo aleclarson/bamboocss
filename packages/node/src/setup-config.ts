@@ -30,16 +30,16 @@ export async function setupConfig(cwd: string, opts: SetupOptions = {}) {
   const { detect } = await import('package-manager-detector')
   const pmResult = await detect({ cwd })
   const pm = (pmResult?.agent ?? 'npm').split('@')[0]
-  const cmd = pm === 'npm' ? 'npm run' : pm
+  // What runs a package's binary: `npx bamboo`, and `pnpm bamboo`, `yarn bamboo`, `bun bamboo`.
+  const cmd = pm === 'npm' ? 'npx' : pm
 
   const isTs = lookItUpSync('tsconfig.json', cwd)
   const file = isTs ? 'bamboo.config.ts' : 'bamboo.config.mjs'
 
-  logger.info('init:config', `creating bamboo config file: ${quote(file)}`)
-
   if (!force && configFile) {
     logger.warn('init:config', messages.configExists(cmd))
   } else {
+    logger.info('init:config', `creating bamboo config file: ${quote(file)}`)
     const content = outdent`
 import { defineConfig } from "@bamboocss/dev"
 

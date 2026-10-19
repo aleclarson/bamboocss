@@ -23,17 +23,15 @@ In styled-components, you can use both tagged template literals and object synta
 Bamboo styles are always objects. Every tagged template in your project becomes an object literal — the sections below
 show the mapping for each case.
 
-To initialize a project, run the following command.
+To set up a project, install Bamboo and its Vite plugin, then create the config:
 
 ```bash
-bamboo init -p
+npm install -D @bamboocss/dev @bamboocss/vite
+npx bamboo init
 ```
 
-Then you need to add the cascade layers to the global styles of your project.
-
-```css
-@layer reset, base, tokens, recipes, utilities;
-```
+Add `bamboocss()` to your Vite plugins and import `virtual:bamboo.css` once from your entry module, as
+[Using Vite](/docs/installation/vite) shows. There is no `@layer` statement to write: the stylesheet declares its own.
 
 ## Tagged Template and Object Syntax
 

@@ -71,7 +71,11 @@ describe('CLI', () => {
     // init
     const output = runCommand(cmd, { cwd: testsCwd })
     // Check for either "Thanks" (new config) or existing config message
-    expect(output.includes('Thanks') || output.includes('It looks like you already have bamboo created')).toBe(true)
+    expect(output.includes('Thanks') || output.includes('A Bamboo config already exists here')).toBe(true)
+    // The next steps are the Vite setup. They used to be Panda's: a stylesheet of your own holding
+    // an `@layer` statement, which the virtual stylesheet declares itself.
+    expect(output).toContain("import 'virtual:bamboo.css'")
+    expect(output).not.toContain('@layer')
 
     // Check if the config file was created
     const configFileExists = await fs.access(paths.config)
@@ -79,7 +83,8 @@ describe('CLI', () => {
 
     // init on existing project
     const output2 = runCommand(cmd, { cwd: testsCwd })
-    expect(output2.includes('It looks like you already have bamboo created')).toBe(true)
+    expect(output2.includes('A Bamboo config already exists here')).toBe(true)
+    expect(output2).toContain('bamboo init --force')
 
     // init with --force
     const output3 = runCommand(cmd + ' --force --logfile="./bamboo.log"', { cwd: testsCwd })
