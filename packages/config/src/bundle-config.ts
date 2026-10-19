@@ -55,11 +55,34 @@ const requireBanner = (file: string) =>
  * any failure, which ran the config a second time and replaced the real error with that
  * fallback's own, `Please pass in filename to use require`.
  */
+/**
+ * The files a load that failed had read: the module it was bundling, and, once that bundled, the
+ * modules it imports. A config watch follows what the config is built from, and a load that
+ * throws builds nothing to say what that is — while the file that broke it, a preset the edit
+ * swapped in, is the one about to be fixed.
+ */
+const filesRead = new WeakMap<object, string[]>()
+
+const withFilesRead = <E>(error: E, files: Iterable<string>): E => {
+  if (error && typeof error === 'object') filesRead.set(error, [...(filesRead.get(error) ?? []), ...files])
+  return error
+}
+
+/** What a load that threw `error` had read, so a watch can follow it. Empty for any other error. */
+export const filesReadBy = (error: unknown): string[] =>
+  error && typeof error === 'object' ? [...(filesRead.get(error) ?? [])] : []
+
 export async function bundle<T extends Config = Config>(filepath: string, cwd: string, options: BundleOptions = {}) {
   // A path, or a package name — a string preset is loaded through here too — resolved from `cwd`.
   const file = resolveFile(filepath, cwd)
   const esm = isEsmFile(file)
-  const { code, dependencies } = await bundleFile(file, cwd, esm, options)
+  let bundled: Awaited<ReturnType<typeof bundleFile>>
+  try {
+    bundled = await bundleFile(file, cwd, esm, options)
+  } catch (error) {
+    throw withFilesRead(error, [file])
+  }
+  const { code, dependencies } = bundled
 
   let config: T
   // Where the bundle ran from, as the stack names it: a temporary file, or the file itself.
@@ -89,7 +112,10 @@ export async function bundle<T extends Config = Config>(filepath: string, cwd: s
       cwd,
     ).catch(() => [])
     const at = where.map((place) => `\n    at ${place}`).join('')
-    throw new BambooError('CONFIG_ERROR', `💥 Failed to load ${file}: ${reason}${at}`, { cause: error })
+    throw withFilesRead(
+      new BambooError('CONFIG_ERROR', `💥 Failed to load ${file}: ${reason}${at}`, { cause: error }),
+      [file, ...dependencies],
+    )
   }
 
   return {

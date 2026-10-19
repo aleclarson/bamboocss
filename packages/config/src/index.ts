@@ -1,4 +1,4 @@
-export { bundleConfig } from './bundle-config'
+export { bundleConfig, filesReadBy } from './bundle-config'
 export { defaultPresets, presetBase, presetBamboo } from './bundled-preset'
 export { changesEveryArtifact } from './config-deps'
 export { diffConfigs } from './diff-config'

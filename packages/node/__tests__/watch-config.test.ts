@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterAll, describe, expect, test } from 'vitest'
 import { loadConfigAndCreateContext } from '../src/config'
-import type { BambooContext } from '../src/create-context'
+import { BambooContext as BambooContextClass, type BambooContext } from '../src/create-context'
 import { nodeRuntime } from '../src/node-runtime'
 
 /**
@@ -30,7 +30,7 @@ const watched = () => {
 }
 
 /** The reload is debounced, so an emitted event is not observable until the queue drains. */
-const settle = () => new Promise((resolve) => setTimeout(resolve, 50))
+const settle = (ms = 50) => new Promise((resolve) => setTimeout(resolve, ms))
 
 test.each(['add', 'change'])('on `%s` of a file it depends on', async (event) => {
   const { emitter, reloaded } = watched()
@@ -162,6 +162,81 @@ describe('the files the watch follows', () => {
 
     expect(armed).toHaveLength(2)
     expect(armed[1]!.map((file) => resolve(root, file))).toContain(join(root, 'b.ts'))
+  })
+
+  const recording = (ctx: BambooContext) => {
+    const armed: string[][] = []
+    const emitters: EventEmitter[] = []
+    ctx.runtime = {
+      ...ctx.runtime,
+      fs: {
+        ...ctx.runtime.fs,
+        watch: ((options: { include: string[] }) => {
+          armed.push(options.include)
+          const emitter = Object.assign(new EventEmitter(), { close: async () => {} })
+          emitters.push(emitter)
+          return emitter
+        }) as unknown as BambooContext['runtime']['fs']['watch'],
+      },
+    }
+    return { armed, emitters }
+  }
+
+  // The reload worked and the build after it did not: the reloaded context still names the files,
+  // and the one to fix is the preset the edit added.
+  test('a reload whose build fails is followed by what it reloaded', async () => {
+    const { root } = project({ 'bamboo.config.ts': config(`{}`) })
+    const ctx = await loadConfigAndCreateContext({ cwd: root })
+    const { armed, emitters } = recording(ctx)
+    const next = await loadConfigAndCreateContext({ cwd: root })
+    next.conf.dependencies = [...next.conf.dependencies, join(root, 'brand.ts')]
+
+    ctx.watchConfig((_file, reloaded) => {
+      reloaded(next)
+      throw new Error('a recipe in the new preset names no token')
+    })
+    emitters[0]!.emit('all', 'change', 'bamboo.config.ts')
+    await settle()
+
+    expect(armed[1]).toContain(join(root, 'brand.ts'))
+  })
+
+  // A preset named by path is bundled on its own, so the config's imports do not name it; the
+  // load that threw on it does.
+  test('a preset named by path that fails to load is watched, so fixing it reloads', async () => {
+    const { root, write } = project({ 'bamboo.config.ts': config(`{}`) })
+    let ctx = await loadConfigAndCreateContext({ cwd: root })
+    const { armed, emitters } = recording(ctx)
+
+    write('brand.ts', `throw new Error('not yet')\n`)
+    write(
+      'bamboo.config.ts',
+      `export default { preflight: false, include: ['src/**/*.ts'], outdir: 'styled-system', presets: ['./brand.ts'] }\n`,
+    )
+    ctx.watchConfig(async (_file, reloaded) => {
+      await ctx.diff.reloadConfigAndRefreshContext((conf) => {
+        ctx = new BambooContextClass(conf)
+      })
+      reloaded(ctx)
+      return ctx
+    })
+    emitters[0]!.emit('all', 'change', 'bamboo.config.ts')
+    await settle(1500)
+
+    expect(armed).toHaveLength(2)
+    expect(armed[1]!.map((file) => resolve(root, file))).toContain(join(root, 'brand.ts'))
+  })
+
+  // Armed on the files it matched, a file that starts to match was never seen.
+  test('a `dependencies` pattern is watched as a pattern', async () => {
+    const { root } = project({
+      'bamboo.config.ts': `export default { preflight: false, include: ['src/**/*.ts'], outdir: 'styled-system', dependencies: ['tokens/*.json'] }\n`,
+    })
+    const ctx = await loadConfigAndCreateContext({ cwd: root })
+    const { armed } = recording(ctx)
+    ctx.watchConfig(() => {})
+
+    expect(armed[0]).toContain('tokens/*.json')
   })
 
   // Re-armed once per edit that changes the files, each watcher used to leave its listener behind.

@@ -245,10 +245,11 @@ export async function main() {
 
       if (watch) {
         ctx.watchConfig(
-          async () => {
+          async (_file, reloaded) => {
             const affecteds = await ctx.diff.reloadConfigAndRefreshContext((conf) => {
               ctx = new BambooContext(conf)
             })
+            reloaded(ctx)
 
             await ctx.hooks['config:change']?.({ config: ctx.config, changes: affecteds })
             await codegen(ctx, artifactsToRebuild(affecteds))
@@ -324,10 +325,11 @@ export async function main() {
       if (watch) {
         //
         ctx.watchConfig(
-          async () => {
+          async (_file, reloaded) => {
             const affecteds = await ctx.diff.reloadConfigAndRefreshContext((conf) => {
               ctx = new BambooContext(conf)
             })
+            reloaded(ctx)
 
             await ctx.hooks['config:change']?.({ config: ctx.config, changes: affecteds })
             await cssgen(ctx, options)
@@ -601,10 +603,11 @@ export async function main() {
 
       if (watch) {
         ctx.watchConfig(
-          async () => {
+          async (_file, reloaded) => {
             const affecteds = await ctx.diff.reloadConfigAndRefreshContext((conf) => {
               ctx = new BambooContext(conf)
             })
+            reloaded(ctx)
 
             await ctx.hooks['config:change']?.({ config: ctx.config, changes: affecteds })
             await buildInfo(ctx, outfile)

@@ -8,7 +8,7 @@ import type {
   NativeToken,
   NativeTokenAccounting,
 } from '@bamboocss/native-extractor'
-import { getConfigDependencies } from '@bamboocss/config'
+import { filesReadBy, getConfigDependencies } from '@bamboocss/config'
 import { checkNamingAgreement, formatNamingDisagreement } from '@bamboocss/core'
 import { Generator } from '@bamboocss/generator'
 import { logger } from '@bamboocss/logger'
@@ -1048,13 +1048,15 @@ export class BambooContext extends Generator {
   /**
    * Call `cb` when a file the config is built from changes.
    *
-   * `cb` reloads the config, and returns the context it built so the watch can follow what that
-   * config is built from. Armed once with this context's files, an edit that swapped in a preset,
-   * or imported one more module, left the new file unwatched: editing it did nothing until the
-   * process restarted.
+   * `cb` reloads the config, and hands the context it built to `reloaded` as soon as it has one, so
+   * the watch can follow what that config is built from. Armed once with this context's files, an
+   * edit that swapped in a preset, or imported one more module, left the new file unwatched:
+   * editing it did nothing until the process restarted. Handed over before `cb` builds, because a
+   * build can fail where the reload did not — a recipe in the new preset naming no token — and the
+   * file to fix is that preset.
    */
   watchConfig = (
-    cb: (file: string) => BambooContext | void | Promise<BambooContext | void>,
+    cb: (file: string, reloaded: (ctx: BambooContext) => void) => BambooContext | void | Promise<BambooContext | void>,
     opts?: Omit<WatchOptions, 'include'>,
   ) => {
     const { cwd, poll, exclude } = opts ?? {}
@@ -1085,29 +1087,41 @@ export class BambooContext extends Generator {
 
     const rebuild = debounce(async (file: string) => {
       logger.info('ctx:change', 'config changed, rebuilding...')
-      let next: BambooContext | void
+      const reload: { ctx?: BambooContext } = {}
       try {
-        next = await cb(file)
+        const next = await cb(file, (ctx) => {
+          reload.ctx = ctx
+        })
+        if (next) reload.ctx = next
       } catch (error) {
         logger.error('ctx:rebuild', error instanceof Error ? error.message : String(error))
-        // A reload that failed built no context to say what the config imports now, and the file
-        // that broke it — a module the edit swapped in — is the one about to be fixed. What the
-        // config names is read off its imports instead, beside what was watched already.
-        await reportRebuildFailure(() => rearm(uniq([...files, ...this.importedFiles()]).sort()))
+        // Reloaded and then failed to build: the reloaded context names its files. Failed to load:
+        // nothing was built to say what the config is built from now, and the file that broke it is
+        // the one about to be fixed, so what the load read is followed instead, with what the
+        // config imports beside what was watched already.
+        const reloaded = reload.ctx
+        const nextFiles = reloaded
+          ? reloaded.configFiles()
+          : uniq([...files, ...this.importedFiles(), ...filesReadBy(error)]).sort()
+        await reportRebuildFailure(() => rearm(nextFiles))
         return
       }
-      const reloaded = next
+      const reloaded = reload.ctx
       if (reloaded) await reportRebuildFailure(() => rearm(reloaded.configFiles()))
     })
   }
 
-  /** The files the config is built from: the config, what it imports, and what `dependencies` matches. */
-  private configFiles = () => uniq([...this.explicitDeps, ...this.conf.dependencies]).sort()
+  /**
+   * The files the config is built from: the config, what it imports, the presets it names by path,
+   * and its `dependencies` — as patterns too, so a file that starts to match one is seen.
+   */
+  private configFiles = () =>
+    uniq([...this.explicitDeps, ...this.conf.dependencies, ...(this.config.dependencies ?? [])]).sort()
 
   /** What the config file imports, read off its source without running it, for a config that failed to load. */
   private importedFiles = (): string[] => {
     try {
-      return [...getConfigDependencies(this.conf.path).deps]
+      return [...getConfigDependencies(this.conf.path, this.conf.tsOptions, this.conf.tsconfig?.compilerOptions).deps]
     } catch {
       return []
     }

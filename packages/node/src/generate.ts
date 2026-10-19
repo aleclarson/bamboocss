@@ -84,10 +84,11 @@ export async function generate(config: Config, configPath?: string, options: Gen
   if (watch) {
     //
     ctx.watchConfig(
-      async () => {
+      async (_file, reloaded) => {
         const affecteds = await ctx.diff.reloadConfigAndRefreshContext((conf) => {
           ctx = new BambooContext(conf)
         })
+        reloaded(ctx)
         sourceScanCache.entries.clear()
         sourceScanCache.resolvedTokenReferences.clear()
 
