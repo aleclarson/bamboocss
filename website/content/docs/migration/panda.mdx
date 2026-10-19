@@ -239,6 +239,9 @@ and recipe-specific selectors do not ship. Bamboo has no extraction-only runtime
 
   The `syntax` config key is gone with it — both values — so delete it if you set it either way.
 
+- **`firstThatWorks()`** from Panda 2 is `fallback()`, imported from `styled-system/css` the same way and written the
+  same way, most-preferred value first: `fallback('100dvh', '100vh')`. See
+  [fallback values](/docs/concepts/writing-styles#fallback-values).
 - **The ESLint plugin** is `@bamboocss/eslint-plugin`.
 - **Editor and CI caches.** The TypeScript server holds on to the old `styled-system` types; restart it after
   regenerating.
