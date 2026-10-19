@@ -5,6 +5,8 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, test } from 'vitest'
+import { loadConfigAndCreateContext } from '@bamboocss/node'
+import { createContextSource } from '../src/context-source'
 import { startMcpServer } from '../src/server'
 
 /**
@@ -90,5 +92,96 @@ describe('a config edited while the server runs', () => {
     const tokens = await call('get_tokens')
     expect(tokens.isError).toBe(false)
     expect(tokens.text).toContain('third')
+  })
+})
+
+describe('the files a config is built from', () => {
+  const roots: string[] = []
+  afterAll(() => roots.forEach((root) => rmSync(root, { force: true, recursive: true })))
+
+  const project = () => {
+    const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'bamboo-mcp-files-')))
+    roots.push(root)
+    mkdirSync(join(root, 'src'), { recursive: true })
+    writeFileSync(join(root, 'src/app.tsx'), 'export const a = 1\n')
+    return { root, write: (file: string, contents: string) => writeFileSync(join(root, file), contents) }
+  }
+
+  const connect = async (root: string) => {
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair()
+    await startMcpServer({ cwd: root, transport: serverTransport, silent: true })
+    const connected = new Client({ name: 'test', version: '0.0.0' })
+    await connected.connect(clientTransport)
+    return async () => {
+      const result = await connected.callTool({ name: 'get_tokens', arguments: {} })
+      return (result.content as Array<{ text: string }>)[0]!.text
+    }
+  }
+
+  // Bundled on its own, so its files were not the config bundle's, and an edit to it was not seen.
+  test('a preset named by path', async () => {
+    const { root, write } = project()
+    write('brand.ts', `export default { theme: { tokens: { colors: { brandOne: { value: '#333' } } } } }\n`)
+    write(
+      'bamboo.config.ts',
+      `export default { preflight: false, include: ['src/**/*.tsx'], outdir: 'styled-system', presets: ['./brand.ts'] }\n`,
+    )
+    const tokens = await connect(root)
+    expect(await tokens()).toContain('brandOne')
+
+    write(
+      'brand.ts',
+      `export default { theme: { tokens: { colors: { brandOne: { value: '#333' }, brandTwo: { value: '#444' } } } } }\n`,
+    )
+    expect(await tokens()).toContain('brandTwo')
+  })
+
+  // No stamp was taken of a file that did not match when the config loaded.
+  test('a file that starts to match `dependencies`', async () => {
+    const { root, write } = project()
+    mkdirSync(join(root, 'tokens'))
+    write('tokens/a.json', JSON.stringify({ alpha: { value: '#111' } }))
+    write(
+      'bamboo.config.ts',
+      `import { readdirSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
+const dir = join(__dirname, 'tokens')
+const colors = Object.assign({}, ...readdirSync(dir).map((file) => JSON.parse(readFileSync(join(dir, file), 'utf8'))))
+export default { preflight: false, include: ['src/**/*.tsx'], outdir: 'styled-system', dependencies: ['tokens/*.json'], theme: { extend: { tokens: { colors } } } }
+`,
+    )
+    const tokens = await connect(root)
+    expect(await tokens()).toContain('alpha')
+
+    write('tokens/b.json', JSON.stringify({ beta: { value: '#222' } }))
+    expect(await tokens()).toContain('beta')
+  })
+
+  // Stamped once the load had finished, an edit landing while it ran was recorded as seen.
+  test('an edit that lands while a reload runs', async () => {
+    const { root, write } = project()
+    write('brand.ts', `export const brand = { brandOne: { value: '#333' } }\n`)
+    write(
+      'bamboo.config.ts',
+      `import { brand } from './brand'\nexport default { preflight: false, include: ['src/**/*.tsx'], outdir: 'styled-system', theme: { extend: { tokens: { colors: brand } } } }\n`,
+    )
+    let duringLoad: (() => void) | undefined
+    const current = createContextSource(async () => {
+      const ctx = await loadConfigAndCreateContext({ cwd: root })
+      duringLoad?.()
+      duringLoad = undefined
+      return ctx
+    })
+    await current()
+
+    write('brand.ts', `export const brand = { brandOne: { value: '#333' }, brandTwo: { value: '#444' } }\n`)
+    duringLoad = () =>
+      write(
+        'brand.ts',
+        `export const brand = { brandOne: { value: '#333' }, brandTwo: { value: '#444' }, brandThree: { value: '#555' } }\n`,
+      )
+    await current()
+    const after = await current()
+    expect(after.tokens.getByName('colors.brandThree')).toBeDefined()
   })
 })
