@@ -1,0 +1,99 @@
+---
+title: Agent Skills
+description: Official skills that teach AI coding agents how to write Bamboo CSS.
+---
+
+Bamboo ships three official skills for AI coding agents: one for writing styles, one for theme and recipe architecture,
+and one for moving a project from Panda CSS.
+
+They exist because the mistakes an agent makes in Bamboo are rarely syntax errors. Agents learned CSS-in-JS from Panda,
+Emotion and Tailwind, and those habits do not carry over. `css({ color: props.color })` fails the build, because every
+style call is [compiled ahead of time](/docs/guides/source-transformation) and an open runtime value has no rule to
+compile to. `<Stack>` and `styled.div` are not generated at all, and `{colors.red.500}` is a retired syntax. A skill
+gives the agent Bamboo's rules before it writes the first line, rather than after the build fails.
+
+## Install
+
+```bash
+npx skills add gajus/bamboocss
+```
+
+The command reads the skills from the [`skills`](https://github.com/gajus/bamboocss/tree/main/skills) directory of the
+repository. Each loads on its own triggers, so you never have to name one: an agent reads every skill's description and
+picks the one that matches the task.
+
+The skills use the open [Agent Skills](https://skills.sh) format, a directory holding a `SKILL.md` with a name, a
+description of when to use it, and the instructions. Any agent that reads the format can use them.
+
+## Available skills
+
+### `bamboo-css`
+
+Day-to-day styling in a project that already has Bamboo set up.
+
+It reads the config and the generated `styled-system` before writing anything, so token names come from
+`styled-system/tokens/tokens.d.ts` rather than from memory. It covers the compile contract, with what each rejection
+reason means and the shape that compiles instead; choosing between `css()`, a pattern and a recipe; composition with
+`cx()`; and a checklist for styles that do not apply.
+
+Loads when you build or change components, when a build fails with `call(s) could not be compiled`, or when a style does
+not apply.
+
+### `bamboo-css-theming`
+
+The decisions that are hard to reverse once a codebase has a few hundred call sites.
+
+Where a value belongs across primitive tokens, semantic tokens, [mixins](/docs/theming/mixins) and recipes. How to name
+things so a rebrand touches the config instead of every component. Dark mode and
+[theme variants](/docs/guides/multiple-themes#multi-themes). Presets, including the opt-in
+[typography preset](/docs/theming/typography). And when a style graduates from a `css()` call to a `cva`, to a config
+recipe, to a slot recipe.
+
+Loads when you set up theming, add brand colors, wire dark mode, ship more than one theme, design a variant API, or
+clean up a theme that has drifted.
+
+### `bamboo-css-migrate`
+
+Moving a project from Panda CSS, and debugging one that built on Panda and fails on Bamboo.
+
+An ordered checklist: packages, the config file, `presets`, the options that were removed or renamed, the Vite plugin,
+and the JSX factory, template literals and patterns Bamboo does not have. Then the calls the compiler now refuses, and
+the CSS differences that are deliberate. It links [Migrating from Panda CSS](/docs/migration/panda) rather than
+restating it.
+
+Loads when you replace `@pandacss/*` packages, or when a project that built on Panda fails on Bamboo.
+
+## LLMs.txt and MCP
+
+Three surfaces, three questions:
+
+| Surface                           | Answers                                                                   |
+| --------------------------------- | ------------------------------------------------------------------------- |
+| [LLMs.txt](/docs/ai/llms-txt)     | What is this API? The documentation, as plain text.                       |
+| [MCP Server](/docs/ai/mcp-server) | What exists in this project right now? Its tokens, recipes and usage.     |
+| Agent Skills                      | How do I do this correctly in Bamboo? Rules, decisions and what to check. |
+
+The skills point at the other two rather than duplicating them. They send an agent to `/llms.txt` for API detail, and to
+the MCP server's `get_tokens`, `get_recipes` and `get_usage_report` when a project has it configured.
+
+## Wire up the linter
+
+`@bamboocss/eslint-plugin` reports token paths that do not exist, nested selectors without `&`, files outside `include`,
+dynamic styling and hardcoded colors, in the editor and in CI.
+
+A rule that runs beats a rule an agent might read. Use both: the skills stop a mistake being written, and the linter
+stops it being merged. See [Linting](/docs/guides/linting).
+
+## Add your project's rules
+
+Skills load on their own. A line in your repository's `AGENTS.md`, or whichever file your agent reads first, still helps
+it orient before it starts:
+
+```md
+This project uses Bamboo CSS. Use the official Bamboo skills (`bamboo-css`, `bamboo-css-theming`). Every style call is
+compiled at build time: no runtime style values, no JSX style props, no Tailwind classes, and token names come from
+styled-system/tokens/tokens.d.ts.
+```
+
+Conventions the skills cannot know, such as which recipes are off limits or which scales are frozen, belong in that file
+too. The skills teach Bamboo; only you can teach your project.

@@ -12,4 +12,5 @@ export const DOC_CATEGORIES = [
   'guides',
   'migration',
   'references',
+  'ai',
 ] as const

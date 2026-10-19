@@ -11,6 +11,7 @@ const CATEGORY_TITLES: Record<(typeof DOC_CATEGORIES)[number], string> = {
   guides: 'Guides',
   migration: 'Migration',
   references: 'References',
+  ai: 'AI for Agents',
 }
 
 export function loader() {

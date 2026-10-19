@@ -38,6 +38,8 @@ with workspace support.
                    # sheet emitted by the server build is pruned against every environment
 
 /website/          # Documentation site
+
+/skills/           # Official agent skills, one <name>/SKILL.md each; installed with npx skills add gajus/bamboocss
 ```
 
 Keep this list honest when packages come and go. A stale entry here is not cosmetic — it sends agents looking for files

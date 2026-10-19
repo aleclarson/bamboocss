@@ -20,6 +20,7 @@ export function loader() {
     ['Guides', '/llms/guides.txt', 'Practical guides for specific use cases'],
     ['Migration', '/llms/migration.txt', 'Guides for migrating from other CSS-in-JS libraries'],
     ['References', '/llms/references.txt', 'CLI commands and configuration reference'],
+    ['AI for Agents', '/llms/ai.txt', 'LLMs.txt routes, the MCP server, and the official agent skills'],
   ]
 
   const links = documentSets

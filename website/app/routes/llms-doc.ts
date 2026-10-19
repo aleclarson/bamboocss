@@ -12,6 +12,7 @@ const categoryTitles: Record<(typeof DOC_CATEGORIES)[number], string> = {
   guides: 'Bamboo CSS Guides',
   migration: 'Bamboo CSS Migration Guides',
   references: 'Bamboo CSS References',
+  ai: 'Bamboo CSS for AI Agents',
 }
 
 export function loader({ params }: LoaderFunctionArgs) {
