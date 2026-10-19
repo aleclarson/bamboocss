@@ -6265,7 +6265,7 @@ describe('generate property types', () => {
          *
          * @see https://developer.mozilla.org/docs/Web/CSS/Reference/Properties/text-wrap
          */
-      textWrap?: ConditionalValue<UtilityValues["textWrap"] | CssVars | CssProperties["textWrap"] | AnyString> | undefined
+      textWrap?: ConditionalValue<CssProperties["textWrap"] | AnyString> | undefined
        /**
          * Since October 2024, this feature works across the latest devices and browser versions. This feature might not work in older devices or browsers.
          *

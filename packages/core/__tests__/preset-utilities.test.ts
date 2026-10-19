@@ -353,3 +353,11 @@ describe('helpers', () => {
     expect(out).toContain('::-webkit-scrollbar')
   })
 })
+
+// Every keyword the property takes, as Panda 2 has it: the three it listed compile as they did.
+describe('textWrap takes every keyword', () => {
+  test.each(['wrap', 'nowrap', 'balance', 'pretty', 'stable'])('%s', (keyword) => {
+    expect(value({ textWrap: keyword } as Styles, 'text-wrap')).toBe(keyword)
+    expect(css({ textWrap: keyword } as Styles)).toContain(`.tw_${keyword} {`)
+  })
+})

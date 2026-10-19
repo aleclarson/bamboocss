@@ -109,7 +109,6 @@ describe('generate property types', () => {
       	textShadow: Tokens["shadows"];
       	textShadowColor: Tokens["colors"];
       	WebkitTextFillColor: Tokens["colors"];
-      	textWrap: "wrap" | "balance" | "nowrap";
       	truncate: boolean;
       	background: Tokens["colors"];
       	backgroundColor: Tokens["colors"];

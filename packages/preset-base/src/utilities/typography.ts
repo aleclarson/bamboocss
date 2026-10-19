@@ -153,13 +153,10 @@ export const typography: UtilityConfig = {
     className: 'wb',
     group: 'Typography',
   },
+  // Every keyword the property takes, `pretty` and `stable` among them, as Panda 2 has it.
   textWrap: {
     className: 'tw',
-    values: ['wrap', 'balance', 'nowrap'],
     group: 'Typography',
-    transform(value) {
-      return { textWrap: value }
-    },
   },
   truncate: {
     className: 'trunc',
