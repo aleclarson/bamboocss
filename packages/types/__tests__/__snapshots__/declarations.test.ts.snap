@@ -221,6 +221,8 @@ exports[`export every name they did 1`] = `
   "StyleResultObject",
   "Subtract",
   "SystemStyleObject",
+  "SystemStyleObjectWith",
+  "SystemStyleObjectWithout",
   "TSConfig",
   "Theme",
   "ThemeFn",
