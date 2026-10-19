@@ -644,6 +644,26 @@ const styles: SystemStyleObject = {
 }
 ```
 
+A component that lets its caller style part of it takes a style object with those properties alone,
+`SystemStyleObjectWith`, or with every property but some, `SystemStyleObjectWithout`. The restriction holds in every
+condition and selector too, and either is a `SystemStyleObject`, so it goes into `css()` as one:
+
+```tsx
+import { css, cx } from '../styled-system/css'
+import type { SystemStyleObjectWith } from '../styled-system/types'
+
+interface ButtonProps {
+  // Only margins and width: a caller places the button, and does not restyle it.
+  css?: SystemStyleObjectWith<'margin' | 'marginTop' | 'marginBottom' | 'width'>
+}
+
+export const Button = ({ css: style = {} }: ButtonProps) => (
+  <button className={cx(css({ paddingInline: '4' }), css(style))} />
+)
+```
+
+A shorthand is a property of its own: list `mt` beside `marginTop` to take both.
+
 ## Property conflicts
 
 When you combine shorthand and longhand properties, Bamboo will resolve the styles in a predictable way. The shorthand

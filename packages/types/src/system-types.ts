@@ -91,6 +91,17 @@ export type NestedCssProperties = Nested<CssProperties>
 export type SystemStyleObject = Nested<(SystemProperties | GenericProperties) & CssVarProperties>
 
 /**
+ * A style object with these properties alone, in every condition and selector too: what a component
+ * takes when it lets its caller style part of it. `SystemStyleObjectWith<'width' | 'margin'>` takes
+ * those two; a shorthand, `mt`, is a property of its own and listed as one. It is a
+ * `SystemStyleObject`, so it goes into `css()` as one.
+ */
+export type SystemStyleObjectWith<K extends keyof SystemProperties> = Omit<Nested<Pick<SystemProperties, K>>, 'base'>
+
+/** A style object with every property but these, in every condition and selector too. @see SystemStyleObjectWith */
+export type SystemStyleObjectWithout<K extends keyof SystemProperties> = Omit<Nested<Omit<SystemProperties, K>>, 'base'>
+
+/**
  * The four `::view-transition-*` pseudo-elements a `viewTransition()` bag can style.
  *
  * `imagePair` is camelCase here and emitted as `::view-transition-image-pair`, matching
