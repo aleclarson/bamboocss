@@ -122,6 +122,7 @@ export const docsNavigation: NavItem = {
         { title: 'Tokens', url: 'tokens' },
         { title: 'Token Usage', url: 'usage' },
         { title: 'Mixins', url: 'mixins' },
+        { title: 'Typography', url: 'typography', tag: 'new' },
         { title: 'Spec', url: 'spec', tag: 'new' },
       ],
     },

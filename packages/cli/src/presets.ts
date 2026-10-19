@@ -1,4 +1,4 @@
-import { preset as presetBamboo } from '@bamboocss/preset-bamboo'
+import { preset as presetBamboo, typographyPreset } from '@bamboocss/preset-bamboo'
 import { preset as presetBase } from '@bamboocss/preset-base'
 
 /**
@@ -15,6 +15,7 @@ import { preset as presetBase } from '@bamboocss/preset-base'
  */
 export const defaultPresets = [presetBase, presetBamboo]
 
-export { presetBamboo, presetBase }
+export { presetBamboo, presetBase, typographyPreset }
+export type { ProseSize, TypographyPresetOptions } from '@bamboocss/preset-bamboo'
 
 export default presetBamboo

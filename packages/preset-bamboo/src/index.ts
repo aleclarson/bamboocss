@@ -53,4 +53,7 @@ export const preset = definePreset({
 
 markBuiltInPreset(preset, '@bamboocss/preset-bamboo')
 
+export { typographyPreset } from './prose'
+export type { ProseSize, SemanticTokensOptions, TypographyPresetOptions } from './prose'
+
 export default preset

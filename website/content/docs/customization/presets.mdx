@@ -119,3 +119,16 @@ export default defineConfig({
   presets: [bambooPreset, myCustomPreset],
 })
 ```
+
+- `typographyPreset()`: opt-in, never included by default. It adds a `prose` recipe for Markdown and CMS HTML, built on
+  the tokens of `@bamboocss/preset-bamboo`, so it is listed after the defaults. See
+  [Typography](/docs/theming/typography).
+
+```ts
+import { defineConfig } from '@bamboocss/dev'
+import { defaultPresets, typographyPreset } from '@bamboocss/dev/presets'
+
+export default defineConfig({
+  presets: [...defaultPresets, typographyPreset()],
+})
+```

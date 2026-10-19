@@ -44,6 +44,9 @@ Every package moves from the `@pandacss` scope to `@bamboocss`. The ones a proje
 | `@pandacss/preset-panda` | `@bamboocss/preset-bamboo` |
 | `@pandacss/postcss`      | `@bamboocss/vite`          |
 
+Panda's `@pandacss/preset-typography` has no package of its own: `typographyPreset()` comes from
+`@bamboocss/dev/presets`, and is listed after the defaults. See [Typography](/docs/theming/typography).
+
 The internal packages (`@pandacss/core`, `/node`, `/parser`, `/generator`, `/token-dictionary` and the rest) follow the
 same rule if you import them directly.
 
