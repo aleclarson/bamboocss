@@ -393,11 +393,19 @@ export class Generator extends Context {
       css = this.hooks['cssgen:done']({ artifact: 'styles.css', content: css }) ?? css
     }
 
+    this.checkSheet(sheet)
+
+    return css
+  }
+
+  /**
+   * What a finished sheet answers to, however it is written out: one file here, or one per layer
+   * by `getSplitCssArtifacts`, which used to skip all three and ship what this refused.
+   */
+  private checkSheet = (sheet: Stylesheet) => {
     this.assertNoUnresolvedTokens(sheet)
     this.reportRawValues()
     this.reportInvalidDeclarations(sheet)
-
-    return css
   }
 
   /**
@@ -594,14 +602,9 @@ export class Generator extends Context {
     const severity = this.utility.invalidDeclaration
     if (severity === 'off') return
 
-    const owned = new Set<string>()
-    for (const ref of this.utility.unresolvedTokens.values()) {
-      // A reference owns the declaration it was written into, which is not the path alone:
-      // `1px solid colors\.nope`. Exactly that one, since text shared with another declaration
-      // is no evidence the two are one mistake.
-      const value = ref.reference ? ref.emitted : ref.value
-      if (value !== undefined) owned.add(`${this.utility.cssPropertyOf(ref.prop)}:${value}`)
-    }
+    // Exactly the declarations a finding was written into, whatever property the utility emitted
+    // them under. @see Utility.ownedDeclarations
+    const owned = this.utility.ownedDeclarations
 
     const id = (finding: InvalidDeclaration) => `${finding.prop}:${finding.value}`
     const findings = sheet.invalidDeclarations.filter((finding) => !owned.has(id(finding)))
@@ -651,6 +654,10 @@ export class Generator extends Context {
    * Used when --splitting flag is enabled
    */
   getSplitCssArtifacts = (sheet: Stylesheet): SplitCssResult => {
+    // Before anything is written, as `getCss` checks before it hands the sheet back.
+    sheet.collectInvalidDeclarations()
+    this.checkSheet(sheet)
+
     const layerNames = this.config.layers as Record<string, string>
 
     // Layer artifacts

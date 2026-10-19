@@ -368,6 +368,22 @@ export class Stylesheet {
     )
   }
 
+  /**
+   * Collect what `toCss` would find the grammar rejecting, without building the sheet: for a
+   * sheet written out some other way, layer by layer, that still has to answer for the same
+   * declarations. On a clone, as `toCss` works, so the layers are left as they were.
+   */
+  collectInvalidDeclarations = () => {
+    const { utility } = this.context
+    if (utility.invalidDeclaration === 'off') {
+      this.invalidDeclarations = []
+      return
+    }
+    const root = this.context.layers.insert({ compact: false }).clone()
+    this.context.conditions.breakpoints.expandScreenAtRule(root)
+    this.invalidDeclarations = findInvalidDeclarations(root, utility.matchesCssGrammar)
+  }
+
   toCss = ({ minify }: CssOptions = {}) => {
     try {
       const breakpoints = this.context.conditions.breakpoints

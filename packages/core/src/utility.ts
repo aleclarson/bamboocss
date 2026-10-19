@@ -111,11 +111,6 @@ export interface UnresolvedTokenRef {
   reference?: true
   /** For a reference, the paths that do resolve one slip away: the category left out or misspelled. */
   suggestions?: string[]
-  /**
-   * For a reference, the value as it reaches the declaration, reference written in as text, so
-   * the emitted-sheet check can leave exactly that declaration to this one.
-   */
-  emitted?: string
 }
 
 const NO_FINDINGS: ReadonlyArray<[string, UnresolvedTokenRef]> = []
@@ -1082,7 +1077,7 @@ export class Utility {
    */
   private recordUnresolvedTokens = (key: string, value: unknown, fallbackValues: readonly string[] | undefined) => {
     const found = fallbackValues ? this.unresolvedIn(key, fallbackValues) : this.unresolvedInValue(key, value)
-    if (found === NO_FINDINGS) return
+    if (found === NO_FINDINGS) return false
 
     const sink = this.sinks[this.sinks.length - 1]
     for (const [id, ref] of found) {
@@ -1096,6 +1091,7 @@ export class Utility {
 
       logger.warn('utility', this.explainUnresolvedToken(ref))
     }
+    return true
   }
 
   /**
@@ -1137,7 +1133,7 @@ export class Utility {
 
     if (value.includes('token(')) {
       for (const path of this.tokens.unresolvedReferences(value)) {
-        ;(found ??= []).push([`${key}:token(${path})`, this.unresolvedReferenceRef(key, path, value)])
+        ;(found ??= []).push([`${key}:token(${path})`, this.unresolvedReferenceRef(key, path)])
       }
     }
 
@@ -1217,7 +1213,7 @@ export class Utility {
    * alone: `color: 'red.300'` but `border: '1px solid token(colors.red.300)'`. Writing the
    * reference the bare way, or misspelling its category, are the slips worth naming.
    */
-  unresolvedReferenceRef = (key: string, path: string, written?: string): UnresolvedTokenRef => {
+  unresolvedReferenceRef = (key: string, path: string): UnresolvedTokenRef => {
     // A colour's opacity rides along, and the colour is what has to resolve.
     const slash = path.indexOf('/')
     const name = slash === -1 ? path : path.slice(0, slash)
@@ -1235,20 +1231,12 @@ export class Utility {
       }
     }
 
-    // What the transform hands on. A value that cannot be expanded at all throws in the transform
-    // itself, with its own message, so there is no declaration to speak for.
-    let emitted: unknown
-    try {
-      emitted = written === undefined ? undefined : this.resolveStyleValue(written)
-    } catch {}
-
     return {
       prop: key,
       value: path,
       kind: 'token',
       reference: true,
       ...(suggestions.size ? { suggestions: [...suggestions].slice(0, 2) } : {}),
-      ...(isString(emitted) ? { emitted } : {}),
     }
   }
 
@@ -1362,15 +1350,45 @@ export class Utility {
     // whole string has parentheses so it is not path-shaped, and the working candidate hides
     // the broken one for good. That is the same silent failure as the bare case, wearing a
     // fallback that makes it look deliberate.
-    this.recordUnresolvedTokens(key, value, fallbackValues)
+    const unresolved = this.recordUnresolvedTokens(key, value, fallbackValues)
+
+    const styles = fallbackValues
+      ? this.getFallbackStyles(key, fallbackValues)
+      : this.getOrCreateStyle(key, this.resolveStyleValue(value))
+
+    if (unresolved) this.ownDeclarations(styles)
 
     return compact({
       layer: this.configs.get(key)?.layer,
       className: this.getOrCreateClassName(key, withoutSpace(value)),
-      styles: fallbackValues
-        ? this.getFallbackStyles(key, fallbackValues)
-        : this.getOrCreateStyle(key, this.resolveStyleValue(value)),
+      styles,
     })
+  }
+
+  /**
+   * Every declaration a finding was written into, `property:value` as the sheet spells it.
+   *
+   * The emitted-sheet check (`invalidDeclaration`) leaves exactly these to this one, so a mistake is
+   * one report and `unresolvedToken: 'off'` is silence about it rather than the same declaration in
+   * the grammar's voice. Read off what the transform emitted rather than off the finding: one broken
+   * reference in two values is two declarations, `1px solid colors\.nope` and `2px dashed
+   * colors\.nope`, and a utility can emit under a property of its own — `bgGradient` writes
+   * `background-image`, `divideColor` a nested rule.
+   */
+  ownedDeclarations = new Set<string>()
+
+  private ownDeclarations = (styles: unknown) => {
+    if (!styles || typeof styles !== 'object') return
+    for (const [prop, value] of Object.entries(styles)) {
+      if (value && typeof value === 'object' && !Array.isArray(value)) {
+        this.ownDeclarations(value)
+        continue
+      }
+      const property = hypenateProperty(prop)
+      const text = Array.isArray(value) ? value.join(',') : String(value)
+      // A fallback stack is a declaration per candidate.
+      for (const candidate of text.split(FALLBACK_SEPARATOR)) this.ownedDeclarations.add(`${property}:${candidate}`)
+    }
   }
 
   /**

@@ -606,6 +606,38 @@ describe('a finding outlives nothing that held it', () => {
     for (let i = 0; i < 3; i++) expect(() => run()).toThrowError(/token\(colors\.nope\)/)
   })
 
+  // Each declaration a finding was written into is this check's, not only the first one's, and
+  // under the property the utility emits, not its own name: `'off'` is silence about all of them.
+  test("'off' is silence about every declaration a reference reaches", () => {
+    const spy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const { run } = build(
+      'off',
+      `
+      import { css } from 'styled-system/css'
+      export const A = () => <div className={css({ border: '1px solid token(colors.nope)' })} />
+      export const B = () => <div className={css({ border: { base: '2px dashed token(colors.nope)', _hover: '3px solid token(colors.nope)' } })} />
+      export const C = () => <div className={css({ bgGradient: 'linear-gradient(to right, token(colors.nope), red)' })} />
+      export const D = () => <div className={css({ divideColor: 'token(colors.nope)' })} />
+    `,
+    )
+
+    run()
+    expect(messages(spy)).not.toMatch(/colors\\?\.nope/)
+  })
+
+  // `cssgen --splitting` writes the sheet layer by layer, and shipped what one file refused.
+  test('a sheet written layer by layer answers to the same checks', () => {
+    const { ctx } = build(undefined, styled('red.300'), {
+      global: { css: { body: { border: '1px solid token(colors.nope)' } } },
+    })
+    ctx.parseFiles()
+    const sheet = ctx.createSheet()
+    ctx.appendBaselineCss(sheet)
+    ctx.appendParserCss(sheet)
+
+    expect(() => ctx.getSplitCssArtifacts(sheet)).toThrowError(/`border: token\(colors\.nope\)`/)
+  })
+
   // The emitted-sheet check leaves a reference's own declaration to this one, and only that one.
   test("a reference does not hide another declaration's grammar warning", () => {
     const spy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
