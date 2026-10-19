@@ -226,12 +226,14 @@ User-preference media features have `_` modifiers of their own, and compose like
 </div>
 ```
 
-| Modifiers                                           | Media query                                                |
-| --------------------------------------------------- | ---------------------------------------------------------- |
-| `_motionReduce` / `_motionSafe`                     | `prefers-reduced-motion: reduce` / `no-preference`         |
-| `_osDark` / `_osLight`                              | `prefers-color-scheme: dark` / `light`                     |
-| `_lessContrast` / `_moreContrast` / `_highContrast` | `prefers-contrast: less` / `more`, `forced-colors: active` |
-| `_portrait` / `_landscape`                          | `orientation: portrait` / `landscape`                      |
+| Modifiers                                                   | Media query                                                 |
+| ----------------------------------------------------------- | ----------------------------------------------------------- |
+| `_motionReduce` / `_motionSafe`                             | `prefers-reduced-motion: reduce` / `no-preference`          |
+| `_osDark` / `_osLight`                                      | `prefers-color-scheme: dark` / `light`                      |
+| `_lessContrast` / `_moreContrast` / `_highContrast`         | `prefers-contrast: less` / `more`, `forced-colors: active`  |
+| `_portrait` / `_landscape`                                  | `orientation: portrait` / `landscape`                       |
+| `_pointerFine` / `_pointerCoarse` / `_pointerNone`          | `pointer: fine` / `coarse` / `none`, of the primary pointer |
+| `_anyPointerFine` / `_anyPointerCoarse` / `_anyPointerNone` | `any-pointer: fine` / `coarse` / `none`, of any pointer     |
 
 ## Group Selectors
 
@@ -519,6 +521,8 @@ Here's a list of all the condition shortcuts you can use in Bamboo:
 | \_required             | `&:is(:required, [data-required], [aria-required=true])`                                         |
 | \_valid                | `&:is(:valid, [data-valid])`                                                                     |
 | \_invalid              | `&:is(:invalid, [data-invalid], [aria-invalid=true])`                                            |
+| \_userValid            | `&:is(:user-valid, [data-user-valid])`                                                           |
+| \_userInvalid          | `&:is(:user-invalid, [data-user-invalid])`                                                       |
 | \_autofill             | `&:autofill`                                                                                     |
 | \_inRange              | `&:is(:in-range, [data-in-range])`                                                               |
 | \_outOfRange           | `&:is(:out-of-range, [data-outside-range])`                                                      |
@@ -537,6 +541,7 @@ Here's a list of all the condition shortcuts you can use in Bamboo:
 | \_fullscreen           | `&:is(:fullscreen, [data-fullscreen])`                                                           |
 | \_loading              | `&:is([data-loading], [aria-busy=true])`                                                         |
 | \_hidden               | `&:is([hidden], [data-hidden])`                                                                  |
+| \_inert                | `&:is([inert], [data-inert])`                                                                    |
 | \_current              | `&:is([aria-current=true], [data-current])`                                                      |
 | \_currentPage          | `&[aria-current=page]`                                                                           |
 | \_currentStep          | `&[aria-current=step]`                                                                           |
