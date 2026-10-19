@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'vitest'
 import { createRuleProcessor } from './fixture'
 
-const cssOf = (styles: Record<string, unknown>) => createRuleProcessor().css(styles).toCss()
+const cssOf = (styles: Record<string, unknown>) =>
+  createRuleProcessor()
+    .css(styles as never)
+    .toCss()
 
 /**
  * Conditions ported from Panda 2: the pointer a device has, whether a field is valid once the user
