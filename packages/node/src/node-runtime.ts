@@ -382,9 +382,18 @@ export const nodeRuntime: Runtime = {
 
       logger.debug('watch:file', `Watching [ ${dirnames.join(', ')} ]`)
 
-      process.once('SIGINT', async () => {
+      const onInterrupt = async () => {
         await watcher.close()
-      })
+      }
+      process.once('SIGINT', onInterrupt)
+
+      // A watcher closed before the process is interrupted lets go of its listener: a watch that
+      // re-arms otherwise left one behind each time, holding a watcher already closed.
+      const close = watcher.close.bind(watcher)
+      watcher.close = () => {
+        process.off('SIGINT', onInterrupt)
+        return close()
+      }
 
       return watcher
     },

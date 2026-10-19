@@ -8,6 +8,7 @@ import type {
   NativeToken,
   NativeTokenAccounting,
 } from '@bamboocss/native-extractor'
+import { getConfigDependencies } from '@bamboocss/config'
 import { checkNamingAgreement, formatNamingDisagreement } from '@bamboocss/core'
 import { Generator } from '@bamboocss/generator'
 import { logger } from '@bamboocss/logger'
@@ -1073,24 +1074,44 @@ export class BambooContext extends Generator {
     let files = this.configFiles()
     let watcher = arm(files)
 
+    const rearm = async (nextFiles: string[]) => {
+      if (nextFiles.join('\n') === files.join('\n')) return
+      // The new one first, so an edit landing in between still has a watcher to reach.
+      const previous = watcher
+      files = nextFiles
+      watcher = arm(files)
+      await previous.close()
+    }
+
     const rebuild = debounce(async (file: string) => {
       logger.info('ctx:change', 'config changed, rebuilding...')
-      await reportRebuildFailure(async () => {
-        const next = await cb(file)
-        if (!next) return
-        const nextFiles = next.configFiles()
-        if (nextFiles.join('\n') === files.join('\n')) return
-        // The new one first, so an edit landing in between still has a watcher to reach.
-        const previous = watcher
-        files = nextFiles
-        watcher = arm(files)
-        await previous.close()
-      })
+      let next: BambooContext | void
+      try {
+        next = await cb(file)
+      } catch (error) {
+        logger.error('ctx:rebuild', error instanceof Error ? error.message : String(error))
+        // A reload that failed built no context to say what the config imports now, and the file
+        // that broke it — a module the edit swapped in — is the one about to be fixed. What the
+        // config names is read off its imports instead, beside what was watched already.
+        await reportRebuildFailure(() => rearm(uniq([...files, ...this.importedFiles()]).sort()))
+        return
+      }
+      const reloaded = next
+      if (reloaded) await reportRebuildFailure(() => rearm(reloaded.configFiles()))
     })
   }
 
   /** The files the config is built from: the config, what it imports, and what `dependencies` matches. */
   private configFiles = () => uniq([...this.explicitDeps, ...this.conf.dependencies]).sort()
+
+  /** What the config file imports, read off its source without running it, for a config that failed to load. */
+  private importedFiles = (): string[] => {
+    try {
+      return [...getConfigDependencies(this.conf.path).deps]
+    } catch {
+      return []
+    }
+  }
 
   watchFiles = (
     cb: (event: WatcherEventType, file: string) => void | Promise<void>,

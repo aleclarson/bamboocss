@@ -36,6 +36,9 @@ export class DiffEngine {
       // invalidates the exact semantic owners after comparing the recorded config bytes.
       applyTsConfig(this.ctx.conf, conf)
       rememberTsConfigResolutionFiles(this.ctx.conf, getTsConfigResolutionFiles(conf))
+      // What the config is built from can change while what it resolves to does not — tokens moved
+      // into a module it imports. The context kept has to know the files the next edit can land in.
+      this.ctx.conf.dependencies = conf.dependencies
     }
     return affected
   }

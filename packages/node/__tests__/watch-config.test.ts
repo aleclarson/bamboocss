@@ -1,7 +1,12 @@
 import { createContext as createFixtureContext } from '@bamboocss/fixture'
 import { EventEmitter } from 'node:events'
-import { expect, test } from 'vitest'
+import { mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { afterAll, describe, expect, test } from 'vitest'
+import { loadConfigAndCreateContext } from '../src/config'
 import type { BambooContext } from '../src/create-context'
+import { nodeRuntime } from '../src/node-runtime'
 
 /**
  * The config reloads when a file it depends on appears, not only when one changes.
@@ -91,4 +96,82 @@ test('a file the reloaded config starts importing is watched from then on', asyn
   expect(reloaded).toEqual(['bamboo.config.ts', 'brand.ts'])
   // The same files again, so the same watcher.
   expect(armed).toHaveLength(2)
+})
+
+describe('the files the watch follows', () => {
+  const roots: string[] = []
+  afterAll(() => roots.forEach((root) => rmSync(root, { force: true, recursive: true })))
+
+  const project = (files: Record<string, string>) => {
+    const root = realpathSync.native(mkdtempSync(join(tmpdir(), 'bamboo-watch-files-')))
+    roots.push(root)
+    for (const [file, contents] of Object.entries(files)) writeFileSync(join(root, file), contents)
+    return { root, write: (file: string, contents: string) => writeFileSync(join(root, file), contents) }
+  }
+
+  const config = (body: string, imports = '') =>
+    `${imports}\nexport default { preflight: false, include: ['src/**/*.ts'], outdir: 'styled-system', theme: { extend: { tokens: { colors: ${body} } } } }\n`
+
+  // The ordinary refactor: the same tokens, moved into a module the config imports. What the config
+  // resolves to is unchanged, so the context is kept, and it went on naming the old files.
+  test('a reload that changes only what the config imports updates the context it keeps', async () => {
+    const { root, write } = project({ 'bamboo.config.ts': config(`{ brand: { value: '#111' } }`) })
+    const ctx = await loadConfigAndCreateContext({ cwd: root })
+
+    write('tokens.ts', `export const colors = { brand: { value: '#111' } }\n`)
+    write('bamboo.config.ts', config('colors', `import { colors } from './tokens'`))
+    let replaced = false
+    const affected = await ctx.diff.reloadConfigAndRefreshContext(() => {
+      replaced = true
+    })
+
+    expect(affected.hasConfigChanged).toBe(false)
+    expect(replaced).toBe(false)
+    expect(ctx.conf.dependencies.map((file) => resolve(root, file))).toContain(join(root, 'tokens.ts'))
+  })
+
+  // The file that broke the reload is the one about to be fixed, and no context was built to name it.
+  test('a module swapped in by a reload that fails is watched, so fixing it reloads', async () => {
+    const { root, write } = project({
+      'a.ts': `export const colors = { brand: { value: '#111' } }\n`,
+      'bamboo.config.ts': config('colors', `import { colors } from './a'`),
+    })
+    const ctx = await loadConfigAndCreateContext({ cwd: root })
+    const armed: string[][] = []
+    const emitters: EventEmitter[] = []
+    ctx.runtime = {
+      ...ctx.runtime,
+      fs: {
+        ...ctx.runtime.fs,
+        watch: ((options: { include: string[] }) => {
+          armed.push(options.include)
+          const emitter = Object.assign(new EventEmitter(), { close: async () => {} })
+          emitters.push(emitter)
+          return emitter
+        }) as unknown as BambooContext['runtime']['fs']['watch'],
+      },
+    }
+
+    write('b.ts', `throw new Error('not yet')\n`)
+    write('bamboo.config.ts', config('colors', `import { colors } from './b'`))
+    ctx.watchConfig(() => {
+      throw new Error('the config failed to load')
+    })
+    emitters[0]!.emit('all', 'change', 'bamboo.config.ts')
+    await settle()
+
+    expect(armed).toHaveLength(2)
+    expect(armed[1]!.map((file) => resolve(root, file))).toContain(join(root, 'b.ts'))
+  })
+
+  // Re-armed once per edit that changes the files, each watcher used to leave its listener behind.
+  test('a closed watcher lets go of its interrupt listener', async () => {
+    const { root } = project({ 'bamboo.config.ts': config(`{}`) })
+    const before = process.listenerCount('SIGINT')
+    const watcher = nodeRuntime.fs.watch({ include: ['bamboo.config.ts'], cwd: root })
+    expect(process.listenerCount('SIGINT')).toBe(before + 1)
+
+    await watcher.close()
+    expect(process.listenerCount('SIGINT')).toBe(before)
+  })
 })
