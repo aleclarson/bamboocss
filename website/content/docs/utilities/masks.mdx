@@ -1,0 +1,176 @@
+---
+title: Masks
+description: Fade an edge, spotlight an image, or stack both without writing mask-image gradients by hand.
+---
+
+Fading the bottom of a hero meant writing the same gradient twice, once for `maskImage` and once for
+`-webkit-mask-image`. Now you set a stop:
+
+```tsx
+css({ maskBottomFrom: '40%' })
+```
+
+Solid through 40%, then fading to transparent at the bottom. The `-webkit-` declaration is written for you.
+
+## Fading one edge
+
+`From` is where the fade starts, `To` where it finishes. Leave out `To` and it is `100%`.
+
+```tsx
+css({ overflow: 'auto', maskBottomFrom: '80%' })
+css({ maskBottomFrom: '20%', maskBottomTo: '80%' })
+```
+
+| Prop             | Fades toward |
+| ---------------- | ------------ |
+| `maskTopFrom`    | top          |
+| `maskRightFrom`  | right        |
+| `maskBottomFrom` | bottom       |
+| `maskLeftFrom`   | left         |
+
+Each has a matching `To`. A value is a spacing token or a length: `8`, `20%`, `2rem`.
+
+## Fading both sides
+
+`maskX` and `maskY` are two edges, not one gradient: left and right, top and bottom.
+
+```tsx
+css({ overflowX: 'auto', maskXFrom: '8', maskXTo: '90%' })
+css({ maskYFrom: '15%', maskYTo: '85%' })
+```
+
+Pick `maskXFrom` or `maskLeftFrom`, not both. They write the same variables, and the order of the rules in the
+stylesheet decides between them, not the order you wrote them in.
+
+## Stacking a fade and a spotlight
+
+Edge fades live on the linear layer. Radial and conic are layers of their own, and the browser intersects them, so a
+bottom fade and a radial spotlight both hold:
+
+```tsx
+css({ maskBottomFrom: '50%', maskRadialFrom: '35%', maskRadialAt: 'center' })
+```
+
+`maskBottomFrom` and `maskLinear` both write the linear layer, so use one or the other: one overwrites the other rather
+than adding a second fade.
+
+## A linear mask
+
+`maskLinear` is an angle, or the same `to-t` … `to-br` shortcuts as `bgGradient`:
+
+```tsx
+css({ maskLinear: '45', maskLinearFrom: '30%' })
+css({ maskLinear: 'to-b', maskLinearFrom: '40%', maskLinearTo: '80%' })
+```
+
+A bare number on `maskLinear` is degrees, `'45'` is `45deg`. A bare number on `maskLinearFrom` is a spacing token.
+
+## A radial mask
+
+`maskRadialAt` is the center of the gradient. It is not `maskPosition`, which moves a `maskImage`.
+
+```tsx
+css({ maskRadialFrom: '20%', maskRadialAt: 'center', maskRadialShape: 'circle', maskRadialSize: 'farthest-side' })
+```
+
+`maskRadialAt` takes `center`, `top`, `top left` and the rest of the position syntax, written as CSS.
+
+## A conic mask
+
+A conic stop is an angle, or a percentage of the turn:
+
+```tsx
+css({ maskConic: '45', maskConicFrom: '20%', maskConicTo: '270deg' })
+```
+
+`maskConic` reads a bare number as degrees, as `maskLinear` does.
+
+## Stop colors
+
+Stops are black, then transparent, which is what a fade wants. Change the color with a prop of its own:
+
+```tsx
+css({ maskBottomFrom: '25%', maskBottomFromColor: 'transparent', maskBottomToColor: 'black' })
+```
+
+Every `From` and `To` has a `FromColor` and a `ToColor`: `maskBottomFromColor`, `maskLinearToColor`,
+`maskRadialFromColor`, `maskConicToColor`. They take color tokens and opacity modifiers, `red.500`, `black/50`.
+
+## A mask image of your own
+
+A PNG, an SVG or a gradient you already have goes on `maskImage`. It replaces the fade layers, so do not combine it with
+the helpers:
+
+```tsx
+css({ maskImage: 'url(/scribble.png)', maskSize: 'cover', maskPosition: 'center', maskRepeat: 'no-repeat' })
+```
+
+## The CSS mask properties
+
+These map one to one to CSS, each written with its `-webkit-` declaration first.
+
+| Prop            | CSS property     | Values                                           |
+| --------------- | ---------------- | ------------------------------------------------ |
+| `mask`          | `mask`           | the shorthand                                    |
+| `maskImage`     | `mask-image`     | `none`, `url(…)`, any image                      |
+| `maskSize`      | `mask-size`      | `auto`, `cover`, `contain`, any length           |
+| `maskPosition`  | `mask-position`  | `center`, `top left`, `50% 50%`, …               |
+| `maskRepeat`    | `mask-repeat`    | `repeat`, `no-repeat`, `repeat-x`, `repeat-y`, … |
+| `maskClip`      | `mask-clip`      | `border-box`, `padding-box`, `content-box`, …    |
+| `maskOrigin`    | `mask-origin`    | `border-box`, `padding-box`, `content-box`, …    |
+| `maskComposite` | `mask-composite` | `add`, `subtract`, `intersect`, `exclude`        |
+| `maskMode`      | `mask-mode`      | `alpha`, `luminance`, `match-source`             |
+| `maskType`      | `mask-type`      | `alpha`, `luminance`, on an SVG `<mask>`         |
+
+The fade helpers intersect their layers. `maskComposite` changes that wherever you write it, since the helpers read the
+same variable:
+
+```tsx
+css({ maskBottomFrom: '50%', maskRadialFrom: '70%', maskComposite: 'add' })
+```
+
+## Under strictValues
+
+A stop's position is read from `spacing`, so with [`strictValues`](/docs/references/config#strictvalues) on, write a
+length outside it as `[value]`:
+
+```tsx
+css({ maskBottomFrom: '4' }) // a spacing token
+css({ maskBottomFrom: '[20%]' }) // a percentage
+```
+
+A color reads `colors` the same way: `maskBottomFromColor: 'red.500'`, or `'[rebeccapurple]'`.
+
+## What does not compose
+
+- `maskImage` and the fade helpers: both write `mask-image`. Pick one.
+- `maskBottomFrom` and `maskLinear`: the same layer.
+- `maskXFrom` and `maskLeftFrom`: the same variables.
+- Logical edges: there is no `maskStartFrom`. A fade's direction is visual, top, right, bottom or left.
+
+## How it works
+
+The helpers write variables, `--mask-linear`, `--mask-bottom-from-position` and the rest, each registered with
+`@property`. A registration does not inherit, so a fade on a parent does not reach a child, and the stylesheet keeps
+only the registrations its rules read: a project that never masks carries none of them.
+
+Set a variable yourself where a helper does not cover the case:
+
+```tsx
+css({ maskBottomFrom: '50%', '--mask-bottom-from-color': 'rebeccapurple' })
+```
+
+## Reference
+
+| Prop                                                                                       | Writes                                                |
+| ------------------------------------------------------------------------------------------ | ----------------------------------------------------- |
+| `maskTopFrom`, `maskRightFrom`, `maskBottomFrom`, `maskLeftFrom`, `maskXFrom`, `maskYFrom` | where an edge's fade starts                           |
+| `maskTopTo`, `maskRightTo`, `maskBottomTo`, `maskLeftTo`, `maskXTo`, `maskYTo`             | where it finishes                                     |
+| `mask…FromColor`, `mask…ToColor`                                                           | a stop's color, for each edge and layer               |
+| `maskLinear`                                                                               | the linear layer's angle or direction                 |
+| `maskLinearFrom`, `maskLinearTo`                                                           | the linear layer's stops                              |
+| `maskRadial`                                                                               | the radial layer's size                               |
+| `maskRadialFrom`, `maskRadialTo`                                                           | the radial layer's stops                              |
+| `maskRadialAt`, `maskRadialShape`, `maskRadialSize`                                        | where the radial layer sits, its shape and its extent |
+| `maskConic`                                                                                | the conic layer's starting angle                      |
+| `maskConicFrom`, `maskConicTo`                                                             | the conic layer's stops, as angles or percentages     |

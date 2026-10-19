@@ -36,27 +36,6 @@ export const polyfill: UtilityConfig = {
       return { WebkitHyphens: value, hyphens: value }
     },
   },
-  mask: {
-    className: 'msk',
-    group: 'Other',
-    transform(value) {
-      return { WebkitMask: value, mask: value }
-    },
-  },
-  maskImage: {
-    className: 'msk-i',
-    group: 'Other',
-    transform(value) {
-      return { WebkitMaskImage: value, maskImage: value }
-    },
-  },
-  maskSize: {
-    className: 'msk-s',
-    group: 'Other',
-    transform(value) {
-      return { WebkitMaskSize: value, maskSize: value }
-    },
-  },
   textSizeAdjust: {
     className: 'txt-adj',
     group: 'Typography',

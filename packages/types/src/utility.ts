@@ -123,6 +123,7 @@ export type CssSemanticGroup =
   | 'Layout'
   | 'List'
   | 'Margin'
+  | 'Mask'
   | 'Other'
   | 'Padding'
   | 'Position'

@@ -377,6 +377,360 @@ describe('Global css', () => {
           initial-value: proximity;
         }
 
+        @property --mask-linear {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-linear-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-linear-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-linear-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-linear-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-radial {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-radial-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-radial-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-radial-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-radial-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-conic {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-conic-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-conic-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-conic-from-position {
+          syntax: '<angle> | <percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-conic-to-position {
+          syntax: '<angle> | <percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-left {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-left-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-left-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-left-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-left-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-right {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-right-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-right-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-right-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-right-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-bottom {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-bottom-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-bottom-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-bottom-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-bottom-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-top {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-top-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-top-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-top-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-top-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-linear-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-radial-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-conic-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-linear-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: 0deg;
+        }
+
+        @property --mask-conic-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: 0deg;
+        }
+
+        @property --mask-radial-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: center;
+        }
+
+        @property --mask-radial-shape {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: ellipse;
+        }
+
+        @property --mask-radial-size {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: farthest-corner;
+        }
+
+        @property --mask-composite {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: intersect;
+        }
+
+        @property --mask-composite-webkit {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: source-in;
+        }
+
         @media (width >= 40rem) {
           .btn {
             font-size: 12px;
@@ -739,6 +1093,360 @@ describe('Global css', () => {
 
           initial-value: proximity;
         }
+
+        @property --mask-linear {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-linear-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-linear-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-linear-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-linear-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-radial {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-radial-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-radial-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-radial-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-radial-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-conic {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-conic-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-conic-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-conic-from-position {
+          syntax: '<angle> | <percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-conic-to-position {
+          syntax: '<angle> | <percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-left {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-left-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-left-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-left-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-left-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-right {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-right-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-right-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-right-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-right-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-bottom {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-bottom-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-bottom-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-bottom-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-bottom-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-top {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-top-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-top-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-top-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-top-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-linear-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-radial-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-conic-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-linear-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: 0deg;
+        }
+
+        @property --mask-conic-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: 0deg;
+        }
+
+        @property --mask-radial-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: center;
+        }
+
+        @property --mask-radial-shape {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: ellipse;
+        }
+
+        @property --mask-radial-size {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: farthest-corner;
+        }
+
+        @property --mask-composite {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: intersect;
+        }
+
+        @property --mask-composite-webkit {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: source-in;
+        }
       }"
     `)
   })
@@ -1034,6 +1742,360 @@ describe('Global css', () => {
           inherits: false;
 
           initial-value: proximity;
+        }
+
+        @property --mask-linear {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-linear-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-linear-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-linear-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-linear-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-radial {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-radial-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-radial-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-radial-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-radial-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-conic {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-conic-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-conic-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-conic-from-position {
+          syntax: '<angle> | <percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-conic-to-position {
+          syntax: '<angle> | <percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-left {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-left-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-left-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-left-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-left-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-right {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-right-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-right-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-right-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-right-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-bottom {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-bottom-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-bottom-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-bottom-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-bottom-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-top {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-top-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-top-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-top-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-top-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-linear-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-radial-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-conic-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-linear-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: 0deg;
+        }
+
+        @property --mask-conic-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: 0deg;
+        }
+
+        @property --mask-radial-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: center;
+        }
+
+        @property --mask-radial-shape {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: ellipse;
+        }
+
+        @property --mask-radial-size {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: farthest-corner;
+        }
+
+        @property --mask-composite {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: intersect;
+        }
+
+        @property --mask-composite-webkit {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: source-in;
         }
       }"
     `)
@@ -1332,6 +2394,360 @@ describe('Global css', () => {
           inherits: false;
 
           initial-value: proximity;
+        }
+
+        @property --mask-linear {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-linear-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-linear-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-linear-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-linear-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-radial {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-radial-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-radial-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-radial-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-radial-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-conic {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-conic-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-conic-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-conic-from-position {
+          syntax: '<angle> | <percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-conic-to-position {
+          syntax: '<angle> | <percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-left {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-left-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-left-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-left-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-left-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-right {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-right-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-right-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-right-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-right-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-bottom {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-bottom-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-bottom-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-bottom-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-bottom-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-top {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-top-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-top-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-top-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-top-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-linear-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-radial-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-conic-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-linear-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: 0deg;
+        }
+
+        @property --mask-conic-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: 0deg;
+        }
+
+        @property --mask-radial-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: center;
+        }
+
+        @property --mask-radial-shape {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: ellipse;
+        }
+
+        @property --mask-radial-size {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: farthest-corner;
+        }
+
+        @property --mask-composite {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: intersect;
+        }
+
+        @property --mask-composite-webkit {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: source-in;
         }
       }"
     `)
@@ -1636,6 +3052,360 @@ describe('Global css', () => {
 
           initial-value: proximity;
         }
+
+        @property --mask-linear {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-linear-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-linear-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-linear-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-linear-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-radial {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-radial-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-radial-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-radial-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-radial-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-conic {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-conic-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-conic-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-conic-from-position {
+          syntax: '<angle> | <percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-conic-to-position {
+          syntax: '<angle> | <percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-left {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-left-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-left-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-left-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-left-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-right {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-right-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-right-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-right-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-right-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-bottom {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-bottom-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-bottom-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-bottom-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-bottom-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-top {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-top-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-top-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-top-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-top-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-linear-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-radial-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-conic-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-linear-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: 0deg;
+        }
+
+        @property --mask-conic-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: 0deg;
+        }
+
+        @property --mask-radial-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: center;
+        }
+
+        @property --mask-radial-shape {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: ellipse;
+        }
+
+        @property --mask-radial-size {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: farthest-corner;
+        }
+
+        @property --mask-composite {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: intersect;
+        }
+
+        @property --mask-composite-webkit {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: source-in;
+        }
       }"
     `)
   })
@@ -1939,6 +3709,360 @@ describe('Global css', () => {
 
           initial-value: proximity;
         }
+
+        @property --mask-linear {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-linear-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-linear-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-linear-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-linear-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-radial {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-radial-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-radial-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-radial-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-radial-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-conic {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-conic-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-conic-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-conic-from-position {
+          syntax: '<angle> | <percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-conic-to-position {
+          syntax: '<angle> | <percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-left {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-left-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-left-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-left-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-left-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-right {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-right-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-right-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-right-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-right-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-bottom {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-bottom-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-bottom-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-bottom-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-bottom-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-top {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-top-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-top-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-top-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-top-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-linear-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-radial-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-conic-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-linear-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: 0deg;
+        }
+
+        @property --mask-conic-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: 0deg;
+        }
+
+        @property --mask-radial-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: center;
+        }
+
+        @property --mask-radial-shape {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: ellipse;
+        }
+
+        @property --mask-radial-size {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: farthest-corner;
+        }
+
+        @property --mask-composite {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: intersect;
+        }
+
+        @property --mask-composite-webkit {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: source-in;
+        }
       }"
     `)
   })
@@ -2231,6 +4355,360 @@ describe('Global css', () => {
           inherits: false;
 
           initial-value: proximity;
+        }
+
+        @property --mask-linear {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-linear-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-linear-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-linear-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-linear-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-radial {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-radial-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-radial-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-radial-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-radial-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-conic {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-conic-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-conic-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-conic-from-position {
+          syntax: '<angle> | <percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-conic-to-position {
+          syntax: '<angle> | <percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-left {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-left-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-left-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-left-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-left-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-right {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-right-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-right-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-right-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-right-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-bottom {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-bottom-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-bottom-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-bottom-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-bottom-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-top {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-top-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-top-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-top-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-top-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-linear-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-radial-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-conic-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-linear-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: 0deg;
+        }
+
+        @property --mask-conic-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: 0deg;
+        }
+
+        @property --mask-radial-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: center;
+        }
+
+        @property --mask-radial-shape {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: ellipse;
+        }
+
+        @property --mask-radial-size {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: farthest-corner;
+        }
+
+        @property --mask-composite {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: intersect;
+        }
+
+        @property --mask-composite-webkit {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: source-in;
         }
 
         @media (min-width: 640px) {
@@ -2536,6 +5014,360 @@ describe('Global css', () => {
           inherits: false;
 
           initial-value: proximity;
+        }
+
+        @property --mask-linear {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-linear-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-linear-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-linear-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-linear-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-radial {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-radial-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-radial-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-radial-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-radial-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-conic {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-conic-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-conic-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-conic-from-position {
+          syntax: '<angle> | <percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-conic-to-position {
+          syntax: '<angle> | <percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-left {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-left-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-left-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-left-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-left-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-right {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-right-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-right-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-right-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-right-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-bottom {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-bottom-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-bottom-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-bottom-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-bottom-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-top {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: linear-gradient(#fff, #fff);
+        }
+
+        @property --mask-top-from-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: black;
+        }
+
+        @property --mask-top-to-color {
+          syntax: '<color>';
+
+          inherits: false;
+
+          initial-value: transparent;
+        }
+
+        @property --mask-top-from-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 0%;
+        }
+
+        @property --mask-top-to-position {
+          syntax: '<length-percentage>';
+
+          inherits: false;
+
+          initial-value: 100%;
+        }
+
+        @property --mask-linear-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-radial-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-conic-stops {
+          syntax: '*';
+
+          inherits: false;
+        }
+
+        @property --mask-linear-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: 0deg;
+        }
+
+        @property --mask-conic-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: 0deg;
+        }
+
+        @property --mask-radial-position {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: center;
+        }
+
+        @property --mask-radial-shape {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: ellipse;
+        }
+
+        @property --mask-radial-size {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: farthest-corner;
+        }
+
+        @property --mask-composite {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: intersect;
+        }
+
+        @property --mask-composite-webkit {
+          syntax: '*';
+
+          inherits: false;
+
+          initial-value: source-in;
         }
 
         @media (min-width: 640px) {

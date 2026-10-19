@@ -8090,6 +8090,48 @@ describe('generate property types', () => {
       scrollSnapMarginRight?: ConditionalValue<UtilityValues["scrollSnapMarginRight"] | CssVars | AnyString> | undefined
        srOnly?: ConditionalValue<UtilityValues["srOnly"] | CssVars | AnyString> | undefined
        debug?: ConditionalValue<UtilityValues["debug"] | CssVars | AnyString> | undefined
+       maskTopFrom?: ConditionalValue<UtilityValues["maskTopFrom"] | CssVars | AnyString> | undefined
+       maskTopTo?: ConditionalValue<UtilityValues["maskTopTo"] | CssVars | AnyString> | undefined
+       maskTopFromColor?: ConditionalValue<UtilityValues["maskTopFromColor"] | CssVars | AnyString> | undefined
+       maskTopToColor?: ConditionalValue<UtilityValues["maskTopToColor"] | CssVars | AnyString> | undefined
+       maskRightFrom?: ConditionalValue<UtilityValues["maskRightFrom"] | CssVars | AnyString> | undefined
+       maskRightTo?: ConditionalValue<UtilityValues["maskRightTo"] | CssVars | AnyString> | undefined
+       maskRightFromColor?: ConditionalValue<UtilityValues["maskRightFromColor"] | CssVars | AnyString> | undefined
+       maskRightToColor?: ConditionalValue<UtilityValues["maskRightToColor"] | CssVars | AnyString> | undefined
+       maskBottomFrom?: ConditionalValue<UtilityValues["maskBottomFrom"] | CssVars | AnyString> | undefined
+       maskBottomTo?: ConditionalValue<UtilityValues["maskBottomTo"] | CssVars | AnyString> | undefined
+       maskBottomFromColor?: ConditionalValue<UtilityValues["maskBottomFromColor"] | CssVars | AnyString> | undefined
+       maskBottomToColor?: ConditionalValue<UtilityValues["maskBottomToColor"] | CssVars | AnyString> | undefined
+       maskLeftFrom?: ConditionalValue<UtilityValues["maskLeftFrom"] | CssVars | AnyString> | undefined
+       maskLeftTo?: ConditionalValue<UtilityValues["maskLeftTo"] | CssVars | AnyString> | undefined
+       maskLeftFromColor?: ConditionalValue<UtilityValues["maskLeftFromColor"] | CssVars | AnyString> | undefined
+       maskLeftToColor?: ConditionalValue<UtilityValues["maskLeftToColor"] | CssVars | AnyString> | undefined
+       maskXFrom?: ConditionalValue<UtilityValues["maskXFrom"] | CssVars | AnyString> | undefined
+       maskXTo?: ConditionalValue<UtilityValues["maskXTo"] | CssVars | AnyString> | undefined
+       maskXFromColor?: ConditionalValue<UtilityValues["maskXFromColor"] | CssVars | AnyString> | undefined
+       maskXToColor?: ConditionalValue<UtilityValues["maskXToColor"] | CssVars | AnyString> | undefined
+       maskYFrom?: ConditionalValue<UtilityValues["maskYFrom"] | CssVars | AnyString> | undefined
+       maskYTo?: ConditionalValue<UtilityValues["maskYTo"] | CssVars | AnyString> | undefined
+       maskYFromColor?: ConditionalValue<UtilityValues["maskYFromColor"] | CssVars | AnyString> | undefined
+       maskYToColor?: ConditionalValue<UtilityValues["maskYToColor"] | CssVars | AnyString> | undefined
+       maskLinear?: ConditionalValue<UtilityValues["maskLinear"] | CssVars | AnyString> | undefined
+       maskLinearFrom?: ConditionalValue<UtilityValues["maskLinearFrom"] | CssVars | AnyString> | undefined
+       maskLinearTo?: ConditionalValue<UtilityValues["maskLinearTo"] | CssVars | AnyString> | undefined
+       maskLinearFromColor?: ConditionalValue<UtilityValues["maskLinearFromColor"] | CssVars | AnyString> | undefined
+       maskLinearToColor?: ConditionalValue<UtilityValues["maskLinearToColor"] | CssVars | AnyString> | undefined
+       maskRadial?: ConditionalValue<string | number | AnyString> | undefined
+       maskRadialFrom?: ConditionalValue<UtilityValues["maskRadialFrom"] | CssVars | AnyString> | undefined
+       maskRadialTo?: ConditionalValue<UtilityValues["maskRadialTo"] | CssVars | AnyString> | undefined
+       maskRadialFromColor?: ConditionalValue<UtilityValues["maskRadialFromColor"] | CssVars | AnyString> | undefined
+       maskRadialToColor?: ConditionalValue<UtilityValues["maskRadialToColor"] | CssVars | AnyString> | undefined
+       maskRadialAt?: ConditionalValue<UtilityValues["maskRadialAt"] | CssVars | AnyString> | undefined
+       maskRadialSize?: ConditionalValue<UtilityValues["maskRadialSize"] | CssVars | AnyString> | undefined
+       maskRadialShape?: ConditionalValue<UtilityValues["maskRadialShape"] | CssVars | AnyString> | undefined
+       maskConic?: ConditionalValue<string | number | AnyString> | undefined
+       maskConicFrom?: ConditionalValue<string | number | AnyString> | undefined
+       maskConicTo?: ConditionalValue<string | number | AnyString> | undefined
+       maskConicFromColor?: ConditionalValue<UtilityValues["maskConicFromColor"] | CssVars | AnyString> | undefined
+       maskConicToColor?: ConditionalValue<UtilityValues["maskConicToColor"] | CssVars | AnyString> | undefined
        colorPalette?: ConditionalValue<UtilityValues["colorPalette"] | CssVars | AnyString> | undefined
        mixin?: ConditionalValue<UtilityValues["mixin"] | CssVars | AnyString> | undefined
       }"
