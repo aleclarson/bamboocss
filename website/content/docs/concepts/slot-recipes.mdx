@@ -433,13 +433,13 @@ the application graph are kept in a production Vite build.
 Every slot recipe ships a type interface for its accepted variants. You can import them from the `styled-system/recipes`
 entrypoint.
 
-For the checkbox recipe, we can import the `CheckboxVariants` type like so:
+For the checkbox recipe, we can import the `CheckboxVariantProps` type like so:
 
 ```ts
 import React from 'react'
-import type { CheckboxVariants } from '../styled-system/recipes'
+import type { CheckboxVariantProps } from '../styled-system/recipes'
 
-type CheckboxProps = CheckboxVariants & {
+type CheckboxProps = CheckboxVariantProps & {
   children: React.ReactNode
   value?: string
   onChange?: (value: string) => void

@@ -644,30 +644,33 @@ const styles: SystemStyleObject = {
 }
 ```
 
-A component that lets its caller style part of it takes a style object with those properties alone,
-`SystemStyleObjectWith`, or with every property but some, `SystemStyleObjectWithout`. The restriction holds in every
-condition and selector too, and either is a `SystemStyleObject`, so it goes into `css()` as one:
+Styles a caller may add to yours can be limited to some properties, `SystemStyleObjectWith`, or to every property but
+some, `SystemStyleObjectWithout`. The restriction holds in every condition and selector too, and either is a
+`SystemStyleObject`:
 
 ```tsx
-import { css, cx } from '../styled-system/css'
-import type { SystemStyleObjectWith } from '../styled-system/types'
+import { css } from '../styled-system/css'
+import type { SystemStyleObject, SystemStyleObjectWith } from '../styled-system/types'
 
-interface ButtonProps {
-  // Only margins and width: a caller places the button, and does not restyle it.
-  css?: SystemStyleObjectWith<'margin' | 'marginTop' | 'marginBottom' | 'width'>
-}
+// Only margins and width: a caller places the button, and does not restyle it.
+type Placement = SystemStyleObjectWith<'margin' | 'marginTop' | 'marginBottom' | 'width'>
 
-export const Button = ({ css: style = {} }: ButtonProps) => (
-  <button className={cx(css({ paddingInline: '4' }), css(style))} />
-)
+const buttonStyles = (placement: Placement = {}): SystemStyleObject => ({ paddingInline: '4', ...placement })
+
+css(buttonStyles({ marginTop: '4' })) // ✅
+css(buttonStyles({ color: 'red.500' })) // ❌ a type error: color is not a placement
 ```
+
+The styles reach `css()` where the build can read them, at the call site, which is why the restriction types a helper's
+parameter rather than a component's prop: `css(props.css)` is a value only known at runtime, and
+[fails the build](/docs/guides/dynamic-styling). A component takes a `className` instead.
 
 A shorthand is a property of its own: list `mt` beside `marginTop` to take both.
 
 ## Property conflicts
 
-When you combine shorthand and longhand properties, Bamboo will resolve the styles in a predictable way. The shorthand
-property will take precedence over the longhand property.
+When a shorthand and one of its longhands are both set, the longhand wins, whatever order you wrote them in. This pads
+the top `20px` and the other sides `10px`:
 
 ```jsx
 import { css } from '../styled-system/css'
@@ -678,19 +681,28 @@ const styles = css({
 })
 ```
 
-The styles generated at build time will look like this:
+Each rule is written into a sublayer ranked by how specific its property is, so the longhand's comes later in the
+cascade wherever the two rules land in the stylesheet:
 
 ```css
 @layer utilities {
-  .p_10px {
-    padding: 10px;
+  @layer s010-c0-p1000, s010-c0-p4000;
+
+  @layer s010-c0-p1000 {
+    .p_10px {
+      padding: 10px;
+    }
   }
 
-  .pt_20px {
-    padding-top: 20px;
+  @layer s010-c0-p4000 {
+    .pt_20px {
+      padding-top: 20px;
+    }
   }
 }
 ```
+
+See [sublayers of `utilities`](/docs/concepts/cascade-layers#sublayers-of-utilities).
 
 ## Global vars
 

@@ -63,7 +63,7 @@ Use a CSS variable when Bamboo conditions or consumer CSS must still be able to 
 ```tsx
 const sidebar = css({
   width: 'var(--sidebar-width)',
-  _tablet: { width: '100%' },
+  mdDown: { width: '100%' },
 })
 
 export const Sidebar = ({ width }: { width: string }) => (

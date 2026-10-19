@@ -458,13 +458,13 @@ a selection: `button({ size: { base: 'sm', md: 'lg' } })` names no variant, and 
 Every recipe ships a type interface for its accepted variants. You can import them from the `styled-system/recipes`
 entrypoint.
 
-For the button recipe, we can import the `ButtonVariants` type like so:
+For the button recipe, we can import the `ButtonVariantProps` type like so:
 
 ```ts
 import React from 'react'
-import type { ButtonVariants } from '../styled-system/recipes'
+import type { ButtonVariantProps } from '../styled-system/recipes'
 
-type ButtonProps = ButtonVariants & {
+type ButtonProps = ButtonVariantProps & {
   children: React.ReactNode
 }
 ```
