@@ -14,8 +14,7 @@ describe('generate recipes', () => {
     expect(recipeJs(fixtureDefaults)).toMatchInlineSnapshot(`
       [
         {
-          "dts": "import type { ConditionalValue } from '../types/index';
-      import type { DistributiveOmit, Pretty } from '../types/system-types';
+          "dts": "import type { DistributiveOmit, Pretty } from '../types/system-types';
 
       interface TextStyleVariant {
         size: "h1" | "h2"
@@ -24,7 +23,7 @@ describe('generate recipes', () => {
 
 
       export type TextStyleVariantProps = {
-        [key in keyof TextStyleVariant]?: ConditionalValue<TextStyleVariant[key]> | undefined
+        [key in keyof TextStyleVariant]?: TextStyleVariant[key] | undefined
       }
 
       export interface TextStyleRecipe {
@@ -48,8 +47,7 @@ describe('generate recipes', () => {
           "name": "text-style",
         },
         {
-          "dts": "import type { ConditionalValue } from '../types/index';
-      import type { DistributiveOmit, Pretty } from '../types/system-types';
+          "dts": "import type { DistributiveOmit, Pretty } from '../types/system-types';
 
       interface TooltipStyleVariant {
         
@@ -58,7 +56,7 @@ describe('generate recipes', () => {
 
 
       export type TooltipStyleVariantProps = {
-        [key in keyof TooltipStyleVariant]?: ConditionalValue<TooltipStyleVariant[key]> | undefined
+        [key in keyof TooltipStyleVariant]?: TooltipStyleVariant[key] | undefined
       }
 
       export interface TooltipStyleRecipe {
@@ -82,8 +80,7 @@ describe('generate recipes', () => {
           "name": "tooltip-style",
         },
         {
-          "dts": "import type { ConditionalValue } from '../types/index';
-      import type { DistributiveOmit, Pretty } from '../types/system-types';
+          "dts": "import type { DistributiveOmit, Pretty } from '../types/system-types';
 
       interface CardStyleVariant {
         rounded: boolean
@@ -92,7 +89,7 @@ describe('generate recipes', () => {
 
 
       export type CardStyleVariantProps = {
-        [key in keyof CardStyleVariant]?: ConditionalValue<CardStyleVariant[key]> | undefined
+        [key in keyof CardStyleVariant]?: CardStyleVariant[key] | undefined
       }
 
       export interface CardStyleRecipe {
@@ -116,8 +113,7 @@ describe('generate recipes', () => {
           "name": "card-style",
         },
         {
-          "dts": "import type { ConditionalValue } from '../types/index';
-      import type { DistributiveOmit, Pretty } from '../types/system-types';
+          "dts": "import type { DistributiveOmit, Pretty } from '../types/system-types';
 
       interface ButtonStyleVariant {
         /**
@@ -133,7 +129,7 @@ describe('generate recipes', () => {
 
 
       export type ButtonStyleVariantProps = {
-        [key in keyof ButtonStyleVariant]?: ConditionalValue<ButtonStyleVariant[key]> | undefined
+        [key in keyof ButtonStyleVariant]?: ButtonStyleVariant[key] | undefined
       }
 
       export interface ButtonStyleRecipe {
@@ -157,8 +153,7 @@ describe('generate recipes', () => {
           "name": "button-style",
         },
         {
-          "dts": "import type { ConditionalValue } from '../types/index';
-      import type { DistributiveOmit, Pretty } from '../types/system-types';
+          "dts": "import type { DistributiveOmit, Pretty } from '../types/system-types';
 
       interface CheckboxVariant {
         /**
@@ -170,7 +165,7 @@ describe('generate recipes', () => {
       type CheckboxSlot = "root" | "control" | "label"
 
       export type CheckboxVariantProps = {
-        [key in keyof CheckboxVariant]?: ConditionalValue<CheckboxVariant[key]> | undefined
+        [key in keyof CheckboxVariant]?: CheckboxVariant[key] | undefined
       }
 
       export interface CheckboxRecipe {
@@ -194,8 +189,7 @@ describe('generate recipes', () => {
           "name": "checkbox",
         },
         {
-          "dts": "import type { ConditionalValue } from '../types/index';
-      import type { DistributiveOmit, Pretty } from '../types/system-types';
+          "dts": "import type { DistributiveOmit, Pretty } from '../types/system-types';
 
       interface BadgeVariant {
         size: "sm"

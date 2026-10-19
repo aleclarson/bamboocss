@@ -433,27 +433,25 @@ emit. The generated recipe config and recipe-specific selectors are absent from 
 }
 ```
 
-### Responsive and Conditional variants
+### Responsive and conditional variants
 
-Recipes created in the config have a **special** feature; they can be applied based on a specific breakpoints or
-conditions.
+A recipe call selects one variant per axis. To change a variant at a breakpoint or in a state, write the condition
+inside the variant's styles:
 
-Here's how to tweak the size variant of the button recipe based on breakpoints.
-
-```jsx
-import { button } from '../styled-system/recipes'
-
-function App() {
-  return (
-    <div>
-      <button className={button({ size: { base: 'sm', md: 'lg' } })}>Click me</button>
-    </div>
-  )
-}
+```js
+export const buttonRecipe = defineRecipe({
+  className: 'button',
+  variants: {
+    size: {
+      sm: { padding: '2', fontSize: '12px' },
+      lg: { padding: '4', fontSize: { base: '16px', md: '20px' } },
+    },
+  },
+})
 ```
 
-> In most cases, we don't recommend applying conditional variants inline. Ideally, you might want to render different
-> views for your responsive breakpoints.
+A size that changes with the viewport is a variant of its own, `fluid: { padding: { base: '2', md: '4' } }`, rather than
+a selection: `button({ size: { base: 'sm', md: 'lg' } })` names no variant, and the build fails on it, saying so.
 
 ### TypeScript Guide
 

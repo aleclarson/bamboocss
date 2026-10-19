@@ -77,6 +77,16 @@ describe('strict compiler', () => {
     expect(end).not.toThrow()
   }, 60_000)
 
+  test('fails on a responsive recipe selection, and says where the condition goes', async () => {
+    const end = await run(
+      `import { cva } from 'styled-system/css'\nconst badge = cva({ variants: { size: { sm: { fontSize: 'sm' }, lg: { fontSize: 'lg' } } } })\nexport const cls = badge({ size: { base: 'sm', md: 'lg' } })\n`,
+      'src/strict-responsive-selection.tsx',
+    )
+
+    expect(end).toThrow(/badge\(\) — recipe-call: `size` is selected with an object/)
+    expect(end).toThrow(/write the condition inside the variant's styles/)
+  }, 60_000)
+
   test('fails on a runtime style leaf', async () => {
     const end = await run(src(`export const f = (tone) => css({ color: tone })`), 'src/strict-leaf.tsx')
     expect(end).toThrow(/dynamic|runtime-binding/)

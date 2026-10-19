@@ -19,7 +19,7 @@ export function generateRecipes(ctx: Context, filters?: ArtifactFilters) {
 
   return details.map((recipe) => {
     const { baseName, config, upperName, variantKeyMap, dashName } = recipe
-    const { description, defaultVariants, compoundVariants, deprecated } = config
+    const { description, defaultVariants, deprecated } = config
 
     const getDefaultValueJsDoc = (key: string) => {
       if (!hasOwn(defaultVariants, key)) return
@@ -62,7 +62,6 @@ export function generateRecipes(ctx: Context, filters?: ArtifactFilters) {
       js: jsCode,
 
       dts: outdent`
-        ${ctx.file.importType('ConditionalValue', '../types/index')}
         ${ctx.file.importType('DistributiveOmit, Pretty', '../types/system-types')}
 
         interface ${upperName}Variant {
@@ -78,9 +77,7 @@ export function generateRecipes(ctx: Context, filters?: ArtifactFilters) {
         ${Recipes.isSlotRecipeConfig(config) ? `type ${upperName}Slot = ${unionType(config.slots)}` : ''}
 
         export type ${upperName}VariantProps = {
-          [key in keyof ${upperName}Variant]?: ${
-            compoundVariants?.length ? `${upperName}Variant[key]` : `ConditionalValue<${upperName}Variant[key]>`
-          } | undefined
+          [key in keyof ${upperName}Variant]?: ${upperName}Variant[key] | undefined
         }
 
         export interface ${upperName}Recipe {

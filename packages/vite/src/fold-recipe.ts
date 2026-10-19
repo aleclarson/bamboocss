@@ -177,7 +177,12 @@ export type LowerResult =
       dynamic: boolean
     }
   | { kind: 'dynamic-style'; map: DynamicStyleMap }
-  | { kind: 'decline'; reason: 'dynamic' | 'unsupported-shape' | 'unknown-recipe' }
+  | {
+      kind: 'decline'
+      reason: 'dynamic' | 'unsupported-shape' | 'unknown-recipe'
+      /** What the call site has to change, where the reason alone would not say. */
+      detail?: string
+    }
 
 export interface CompiledStyleMap {
   expression: string
@@ -270,6 +275,17 @@ export const lowerRecipeCall = (
 
       for (const property of written.properties) {
         const { key } = property
+
+        // `{ size: { base: 'sm', md: 'lg' } }`. Taken for a runtime value, an object reached the
+        // decision table as `[object Object]`, matched no variant, and rendered the call without
+        // one: no error, and no size.
+        if (property.structured) {
+          return {
+            kind: 'decline',
+            reason: 'dynamic',
+            detail: `\`${key}\` is selected with an object, and a recipe call takes one variant per axis: write the condition inside the variant's styles`,
+          }
+        }
 
         // `{ tone }`, the idiomatic spelling. The name is the expression. Last write wins, as
         // the object literal itself would evaluate.

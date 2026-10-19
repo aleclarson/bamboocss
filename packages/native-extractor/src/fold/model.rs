@@ -121,6 +121,10 @@ pub struct FoldSelectionProperty {
     pub inert: bool,
     /// The value evaluated to exactly one scalar the program will produce.
     pub resolved: Option<serde_json::Value>,
+    /// The value is an object or an array, written as one or evaluated exactly to one. No
+    /// variant is named by one: `{ base: 'sm', md: 'lg' }` is a responsive selection, which a
+    /// recipe call does not take.
+    pub structured: bool,
 }
 
 #[napi(object)]

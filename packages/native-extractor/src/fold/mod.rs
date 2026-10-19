@@ -1435,27 +1435,35 @@ fn recipe_invocation<'a>(
                             continue;
                         };
                         let value = &property.value;
-                        let resolved = {
-                            let result = evaluator.evaluate(value);
-                            let exact = exact_result(&result)
-                                && Exactness {
-                                    evaluator: &mut *evaluator,
-                                    drops_nullish: false,
-                                }
-                                .check(value);
-                            if exact {
-                                match result.value {
-                                    Some(
-                                        value @ (serde_json::Value::String(_)
-                                        | serde_json::Value::Number(_)
-                                        | serde_json::Value::Bool(_)
-                                        | serde_json::Value::Null),
-                                    ) => Some(value),
-                                    _ => None,
-                                }
-                            } else {
-                                None
+                        let result = evaluator.evaluate(value);
+                        let exact = exact_result(&result)
+                            && Exactness {
+                                evaluator: &mut *evaluator,
+                                drops_nullish: false,
                             }
+                            .check(value);
+                        // Written as an object or an array, or known to be one: a value no
+                        // variant is named, whatever its parts are.
+                        let structured = matches!(
+                            unwrap(value),
+                            Expression::ObjectExpression(_) | Expression::ArrayExpression(_)
+                        ) || (exact
+                            && matches!(
+                                result.value,
+                                Some(serde_json::Value::Object(_) | serde_json::Value::Array(_))
+                            ));
+                        let resolved = if exact {
+                            match result.value {
+                                Some(
+                                    value @ (serde_json::Value::String(_)
+                                    | serde_json::Value::Number(_)
+                                    | serde_json::Value::Bool(_)
+                                    | serde_json::Value::Null),
+                                ) => Some(value),
+                                _ => None,
+                            }
+                        } else {
+                            None
                         };
                         properties.push(FoldSelectionProperty {
                             key,
@@ -1468,6 +1476,7 @@ fn recipe_invocation<'a>(
                             text: value.span().source_text(facts.source).to_string(),
                             inert: is_inert(value),
                             resolved,
+                            structured,
                         });
                     }
                 }

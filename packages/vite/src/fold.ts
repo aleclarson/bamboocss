@@ -80,7 +80,10 @@ export interface SkippedCall {
    * binding may be anywhere in its module.
    */
   refusal?: FoldRefusal
-  /** For `unknown-condition`: the key, and what it was probably meant to be. */
+  /**
+   * What to change, where the reason does not say: for `unknown-condition` the key and what it
+   * was probably meant to be, for a `recipe-call` or a `dynamic` call the shape it cannot take.
+   */
   detail?: string
 }
 
@@ -581,7 +584,13 @@ export const foldSource = (options: FoldOptions): FoldResult => {
         continue
       }
 
-      skipped.push({ name, reason: 'recipe-call', start, end })
+      skipped.push({
+        name,
+        reason: 'recipe-call',
+        start,
+        end,
+        ...(lowered.kind === 'decline' && lowered.detail && { detail: lowered.detail }),
+      })
       continue
     }
 

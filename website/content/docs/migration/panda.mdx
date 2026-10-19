@@ -242,6 +242,9 @@ and recipe-specific selectors do not ship. Bamboo has no extraction-only runtime
 - **`firstThatWorks()`** from Panda 2 is `fallback()`, imported from `styled-system/css` the same way and written the
   same way, most-preferred value first: `fallback('100dvh', '100vh')`. See
   [fallback values](/docs/concepts/writing-styles#fallback-values).
+- **A responsive recipe selection** fails the build. `button({ size: { base: 'sm', md: 'lg' } })` names no variant, as a
+  recipe call takes one per axis: write the condition inside the variant's styles. See
+  [responsive and conditional variants](/docs/concepts/recipes#responsive-and-conditional-variants).
 - **`keyframes()`** from Panda 2 is here too, imported from `styled-system/css` and called the same way. The name it
   returns can differ from Panda's for the same stops, since it hashes them in the order they were written, and the stops
   have to be known at build time. See [keyframes](/docs/concepts/keyframes).

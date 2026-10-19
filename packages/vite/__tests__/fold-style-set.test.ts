@@ -286,3 +286,60 @@ describe('static style-set folding', () => {
     expect(result.skipped).toContainEqual(expect.objectContaining({ name: 'viewTransition', reason: 'dynamic' }))
   })
 })
+
+/**
+ * A recipe call takes one variant per axis. `{ base: 'sm', md: 'lg' }` was taken for a runtime
+ * value and compiled into the decision table, where it reached the lookup as `[object Object]`,
+ * matched no variant, and rendered the call without one: no error, and no size.
+ */
+describe('a responsive or conditional selection', () => {
+  const refused = (result: ReturnType<ReturnType<typeof createFoldFixture>['foldStrict']>, name: string) => {
+    expect(result.code).not.toContain('cvaMap(')
+    expect(result.skipped).toContainEqual(
+      expect.objectContaining({
+        name,
+        reason: 'recipe-call',
+        detail: expect.stringContaining('`size` is selected with an object'),
+      }),
+    )
+  }
+
+  test.each([
+    ['an object', `{ base: 'sm', md: 'md' }`],
+    ['an array', `['sm', 'md']`],
+  ])('is refused, written as %s', (_label, value) => {
+    const result = createFoldFixture().foldStrict(`
+      import { buttonStyle } from 'styled-system/recipes'
+      export const className = buttonStyle({ size: ${value} })
+    `)
+    refused(result, 'buttonStyle')
+  })
+
+  test('is refused through a binding holding one', () => {
+    const result = createFoldFixture().foldStrict(`
+      import { buttonStyle } from 'styled-system/recipes'
+      const size = { base: 'sm', md: 'md' }
+      export const className = buttonStyle({ size })
+    `)
+    refused(result, 'buttonStyle')
+  })
+
+  test('is refused by an inline recipe', () => {
+    const result = createFoldFixture().foldStrict(`
+      import { cva } from 'styled-system/css'
+      const badge = cva({ variants: { size: { sm: { fontSize: 'sm' }, lg: { fontSize: 'lg' } } } })
+      export const className = badge({ size: { base: 'sm', md: 'lg' } })
+    `)
+    refused(result, 'badge')
+  })
+
+  // The value is the caller's, and may be one of the variants: only a written or known object is refused.
+  test('a parameter still compiles to the decision table', () => {
+    const result = createFoldFixture().foldStrict(`
+      import { buttonStyle } from 'styled-system/recipes'
+      export const Button = (size) => buttonStyle({ size })
+    `)
+    expect(result.code).toContain('cvaMap(')
+    expect(result.skipped).toEqual([])
+  })
+})

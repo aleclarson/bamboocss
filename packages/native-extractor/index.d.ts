@@ -126,6 +126,8 @@ export interface FoldSelectionProperty {
   text: string
   inert: boolean
   resolved?: unknown
+  /** An object or an array, written as one or known to be one: a value no variant is named. */
+  structured: boolean
 }
 
 export interface FoldSelection {
