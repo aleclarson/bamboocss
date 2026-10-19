@@ -20,10 +20,14 @@ const getPercent = (used: number, total: number) => {
  * it was.
  */
 export interface TokenReachability {
-  /** The configured tokens the prune judges, by name: not a palette's virtual ones, nor a scale's negatives. */
-  judged: ReadonlySet<string>
-  /** Those of them it removes. */
-  unused: ReadonlySet<string>
+  /**
+   * The configured tokens the prune judges, not a palette's virtual ones nor a scale's negatives:
+   * by category, each by its name within the category, as a style value names it. Not parsed out
+   * of the token's full name, which `formatTokenName` can spell any way at all.
+   */
+  judged: ReadonlyMap<string, ReadonlySet<string>>
+  /** Those of them it removes, the same way. */
+  unused: ReadonlyMap<string, ReadonlySet<string>>
 }
 
 export function analyzeTokens(
@@ -38,12 +42,8 @@ export function analyzeTokens(
   // one read only through other tokens, and one that is entirely unused, which is the row an
   // audit is looking for.
   if (reachability) {
-    const listed = new Set(categoryMap.keys())
-    for (const name of reachability.judged) {
-      const category = name.slice(0, name.indexOf('.'))
-      if (listed.has(category)) continue
-      listed.add(category)
-      categoryEntries.push([category, new Set()])
+    for (const category of reachability.judged.keys()) {
+      if (!categoryMap.has(category)) categoryEntries.push([category, new Set()])
     }
   }
 
@@ -79,17 +79,14 @@ export function analyzeTokens(
 
   const percentMap = usageEntries.reduce((map, [category, usage]) => {
     const total = totalMap.get(category) ?? 0
+    // A configured token is the prune's to judge: written in a config recipe nothing calls is not a
+    // use, and read through another token is one.
+    const judged = reachability?.judged.get(category)
     const tokens = usage.reduce((acc, item) => {
-      // A configured token is the prune's to judge: written in a config recipe nothing calls is
-      // not a use, and read through another token is one.
-      return item.type === 'token' && !reachability?.judged.has(`${category}.${item.value}`) ? acc.add(item.value) : acc
+      return item.type === 'token' && !judged?.has(item.value) ? acc.add(item.value) : acc
     }, new Set<string>())
-    if (reachability) {
-      const prefix = `${category}.`
-      for (const name of reachability.judged) {
-        if (name.startsWith(prefix) && !reachability.unused.has(name)) tokens.add(name.slice(prefix.length))
-      }
-    }
+    const unused = reachability?.unused.get(category)
+    for (const name of judged ?? []) if (!unused?.has(name)) tokens.add(name)
 
     const percent = getPercent(tokens.size, total)
     return map.set(category, {

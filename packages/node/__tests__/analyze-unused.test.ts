@@ -185,3 +185,35 @@ describe('the usage reports agree with --unused', () => {
     expect(patterns).toContainEqual(expect.objectContaining({ patternName: 'flex', usedCount: 0, unused: true }))
   })
 })
+
+// `formatTokenName` can spell a token's full name any way at all, so the report reads a token's
+// category and its name within it off the token, never out of the full name.
+test('the token report keeps its categories under a custom formatTokenName', async () => {
+  const summary = async (config: Config, color: string) => {
+    const ctx = createContext(config) as any
+    ctx.project.addSourceFile(
+      'code.tsx',
+      `import { css } from 'styled-system/css'\nexport const a = css({ color: '${color}' })\n`,
+    )
+    ctx.getFiles = () => ['code.tsx']
+    return (await analyze(ctx)).getTokenReport('json').report.getSummary()
+  }
+  const formatName = (path: string[]) => `$${path.join('-')}`
+  const plain = await summary({} as Config, 'red.300')
+  // Each token as the formatted config names it.
+  const formatted = await summary(
+    {
+      plugins: [
+        {
+          name: 'format-names',
+          hooks: { 'tokens:created': ({ configure }: any) => configure({ formatTokenName: formatName }) },
+        },
+      ],
+    } as Config,
+    '$red-300',
+  )
+
+  expect(formatted.map((row) => row.category).sort()).toEqual(plain.map((row) => row.category).sort())
+  const colors = (rows: typeof plain) => rows.find((row) => row.category === 'colors')!
+  expect(colors(formatted).usedCount).toBe(colors(plain).usedCount)
+})

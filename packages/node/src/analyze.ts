@@ -66,7 +66,15 @@ export async function analyze(ctx: BambooContext, options: AnalysisOptions = {})
    * built, and `unresolvedPath` is off for it: that one only decides how loudly the prune says what
    * it could not read, and a project that does not prune tokens never hears it.
    */
-  let pruned: { tokens: string[]; keyframes: string[]; judged: Set<string> } | undefined
+  let pruned:
+    | {
+        tokens: string[]
+        keyframes: string[]
+        /** By category, each by its name within it, as the token report reads them. */
+        judged: Map<string, Set<string>>
+        unused: Map<string, Set<string>>
+      }
+    | undefined
   const prunedNames = () => {
     if (pruned) return pruned
 
@@ -101,8 +109,14 @@ export async function analyze(ctx: BambooContext, options: AnalysisOptions = {})
 
     const declarable = new Set<string>()
     for (const vars of ctx.tokens.view.vars.values()) for (const name of vars.keys()) declarable.add(name)
-    const judged = new Set<string>()
+    const judged = new Map<string, Set<string>>()
+    const unused = new Map<string, Set<string>>()
     const tokens: string[] = []
+    const add = (into: Map<string, Set<string>>, category: string, name: string) => {
+      const names = into.get(category) ?? new Set<string>()
+      names.add(name)
+      into.set(category, names)
+    }
     for (const token of ctx.tokens.allTokens) {
       // Generated rather than configured: a palette's virtual tokens and a theme's, the negatives
       // of a scale, and the tokens each breakpoint is written as, which a condition reads by value.
@@ -110,8 +124,11 @@ export async function analyze(ctx: BambooContext, options: AnalysisOptions = {})
       if (isVirtual || isNegative || category === 'breakpoints' || token.name.startsWith('sizes.breakpoint-')) continue
       const name = token.extensions.var
       if (!declarable.has(name)) continue
-      judged.add(token.name)
-      if (!declared.has(name)) tokens.push(token.name)
+      // One with no category has no row in the token table, and is listed by name all the same.
+      if (category) add(judged, category, token.extensions.prop)
+      if (declared.has(name)) continue
+      tokens.push(token.name)
+      if (category) add(unused, category, token.extensions.prop)
     }
 
     pruned = {
@@ -120,6 +137,7 @@ export async function analyze(ctx: BambooContext, options: AnalysisOptions = {})
         .filter((name) => !keyframes.has(name))
         .sort(),
       judged,
+      unused,
     }
     return pruned
   }
@@ -174,8 +192,8 @@ export async function analyze(ctx: BambooContext, options: AnalysisOptions = {})
     },
     /** Each category's tokens, counted as used exactly when the build keeps them. */
     getTokenReport(format: ReportFormat = 'table') {
-      const { judged, tokens } = prunedNames()
-      const report = reporter.getTokenReport({ judged, unused: new Set(tokens) })
+      const { judged, unused } = prunedNames()
+      const report = reporter.getTokenReport({ judged, unused })
       return { report, formatted: formatTokenReport(report.getSummary(), format) }
     },
     /** Every pattern the config defines, how often each is called, and whether anything uses it. */
