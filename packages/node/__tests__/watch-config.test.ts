@@ -47,3 +47,48 @@ test('not on one going, nor on a directory', async () => {
 
   expect(reloaded).toEqual([])
 })
+
+/**
+ * The watch follows what the config is built from as it changes. Armed once with the files the
+ * first config imported, an edit that swapped in a preset left the new file unwatched, and editing
+ * the preset did nothing until the process restarted.
+ */
+test('a file the reloaded config starts importing is watched from then on', async () => {
+  const armed: Array<{ include: string[]; emitter: EventEmitter & { close: () => Promise<void> }; closed: boolean }> =
+    []
+  const ctx = createFixtureContext() as unknown as BambooContext
+  ctx.runtime = {
+    ...ctx.runtime,
+    fs: {
+      ...ctx.runtime.fs,
+      watch: ((options: { include: string[] }) => {
+        const emitter = Object.assign(new EventEmitter(), { close: async () => void (entry.closed = true) })
+        const entry = { include: options.include, emitter, closed: false }
+        armed.push(entry)
+        return emitter
+      }) as unknown as BambooContext['runtime']['fs']['watch'],
+    },
+  }
+  ctx.conf = { ...ctx.conf, dependencies: ['bamboo.config.ts'] }
+
+  const next = createFixtureContext() as unknown as BambooContext
+  next.conf = { ...next.conf, dependencies: ['bamboo.config.ts', 'brand.ts'] }
+
+  const reloaded: string[] = []
+  ctx.watchConfig((file) => {
+    reloaded.push(file)
+    return next
+  })
+  expect(armed.map((entry) => entry.include)).toEqual([['bamboo.config.ts']])
+
+  armed[0]!.emitter.emit('all', 'change', 'bamboo.config.ts')
+  await settle()
+  expect(armed.map((entry) => entry.include)).toEqual([['bamboo.config.ts'], ['bamboo.config.ts', 'brand.ts']])
+  expect(armed[0]!.closed).toBe(true)
+
+  armed[1]!.emitter.emit('all', 'change', 'brand.ts')
+  await settle()
+  expect(reloaded).toEqual(['bamboo.config.ts', 'brand.ts'])
+  // The same files again, so the same watcher.
+  expect(armed).toHaveLength(2)
+})

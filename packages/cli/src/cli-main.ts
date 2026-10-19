@@ -253,6 +253,7 @@ export async function main() {
             await ctx.hooks['config:change']?.({ config: ctx.config, changes: affecteds })
             await codegen(ctx, artifactsToRebuild(affecteds))
             logger.info('ctx:updated', 'config rebuilt ✅')
+            return ctx
           },
           { cwd, poll },
         )
@@ -331,6 +332,7 @@ export async function main() {
             await ctx.hooks['config:change']?.({ config: ctx.config, changes: affecteds })
             await cssgen(ctx, options)
             logger.info('ctx:updated', 'config rebuilt ✅')
+            return ctx
           },
           { cwd, poll },
         )
@@ -607,6 +609,7 @@ export async function main() {
             await ctx.hooks['config:change']?.({ config: ctx.config, changes: affecteds })
             await buildInfo(ctx, outfile)
             logger.info('ctx:updated', 'config rebuilt ✅')
+            return ctx
           },
           { cwd, poll },
         )

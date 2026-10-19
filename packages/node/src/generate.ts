@@ -93,7 +93,8 @@ export async function generate(config: Config, configPath?: string, options: Gen
 
         logger.info('ctx:updated', 'config rebuilt ✅')
         await ctx.hooks['config:change']?.({ config: ctx.config, changes: affecteds })
-        return build(ctx, sourceScanCache, artifactsToRebuild(affecteds))
+        await build(ctx, sourceScanCache, artifactsToRebuild(affecteds))
+        return ctx
       },
       { cwd, poll },
     )

@@ -1044,28 +1044,53 @@ export class BambooContext extends Generator {
     if (fs.existsSync(recipesDir)) fs.rmFileSync(recipesDir)
   }
 
-  watchConfig = (cb: (file: string) => void | Promise<void>, opts?: Omit<WatchOptions, 'include'>) => {
+  /**
+   * Call `cb` when a file the config is built from changes.
+   *
+   * `cb` reloads the config, and returns the context it built so the watch can follow what that
+   * config is built from. Armed once with this context's files, an edit that swapped in a preset,
+   * or imported one more module, left the new file unwatched: editing it did nothing until the
+   * process restarted.
+   */
+  watchConfig = (
+    cb: (file: string) => BambooContext | void | Promise<BambooContext | void>,
+    opts?: Omit<WatchOptions, 'include'>,
+  ) => {
     const { cwd, poll, exclude } = opts ?? {}
     logger.info('ctx:watch', this.messages.configWatch())
 
-    const watcher = this.runtime.fs.watch({
-      include: uniq([...this.explicitDeps, ...this.conf.dependencies]),
-      exclude,
-      cwd,
-      poll,
-    })
+    const arm = (include: string[]) => {
+      const watcher = this.runtime.fs.watch({ include, exclude, cwd, poll })
+      // A dependency appearing is a change too: the config's tsconfigs include a referenced project
+      // that does not exist yet. One going is not — a checkout removes and restores files, and the
+      // config would fail to load in between.
+      watcher.on('all', (event, file) => {
+        if (event === 'add' || event === 'change') void rebuild(file)
+      })
+      return watcher
+    }
+
+    let files = this.configFiles()
+    let watcher = arm(files)
 
     const rebuild = debounce(async (file: string) => {
       logger.info('ctx:change', 'config changed, rebuilding...')
-      await reportRebuildFailure(() => cb(file))
-    })
-    // A dependency appearing is a change too: the config's tsconfigs include a referenced project
-    // that does not exist yet. One going is not — a checkout removes and restores files, and the
-    // config would fail to load in between.
-    watcher.on('all', (event, file) => {
-      if (event === 'add' || event === 'change') void rebuild(file)
+      await reportRebuildFailure(async () => {
+        const next = await cb(file)
+        if (!next) return
+        const nextFiles = next.configFiles()
+        if (nextFiles.join('\n') === files.join('\n')) return
+        // The new one first, so an edit landing in between still has a watcher to reach.
+        const previous = watcher
+        files = nextFiles
+        watcher = arm(files)
+        await previous.close()
+      })
     })
   }
+
+  /** The files the config is built from: the config, what it imports, and what `dependencies` matches. */
+  private configFiles = () => uniq([...this.explicitDeps, ...this.conf.dependencies]).sort()
 
   watchFiles = (
     cb: (event: WatcherEventType, file: string) => void | Promise<void>,
