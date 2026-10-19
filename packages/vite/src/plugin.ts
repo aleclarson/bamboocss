@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readFileSync, realpathSync, statSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
 
 import { logger } from '@bamboocss/logger'
@@ -278,15 +278,26 @@ export const compilerParsePath = (id: string, code: string): string | null => {
  * is most likely to keep its style calls.
  *
  * `resolve` rather than `join`, so an absolute `outdir` is honoured rather than appended
- * to the cwd.
+ * to the cwd. Compared with `/` and the drive letter in one case: on Windows the cwd keeps the
+ * case the shell gave it, `d:\app`, where a bundler names a module `D:/app/…`, and the
+ * generated runtime was compiled as the project's own source. `resolvePath` is the platform's,
+ * and a parameter so the Windows spelling can be checked anywhere.
  */
-export const isGeneratedOutput = (filePath: string, ctx: { config: { cwd: string; outdir: string } }) => {
+export const isGeneratedOutput = (
+  filePath: string,
+  ctx: { config: { cwd: string; outdir: string } },
+  resolvePath: (...paths: string[]) => string = resolve,
+) => {
   const { cwd, outdir } = ctx.config
   if (!outdir) return false
 
-  const slashed = (value: string) => value.replaceAll('\\', '/').replace(/\/$/, '')
+  const slashed = (value: string) =>
+    value
+      .replaceAll('\\', '/')
+      .replace(/^[a-z]:\//, (drive) => drive.toUpperCase())
+      .replace(/\/$/, '')
 
-  const root = slashed(resolve(cwd, outdir))
+  const root = slashed(resolvePath(cwd, outdir))
   const file = slashed(filePath)
 
   return file === root || file.startsWith(`${root}/`)
@@ -2801,9 +2812,19 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
             )
           }
 
-          const outsideExtraction = [...staticSession.transformedFiles].filter(
-            (file) => !staticSession.extractedFiles.has(extractedFileKey(file)),
-          )
+          // A module the bundler names by a spelling of its own is looked up again as it really is,
+          // as the inventory holds what it read through a link: Rolldown names one a Windows junction
+          // reaches by the target the junction stores, which can spell a folder short (`RUNNER~1`)
+          // or in a case the disk does not, and a bundler keeping links names it by the link.
+          const extracted = (file: string) => {
+            if (staticSession.extractedFiles.has(extractedFileKey(file))) return true
+            try {
+              return staticSession.extractedFiles.has(extractedFileKey(realpathSync.native(file)))
+            } catch {
+              return false
+            }
+          }
+          const outsideExtraction = [...staticSession.transformedFiles].filter((file) => !extracted(file))
           if (outsideExtraction.length) {
             throw new Error(
               `bamboocss: ${outsideExtraction.length} statically compiled module(s) are outside the CSS extraction graph:\n\n` +

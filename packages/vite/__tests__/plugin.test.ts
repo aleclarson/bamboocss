@@ -1,8 +1,8 @@
 import { logger } from '@bamboocss/logger'
 import { isStaticCompilerActive } from '@bamboocss/node/static-compiler'
-import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, resolve, win32 } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { afterAll, describe, expect, test, vi } from 'vitest'
 import { VIRTUAL_CSS_ID } from '../src/css'
@@ -403,6 +403,17 @@ describe('generated output', () => {
     expect(isGeneratedOutput(resolve('/app/styled-system-static/app.tsx'), ctx('/app', 'styled-system'))).toBe(false)
   })
 
+  // On Windows the cwd keeps the drive letter's case as the shell gave it, where a bundler names a
+  // module with a capital: the generated runtime was compiled as the project's own source.
+  test('whichever case a Windows drive letter is in', () => {
+    const generated = (file: string, cwd: string) =>
+      isGeneratedOutput(file, { config: { cwd, outdir: 'styled-system' } }, win32.resolve)
+    expect(generated('D:/app/styled-system/css/css.mjs', 'd:\\app')).toBe(true)
+    expect(generated('d:\\app\\styled-system\\css\\css.mjs', 'D:\\app')).toBe(true)
+    expect(generated('D:/app/src/Button.tsx', 'd:\\app')).toBe(false)
+    expect(generated('E:/app/styled-system/css/css.mjs', 'd:\\app')).toBe(false)
+  })
+
   test('an absolute outdir is honoured rather than appended to the cwd', () => {
     expect(isGeneratedOutput(resolve('/generated/css/css.mjs'), ctx('/app', '/generated'))).toBe(true)
     expect(isGeneratedOutput(resolve('/app/generated/css/css.mjs'), ctx('/app', '/generated'))).toBe(false)
@@ -572,6 +583,48 @@ describe('compiler', () => {
       expect(emittedCss).not.toContain(widths.stale)
     } finally {
       rmSync(entry, { force: true })
+    }
+  }, 60_000)
+
+  /**
+   * A bundler can name a module by a spelling the inventory does not hold: Rolldown names one a
+   * Windows junction reaches by the target the junction stores, which can spell a folder short
+   * (`RUNNER~1`) or in a case the disk does not, and a bundler keeping links names it by the link.
+   * The inventory holds it as it really is, so the build refused the classes compiled for it as
+   * outside the CSS extraction graph.
+   */
+  test('a module named through a link is in the extraction graph where it really is', async () => {
+    const entry = join(cwd, 'src/__linked-entry.tsx')
+    const linked = join(cwd, '__linked-src')
+    symlinkSync(join(cwd, 'src'), linked, process.platform === 'win32' ? 'junction' : 'dir')
+    const source = `import { css } from 'styled-system/css'\nexport const className = css({ width: '[95.101px]' })\n`
+    const { css, fold: compiler } = plugins({ cwd, reportSummary: false })
+    const config = { command: 'build', root: cwd, build: { sourcemap: false } }
+    const environment = { name: 'client', config: { build: { sourcemap: false } } }
+    const resolvedCss = hookOf(css.resolveId)!.call({} as never, VIRTUAL_CSS_ID, undefined, {} as never) as string
+    const id = join(linked, '__linked-entry.tsx')
+    const context = {
+      addWatchFile() {},
+      environment,
+      getModuleIds: () => [id, resolvedCss].values(),
+      getModuleInfo: () => null,
+    }
+
+    writeFileSync(entry, `import 'virtual:bamboo.css'\n${source}`)
+    try {
+      await hookOf(css.configResolved)?.call({} as never, config as never)
+      await hookOf(compiler.configResolved)?.call({} as never, config as never)
+      await hookOf(css.buildStart)?.call(context as never, {} as never)
+      await hookOf(compiler.buildStart)?.call(context as never, {} as never)
+      await hookOf(css.load)?.call(context as never, resolvedCss, {} as never)
+      const result = await hookOf(compiler.transform)!.call(context as never, source, id, {} as never)
+      expect(typeof result === 'object' && result?.code).toContain('w_[95.101px]')
+
+      // Refused as outside the CSS extraction graph, it throws.
+      await hookOf(compiler.buildEnd)!.call(context as never, undefined as never)
+    } finally {
+      rmSync(entry, { force: true })
+      rmSync(linked, { force: true, recursive: true })
     }
   }, 60_000)
 
