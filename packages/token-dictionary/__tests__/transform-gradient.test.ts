@@ -56,13 +56,13 @@ test('transform / gradient', () => {
           "prop": "primary",
         },
         "name": "gradients.primary",
-        "originalValue": "linear-gradient(to top, #ff0000 0px, token(colors.pink) 100px)",
+        "originalValue": "linear-gradient(to top, #ff0000 0%, token(colors.pink) 100%)",
         "path": [
           "gradients",
           "primary",
         ],
         "type": "gradient",
-        "value": "linear-gradient(to top, #ff0000 0px, #ff00ff 100px)",
+        "value": "linear-gradient(to top, #ff0000 0%, #ff00ff 100%)",
       },
     ]
   `)
@@ -92,7 +92,22 @@ test('transform / gradient with an angle', () => {
     { color: 'blue', position: 100 },
   ]
   expect(gradient({ type: 'linear', placement: 90, stops }), 'with stops placed').toEqual([
-    'linear-gradient(90deg, red 0px, blue 100px)',
+    'linear-gradient(90deg, red 0%, blue 100%)',
+  ])
+})
+
+// A number places a stop along the gradient, as a design tool does: `100` is its end however long it
+// is. In pixels, a stop at `100` ended the gradient a hundred pixels in and filled the rest with its
+// last color. Any other unit is written as a string.
+test('transform / gradient stop positions', () => {
+  const stops = [
+    { color: 'red', position: 0 },
+    { color: 'white', position: 37.5 },
+    { color: 'blue', position: '40px' },
+    { color: 'black', position: 'calc(100% - 1rem)' },
+  ]
+  expect(gradient({ type: 'linear', placement: 'to right', stops })).toEqual([
+    'linear-gradient(to right, red 0%, white 37.5%, blue 40px, black calc(100% - 1rem))',
   ])
 })
 

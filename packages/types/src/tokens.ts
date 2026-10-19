@@ -61,7 +61,8 @@ export interface Gradient {
   stops:
     | Array<{
         color: string
-        position: number
+        /** A number is a percentage along the gradient, `100` its end; a string is written as it is, `'40px'`. */
+        position: number | string
       }>
     | Array<string>
 }

@@ -69,6 +69,13 @@ const gradientAngle = (name: string, type: string, placement: number) => {
   )
 }
 
+/**
+ * Where a stop sits along the gradient. A number is a percentage of it, as a design tool places a
+ * stop: `position: 100` is the end of the gradient however long it is, where `100px` ended it a
+ * hundred pixels in and filled the rest with the last color. A string is written as it is, `'40px'`.
+ */
+const gradientStopPosition = (position: number | string) => (isString(position) ? position : `${position}%`)
+
 export const transformGradient: TokenTransformer = {
   name: 'tokens/gradient',
   match: (token) => token.extensions.category === 'gradients',
@@ -82,7 +89,7 @@ export const transformGradient: TokenTransformer = {
       const rawStops = stops.map((stop) => {
         if (isString(stop)) return stop
         const { color, position } = stop
-        return `${color} ${position}px`
+        return `${color} ${gradientStopPosition(position)}`
       })
       const direction = typeof placement === 'number' ? gradientAngle(token.name, type, placement) : placement
       return `${type}-gradient(${direction}, ${rawStops.join(', ')})`

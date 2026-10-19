@@ -263,7 +263,7 @@ type Gradient =
       stops:
         | Array<{
             color: string
-            position: number
+            position: number | string
           }>
         | Array<string>
     }
@@ -271,7 +271,8 @@ type Gradient =
 
 A linear gradient's `placement` may be a number, which is an angle in degrees: `placement: 90` is
 `linear-gradient(90deg, …)`. A radial gradient is placed with a shape and a position, like `'circle at top'`. A stop's
-numeric `position` is in pixels.
+numeric `position` is a percentage along the gradient, `position: 100` its end; a string is written as it is, like
+`'40px'`.
 
 ```jsx
 const theme = {

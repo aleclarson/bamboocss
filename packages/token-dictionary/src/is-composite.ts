@@ -16,7 +16,7 @@ export const isCompositeGradient = isMatching({
     P.array(P.string),
     P.array({
       color: P.string,
-      position: P.number,
+      position: P.union(P.number, P.string),
     }),
   ),
 })
