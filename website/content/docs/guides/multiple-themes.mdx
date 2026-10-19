@@ -78,6 +78,10 @@ scheme.
 </html>
 ```
 
+The color mode can be set on the theme's element, as above, or on an element above it — `<html data-color-mode="dark">`
+around a `<body data-theme="pink">` — which is where a `css()` call nesting the two conditions applies too. Set inside
+the theme's element, it does not reach the theme's dark value; theme variants, below, meet the color mode either way.
+
 ## Multi-Themes
 
 The above example shows you how to define multi-theme tokens using nested conditions but you can also define clearly

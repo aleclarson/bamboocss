@@ -243,11 +243,98 @@ describe('a parent condition inside a theme', () => {
           --colors-text: #333
       }
 
-        .dim.dark {
+        .dark .dim, .dim.dark {
           --colors-text: #444
           }
       }"
     `)
+  })
+})
+
+/**
+ * Outside a theme, a condition after another selector condition, `.hc &` after `.dark &`, was
+ * compounded onto the element the first declares on, `.dark.hc`, and held only where the two
+ * classes share an element. An ordinary `css()` call nesting the two applies under `.hc .dark`, so a
+ * page with `.hc` above `.dark` styled its elements for both and kept the token's dark value alone.
+ */
+describe('a parent condition after another, outside a theme', () => {
+  const tokens = (conditions: Config['conditions'], value: unknown, variants?: Record<string, unknown>) => {
+    const ctx = createContext({
+      presets: [],
+      conditions,
+      theme: {
+        breakpoints: { md: '768px' },
+        semanticTokens: { colors: { text: { value } } },
+        ...(variants ? { variants } : {}),
+      },
+      outdir: '',
+    } as Config)
+    const sheet = ctx.createSheet()
+    ctx.appendCssOfType('tokens', sheet)
+    return { ctx, css: sheet.toCss() }
+  }
+  const conditions = { dark: '.dark &', hc: '.hc &' }
+
+  test('meets the element the first declares on from above, and on it', () => {
+    expect(tokens(conditions, { base: '#000', _dark: { base: '#111', _hc: '#fff' } }).css).toMatchInlineSnapshot(`
+      "@layer tokens {
+        :where(html) {
+          --breakpoints-md: 768px;
+          --sizes-breakpoint-md: 768px;
+          --colors-text: #000;
+      }
+
+        .dark {
+          --colors-text: #111
+      }
+
+        .hc .dark, .dark.hc {
+          --colors-text: #fff
+          }
+      }"
+    `)
+  })
+
+  // Inside it, `.dark .hc` would declare on a `.light` panel, or on the root of a region of the
+  // project's own, over the values that one has to keep: nothing tells such a root from another.
+  test('and not inside it, even in a project with themes', () => {
+    const { css } = tokens(conditions, { base: '#000', _dark: { _hc: '#fff' } }, { pastel: {} })
+    expect(css).toContain('.hc .dark, .dark.hc {')
+    expect(css).not.toContain('.dark .hc')
+    expect(css).not.toContain(':not([data-bamboo-theme])')
+  })
+
+  // Wherever an ordinary `css()` call nesting the two applies, so does the token.
+  test('where a css() call nesting the two applies', () => {
+    const { ctx, css } = tokens(conditions, { base: '#000', _dark: { _hc: '#fff' } })
+    ctx.encoder.processAtomic({ color: { _dark: { _hc: 'red' } } } as never)
+    ctx.decoder.collect(ctx.encoder)
+    const atomic = ctx.createSheet()
+    atomic.processDecoder(ctx.decoder)
+    expect(atomic.toCss()).toContain('.hc .dark .dark\\:hc\\:color_red')
+    expect(css).toContain('.hc .dark, .dark.hc {')
+  })
+
+  test('through a media query between the two, and not after one alone', () => {
+    expect(tokens(conditions, { base: '#000', _dark: { md: { _hc: '#fff' } }, md: { _dark: '#eee' } }).css)
+      .toMatchInlineSnapshot(`
+        "@layer tokens {
+          :where(html) {
+            --breakpoints-md: 768px;
+            --sizes-breakpoint-md: 768px;
+            --colors-text: #000;
+        }
+
+          @media (width >= 48rem) {
+            .hc .dark, .dark.hc {
+              --colors-text: #fff
+                    }
+            .dark {
+              --colors-text: #eee
+                }
+            }
+        }"
+      `)
   })
 })
 

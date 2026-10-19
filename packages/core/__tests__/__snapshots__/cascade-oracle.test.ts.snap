@@ -706,9 +706,15 @@ exports[`the precedence contract > is what the emitted stylesheet ranks to 1`] =
   ],
   "--colors-surface": [
     "[data-color=material]",
-    "[data-color=material]:where([data-theme=dark], .dark)",
     "[data-color=pastel]",
-    "@media (width >= 48rem) [data-color=pastel]:where([data-theme=dark], .dark)",
+    "[data-theme=dark] [data-color=material]",
+    "[data-color=material][data-theme=dark]",
+    ".dark [data-color=material]",
+    "[data-color=material].dark",
+    "@media (width >= 48rem) [data-theme=dark] [data-color=pastel]",
+    "@media (width >= 48rem) [data-color=pastel][data-theme=dark]",
+    "@media (width >= 48rem) .dark [data-color=pastel]",
+    "@media (width >= 48rem) [data-color=pastel].dark",
   ],
   "--colors-teal-100": [
     ":where(html)",

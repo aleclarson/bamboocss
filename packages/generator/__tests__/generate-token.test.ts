@@ -559,7 +559,7 @@ describe('generator', () => {
           --colors-surface: #m-b
       }
 
-        [data-color=material]:where([data-theme=dark], .dark) {
+        [data-theme=dark] [data-color=material], [data-color=material][data-theme=dark], .dark [data-color=material], [data-color=material].dark {
           --colors-surface: #m-d
           }
 
@@ -568,7 +568,7 @@ describe('generator', () => {
       }
 
         @media (width >= 48rem) {
-          [data-color=pastel]:where([data-theme=dark], .dark) {
+          [data-theme=dark] [data-color=pastel], [data-color=pastel][data-theme=dark], .dark [data-color=pastel], [data-color=pastel].dark {
             --colors-surface: #p-d
                   }
               }

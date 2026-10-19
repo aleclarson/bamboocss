@@ -388,15 +388,21 @@ export function stringifyVars(options: {
     combos = next
   }
 
-  // A theme's tokens are declared on its root, and each condition after it meets that root.
+  // A theme's tokens are declared on its root, and each condition after it meets that root. Outside a
+  // theme, a selector condition after another meets the element that one declares on as well.
   const anyTheme = conditions.isThemeCondition(keys[0]!) ? conditions.getThemeSelector() : undefined
 
   const rules = combos
     .map((segments) => {
+      // Whether a selector condition came before, whose element this one meets.
+      let nested = false
       const transformed = segments
-        .map((segment, index) =>
-          anyTheme && index > 0 ? transformThemeSegment(segment, anyTheme) : transformSegment(segment),
-        )
+        .map((segment) => {
+          if (segment.startsWith('@')) return segment
+          const meets = nested
+          nested = true
+          return meets ? transformNestedSegment(segment, anyTheme) : transformSegment(segment)
+        })
         .filter(Boolean) as string[]
       const rule = getDeepestRule(root, transformed)
       if (!rule) return
@@ -449,19 +455,22 @@ function transformSegment(seg: string): string {
 }
 
 /**
- * A condition inside a theme, as the selector nested under the theme's root.
+ * A condition after another selector condition, as the selector nested under the element that one
+ * declares on: a theme's root, or the element `.dark &` names.
  *
  * A theme's tokens are declared on its root, `[data-bamboo-theme=pastel]`, and inherit from there.
  * `.dark &` was compounded onto that root, as `transformSegment` writes it, and so held only where
  * the theme attribute and the dark class share an element: a theme in a page that `<html
  * class="dark">` puts in dark mode kept its light values, and a dark panel inside the theme took
- * the default dark values instead of the theme's.
+ * the default dark values instead of the theme's. `.hc &` after `.dark &` was compounded the same
+ * way outside a theme, `.dark.hc`, where an ordinary `css()` call nesting the two applies under
+ * `.hc .dark`: a page with `.hc` above `.dark` kept the token's dark value alone.
  *
- * So each `P &` in it meets the root wherever the two can, as `themeBoundaries` writes it. Anything
- * else is nested as it is written: `&:hover` on the root, `.dark > &` above it alone, and
+ * So each `P &` in it meets that element wherever the two can, as `boundaries` writes it. Anything
+ * else is nested as it is written: `&:hover` on the element, `.dark > &` above it alone, and
  * `.dark & .panel` around it.
  */
-function transformThemeSegment(segment: string, anyTheme: string): string {
+function transformNestedSegment(segment: string, anyTheme: string | undefined): string {
   if (segment.startsWith('@')) return segment
   const selectors = splitSelectors(segment)
   const parents = selectors.map(nestingParent)
@@ -471,7 +480,7 @@ function transformThemeSegment(segment: string, anyTheme: string): string {
   if (parents.some((parent) => parent !== undefined && hasPseudoElement(parent))) return transformSegment(segment)
   const meeting = selectors.flatMap((selector, index) => {
     const parent = parents[index]
-    return parent === undefined ? [selector] : themeBoundaries(parent, anyTheme)
+    return parent === undefined ? [selector] : boundaries(parent, anyTheme)
   })
   return [...new Set(meeting)].join(', ')
 }
@@ -483,17 +492,23 @@ const hasPseudoElement = (selector: string) => withoutQuotes(selector).includes(
 const withoutQuotes = (selector: string) => selector.replace(/"(?:[^"\\\n]|\\.)*"|'(?:[^'\\\n]|\\.)*'/g, '""')
 
 /**
- * Where `P` in `P &` meets a theme's root, `&`: above it, on it, and inside it, where the theme's
- * values are declared on the element `P` names.
+ * Where `P` in `P &` meets the element `&` declares on — a theme's root, or the element an earlier
+ * condition names: above it and on it, and for a theme inside it too, where the theme's values are
+ * declared on the element `P` names.
  *
- * Each is more specific than the theme's values alone and than the default `P` rule, so it wins
- * over both in whichever order they are written — but for the root of another theme nested in this
- * one. There the nested theme's own `P` values have to win, and this one's only fill in what it
- * leaves out, so the rule for that root is no more specific than the root's own. It wins over the
- * default rule by coming after it, and against a value the nested theme sets for every condition,
- * the order of the two themes decides.
+ * Each is more specific than the values on `&` alone and than the default `P` rule, so it wins over
+ * both in whichever order they are written — but for the root of another theme nested in this one.
+ * There the nested theme's own `P` values have to win, and this one's only fill in what it leaves
+ * out, so the rule for that root is no more specific than the root's own. It wins over the default
+ * rule by coming after it, and against a value the nested theme sets for every condition, the order
+ * of the two themes decides.
+ *
+ * Outside a theme nothing tells such a root from any other element, so a condition meets the one
+ * before it from above and on it alone, where an ordinary `css()` call nesting the two applies and
+ * where both are on one element. Inside it, `.dark .hc` would declare on a `.light` panel or the root
+ * of a region of the project's own, `[data-color=pastel]`, over the values that one has to keep.
  */
-function themeBoundaries(parent: string, anyTheme: string): string[] {
+function boundaries(parent: string, anyTheme: string | undefined): string[] {
   // Every element below the root is inside `*`: it meets the theme from above, and inside the
   // theme it would declare on each element what that element inherits anyway.
   if (parent === '*') return ['* &']
@@ -501,6 +516,7 @@ function themeBoundaries(parent: string, anyTheme: string): string[] {
   // `&body.print` is no selector — a type comes first in a compound — and `&.app .dark` would make
   // the root the `.app`. `:is()` keeps either whole, on the element it names.
   const on = compound && /^[.[:#]/.test(parent) ? parent : `:is(${parent})`
+  if (anyTheme === undefined) return [`${parent} &`, `&${on}`]
   const inside = compound ? parent : `:is(${parent})`
   return [`${parent} &`, `&${on}`, `& ${inside}:not(${anyTheme})`, `& :where(${anyTheme}${on})`]
 }
