@@ -161,10 +161,11 @@ export function classifyProject(ctx: ParserOptions, resultMap: ParserResultMap):
     }
 
     // `tokenValue` lives in the token bucket, and a token call resolves to a value rather than
-    // to a set of properties to walk. Unreachable in practice — the walk below only visits the
-    // css, cva, sva, pattern and recipe buckets — but stated, so `ReportItemType` need not carry a
-    // member no report can contain.
-    if (item.type === 'tokenValue') {
+    // to a set of properties to walk; `keyframes` to a name, its stops being no element's
+    // styles. Unreachable in practice — the walk below only visits the css, cva, sva, pattern and
+    // recipe buckets — but stated, so `ReportItemType` need not carry a member no report can
+    // contain.
+    if (item.type === 'tokenValue' || item.type === 'keyframes') {
       return
     }
 

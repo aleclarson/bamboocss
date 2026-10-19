@@ -1,0 +1,120 @@
+---
+title: Keyframes
+description:
+  Write a @keyframes block next to the component that animates with it, and get its name back from keyframes().
+---
+
+A keyframe used by one component does not have to live in the config. Write it where it is used:
+
+```ts
+import { css, keyframes } from '../styled-system/css'
+
+const fadeIn = keyframes({
+  from: { opacity: 0 },
+  to: { opacity: 1 },
+})
+// → 'kf_feVUdh'
+
+const toast = css({ animation: `${fadeIn} 0.2s ease-out` })
+```
+
+`keyframes()` returns the name of the block, and the stylesheet gets the block:
+
+```css
+@layer tokens {
+  @keyframes kf_feVUdh {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+```
+
+The name works anywhere a keyframe name does: `animation`, `animationName`, a template literal, or an inline `style`.
+
+## Stops
+
+A stop is `from`, `to` or a percentage, and its declarations are written as in a style object, tokens included:
+
+```ts
+const pulse = keyframes({
+  '0%, 100%': { opacity: 1 },
+  '50%': { opacity: 0.5, color: 'red.300' },
+})
+```
+
+`color: 'red.300'` is written `var(--colors-red-300)`, as in `css()`. Conditions do not go in a stop: `@keyframes` holds
+no selectors or media queries. Put the condition on the animation instead:
+
+```ts
+css({ animation: `${pulse} 2s infinite`, _motionReduce: { animation: 'none' } })
+```
+
+## The name is a hash of the stops
+
+The same stops anywhere in the project are one block under one name, so a keyframe can be declared in each component
+that needs it without repeating the CSS.
+
+The order the stops were written in is part of the hash, so `{ from, to }` and `{ to, from }` are two blocks. Order can
+change an animation: a stop written twice, as `from` and `0%`, takes the later one's value where the two overlap.
+
+With a [`prefix`](/docs/references/config#prefix), the name starts with it: `app-kf_feVUdh`.
+
+## Sharing keyframes
+
+A keyframe is a value, so share it as one:
+
+```ts filename="animations.ts"
+import { keyframes } from '../styled-system/css'
+
+export const fadeIn = keyframes({ from: { opacity: 0 }, to: { opacity: 1 } })
+```
+
+```ts filename="toast.ts"
+import { css } from '../styled-system/css'
+import { fadeIn } from './animations'
+
+export const toast = css({ animation: `${fadeIn} 0.2s ease-out` })
+```
+
+The block is written from the module that calls `keyframes()`, so that module has to be one the build reads: inside
+[`include`](/docs/references/config#include).
+
+## Or in the config
+
+A keyframe the whole design system shares, used by name across the app, still belongs in `theme.keyframes`:
+
+```ts
+export default defineConfig({
+  theme: {
+    extend: {
+      keyframes: {
+        spin: { to: { transform: 'rotate(360deg)' } },
+      },
+    },
+  },
+})
+```
+
+The two differ in what happens to an unused one. A theme keyframe nothing animates is pruned with
+[`prune.keyframes`](/docs/references/config#prune). A `keyframes()` block is written while the call exists, whether or
+not anything in the stylesheet names it, because its name can be read where the build cannot see: an inline `style`, or
+a string built at runtime.
+
+## Limitations
+
+- **The stops have to be known at build time.** The call is replaced by its name when the module is compiled, and the
+  name is a hash of the stops, so a stop the build cannot read leaves it with no name to write:
+
+  ```ts
+  // ❌ `to` is a parameter, so the build cannot name this block.
+  const fade = (to: number) => keyframes({ from: { opacity: 0 }, to: { opacity: to } })
+  ```
+
+  The build fails on the call rather than ship it. Vary what the stops read instead: a custom property set where the
+  animation runs, `to: { opacity: 'var(--fade-to)' }`, or the animation's own duration, delay and direction.
+
+- **Compiled by Vite.** Without the Vite plugin, `keyframes()` throws when called, as `css()` does.

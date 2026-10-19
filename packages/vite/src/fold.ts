@@ -437,6 +437,35 @@ export const foldSource = (options: FoldOptions): FoldResult => {
       continue
     }
 
+    // `keyframes()` returns the name of its block, which the analysis computed from the stops by
+    // the same function that named the block the stylesheet writes.
+    if (kind === 'keyframes') {
+      const rangeKey = `${start}:${end}`
+      if (seenRanges.has(rangeKey)) continue
+      seenRanges.add(rangeKey)
+
+      if (call.calleeProperty !== undefined) {
+        skipped.push({ name, reason: 'unsupported-kind', start, end })
+        continue
+      }
+
+      if (call.value === undefined) {
+        skipped.push({
+          name,
+          reason: 'dynamic',
+          start,
+          end,
+          ...(call.refusal
+            ? { refusal: call.refusal }
+            : { detail: 'the name it returns is a hash of its stops, so they have to be known at build time' }),
+        })
+        continue
+      }
+
+      candidates.push({ call, name, start, end, value: call.value })
+      continue
+    }
+
     if (kind === 'cva-call' || kind === 'recipe') {
       const rangeKey = `${start}:${end}`
       if (seenRanges.has(rangeKey)) continue
@@ -874,7 +903,6 @@ export const foldSource = (options: FoldOptions): FoldResult => {
   }
 
   const collides = (start: number, end: number) => applied.some(([from, to]) => start < to && from < end)
-
   for (const candidate of candidates) {
     if (candidate.subsumed || candidate.failed) continue
     const { name, start, end } = candidate

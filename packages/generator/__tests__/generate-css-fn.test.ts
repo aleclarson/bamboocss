@@ -6,7 +6,7 @@ describe('generate css-fn', () => {
   test('basic', () => {
     expect(generateCssFn(createContext())).toMatchInlineSnapshot(`
       {
-        "dts": "import type { SystemStyleObject, ViewTransitionFn } from '../types/index';
+        "dts": "import type { KeyframesFn, SystemStyleObject, ViewTransitionFn } from '../types/index';
 
       type Styles = SystemStyleObject | undefined | null | false
 
@@ -51,6 +51,22 @@ describe('generate css-fn', () => {
        * @see https://bamboocss.com/docs/concepts/view-transitions
        */
       export declare const viewTransition: ViewTransitionFn;
+
+      /**
+       * Write a \`@keyframes\` block from these stops and get back its name, to animate with.
+       *
+       * The name is a hash of the stops as written, so the same stops anywhere in the project are
+       * one block. The call is replaced by the name at build time, which is why the stops have to
+       * be known then.
+       *
+       * @example
+       * const fadeIn = keyframes({ from: { opacity: 0 }, to: { opacity: 1 } })
+       *
+       * css({ animation: \`\${fadeIn} 0.2s ease-out\` })
+       *
+       * @see https://bamboocss.com/docs/concepts/keyframes
+       */
+      export declare const keyframes: KeyframesFn;
       ",
         "js": "import { cloneStyles, uncompiledStyle } from '../helpers.mjs';
       import { mergeCss } from './merge-css.mjs';
@@ -66,6 +82,8 @@ describe('generate css-fn', () => {
       export const fallback = (...values) => \`fallback(\${values.join(', ')})\`
 
       export const viewTransition = (_options) => uncompiledStyle('viewTransition')
+
+      export const keyframes = (_stops) => uncompiledStyle('keyframes')
       ",
       }
     `)
@@ -96,7 +114,7 @@ describe('generate css-fn', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
-        "dts": "import type { SystemStyleObject, ViewTransitionFn } from '../types/index';
+        "dts": "import type { KeyframesFn, SystemStyleObject, ViewTransitionFn } from '../types/index';
 
       type Styles = SystemStyleObject | undefined | null | false
 
@@ -141,6 +159,22 @@ describe('generate css-fn', () => {
        * @see https://bamboocss.com/docs/concepts/view-transitions
        */
       export declare const viewTransition: ViewTransitionFn;
+
+      /**
+       * Write a \`@keyframes\` block from these stops and get back its name, to animate with.
+       *
+       * The name is a hash of the stops as written, so the same stops anywhere in the project are
+       * one block. The call is replaced by the name at build time, which is why the stops have to
+       * be known then.
+       *
+       * @example
+       * const fadeIn = keyframes({ from: { opacity: 0 }, to: { opacity: 1 } })
+       *
+       * css({ animation: \`\${fadeIn} 0.2s ease-out\` })
+       *
+       * @see https://bamboocss.com/docs/concepts/keyframes
+       */
+      export declare const keyframes: KeyframesFn;
       ",
         "js": "import { cloneStyles, uncompiledStyle } from '../helpers.mjs';
       import { mergeCss } from './merge-css.mjs';
@@ -156,6 +190,8 @@ describe('generate css-fn', () => {
       export const fallback = (...values) => \`fallback(\${values.join(', ')})\`
 
       export const viewTransition = (_options) => uncompiledStyle('viewTransition')
+
+      export const keyframes = (_stops) => uncompiledStyle('keyframes')
       ",
       }
     `)

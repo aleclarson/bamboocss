@@ -15,6 +15,7 @@ import type {
   Dict,
   GroupedResult,
   GroupedStyleResultDetails,
+  KeyframesResult,
   MultiBlockCondition,
   RecipeBaseResult,
   StyleEntry,
@@ -42,6 +43,7 @@ export class StyleDecoder {
   recipes_base = new Map<string, Set<RecipeBaseResult>>()
   //
   view_transitions = new Set<ViewTransitionResult>()
+  keyframes = new Set<KeyframesResult>()
 
   clone = () => {
     return new StyleDecoder(this.context)
@@ -89,12 +91,19 @@ export class StyleDecoder {
     this.recipes.clear()
     this.recipes_base.clear()
     this.view_transitions.clear()
+    this.keyframes.clear()
     this.group_cache.clear()
     this.recipe_base_cache.clear()
   }
 
   isEmpty = () => {
-    return !this.atomic.size && !this.recipes.size && !this.recipes_base.size && !this.view_transitions.size
+    return (
+      !this.atomic.size &&
+      !this.recipes.size &&
+      !this.recipes_base.size &&
+      !this.view_transitions.size &&
+      !this.keyframes.size
+    )
   }
 
   get results() {
@@ -103,6 +112,7 @@ export class StyleDecoder {
       recipes: this.recipes,
       recipes_base: this.recipes_base,
       view_transitions: this.view_transitions,
+      keyframes: this.keyframes,
     }
   }
 
@@ -527,6 +537,18 @@ export class StyleDecoder {
   }
 
   /**
+   * Rebuilt whole on every collect, as transitions are, and sorted by name: the encoder's map is
+   * in the order files were read, which differs between a client and an SSR build of one app.
+   */
+  collectKeyframes = (encoder: StyleEncoder) => {
+    this.keyframes.clear()
+    Array.from(encoder.keyframes.keys())
+      .sort()
+      .forEach((name) => this.keyframes.add({ name, stops: encoder.keyframes.get(name)! }))
+    return this
+  }
+
+  /**
    * Collect and re-create all styles and recipes objects from the style encoder
    * So that we can just iterate over them and transform resulting CSS objects into CSS strings
    */
@@ -536,6 +558,7 @@ export class StyleDecoder {
     this.collectRecipe(encoder)
     this.collectRecipeBase(encoder)
     this.collectViewTransitions(encoder)
+    this.collectKeyframes(encoder)
     return this
   }
 

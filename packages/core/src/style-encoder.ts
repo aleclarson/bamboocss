@@ -77,6 +77,8 @@ export interface EncoderScope {
   view_transitions?: Set<string>
   /** Exact input and normalized declaration order for each transition this call encoded. */
   view_transition_payloads?: Map<string, ViewTransitionPayload>
+  /** `keyframes()` blocks this call encoded: name -> the stops behind it. */
+  keyframes?: Map<string, StyleResultObject>
   /** Recipe names this call observed, which is the list `atomizeObservedRecipes` walks. */
   observed_recipes?: Set<string>
   /** Inline recipe configs registered while this owner was active. */
@@ -140,6 +142,10 @@ const mergeScope = (target: EncoderScope, source: EncoderScope) => {
   source.view_transition_payloads?.forEach((payload, className) => {
     const payloads = (target.view_transition_payloads ??= new Map())
     payloads.set(className, payload)
+  })
+  source.keyframes?.forEach((stops, name) => {
+    const keyframes = (target.keyframes ??= new Map())
+    keyframes.set(name, stops)
   })
   target.observed_recipes = mergeSet(target.observed_recipes, source.observed_recipes)
   source.inline_recipes?.forEach((recipe, name) => {
@@ -1223,6 +1229,16 @@ export class StyleEncoder {
   private viewTransitionInputs: Map<string, StyleResultObject> = new OrderableMap()
 
   /**
+   * `keyframes()` name -> the stops behind it.
+   *
+   * The name is a hash of the stops as written, so a name stands for one block and two calls
+   * writing the same stops share it. Not ordered by owner like the collections above: no two
+   * blocks share a name, so where one sits in the sheet changes nothing, and the decoder
+   * writes them sorted by name.
+   */
+  keyframes = new Map<string, StyleResultObject>()
+
+  /**
    * Scope being recorded by the innermost `withScope` on the stack, if any.
    * Encoding is synchronous, so a single field is enough to thread this through
    * nested `process*` calls without changing their signatures.
@@ -1292,6 +1308,7 @@ export class StyleEncoder {
   private recipeBaseRefs = new Refs()
   private compoundRefs = new Refs()
   private viewTransitionRefs = new Refs()
+  private keyframesRefs = new Refs()
   /** Exact ordered payload occurrences, independent from the transition class's key position. */
   private viewTransitionPayloads = new Map<string, ViewTransitionPayloadIndex>()
   private observedRefs = new Refs()
@@ -2006,6 +2023,7 @@ export class StyleEncoder {
     scope.recipes_base.forEach(this.recipeBaseRefs.retain)
     scope.compound_variants?.forEach(this.compoundRefs.retain)
     scope.view_transitions?.forEach(this.viewTransitionRefs.retain)
+    scope.keyframes?.forEach((_, name) => this.keyframesRefs.retain(name))
     scope.observed_recipes?.forEach(this.observedRefs.retain)
     scope.inline_recipes?.forEach((_, name) => this.inlineRecipeRefs.retain(name))
   }
@@ -2036,6 +2054,10 @@ export class StyleEncoder {
       if (!this.viewTransitionRefs.release(className)) return
       this.viewTransitionInputs.delete(className)
       this.drop(this.view_transitions.delete(className))
+    })
+
+    scope.keyframes?.forEach((_, name) => {
+      if (this.keyframesRefs.release(name)) this.drop(this.keyframes.delete(name))
     })
 
     scope.observed_recipes?.forEach((name) => {
@@ -2284,7 +2306,8 @@ export class StyleEncoder {
       !this.recipes.size &&
       !this.compound_variants.size &&
       !this.recipes_base.size &&
-      !this.view_transitions.size
+      !this.view_transitions.size &&
+      !this.keyframes.size
     )
   }
 
@@ -2294,6 +2317,7 @@ export class StyleEncoder {
       recipes: this.recipes,
       recipes_base: this.recipes_base,
       view_transitions: this.view_transitions,
+      keyframes: this.keyframes,
     }
   }
   /**
@@ -2471,6 +2495,31 @@ export class StyleEncoder {
       classes.add(className)
       payloads.set(className, payload)
     }
+  }
+
+  /**
+   * Record a `keyframes({ ... })` block under the name the call returns.
+   *
+   * The name comes from the extractor, which computed it from the same stops and folded it into
+   * every style object that reads the call, so the block is written under the name those
+   * declarations animate. A different set of stops under a name already held is a hash
+   * collision: the two calls would share one animation, so it is refused rather than resolved
+   * by whichever file was read last.
+   */
+  processKeyframes = (name: string, stops: unknown) => {
+    if (!name || !stops || typeof stops !== 'object' || Array.isArray(stops)) return
+
+    // The caller retains its object, as with a transition's options.
+    const stable = snapshotContributionObject(stops) as StyleResultObject
+    const existing = this.activeScope?.keyframes?.get(name) ?? this.keyframes.get(name)
+    if (existing && !sameJson(existing, stable)) {
+      throw new StyleContributionError(`keyframes ${JSON.stringify(name)} collides with different stops`)
+    }
+
+    if (this.activeOwner === null) this.keyframesRefs.pin(name)
+    this.keyframes.set(name, stable)
+    const scope = this.activeScope
+    if (scope) (scope.keyframes ??= new Map()).set(name, stable)
   }
 
   processStyleProps = (styleProps: StyleProps) => {
@@ -2892,6 +2941,12 @@ export class StyleEncoder {
       styles.viewTransitions = Object.fromEntries(this.view_transitions)
     }
 
+    // The stops, for the same reason: a block is written whole, under the name the producing
+    // build folded into its declarations.
+    if (this.keyframes.size) {
+      styles.keyframes = Object.fromEntries(this.keyframes)
+    }
+
     return {
       schemaVersion: version,
       styles,
@@ -2956,6 +3011,16 @@ export class StyleEncoder {
       this.pinViewTransitionPayload(className, payload)
       this.pinOrderKey(this.view_transitions, className)
       this.pinOrderKey(this.viewTransitionInputs, className)
+    })
+
+    // Pinned, so a local file writing the same stops cannot release the restored block.
+    Object.entries(styles.keyframes ?? {}).forEach(([name, stops]) => {
+      const existing = this.keyframes.get(name)
+      if (existing && !sameJson(existing, stops)) {
+        throw new StyleContributionError(`keyframes ${JSON.stringify(name)} collides with different stops`)
+      }
+      this.keyframesRefs.pin(name)
+      this.keyframes.set(name, stops)
     })
 
     return this

@@ -20,6 +20,7 @@ use oxc_syntax::symbol::SymbolId;
 
 mod evaluator;
 mod fold;
+mod names;
 mod token_accounting;
 
 pub use token_accounting::{NativeTokenAccounting, NativeTokenDecline};
@@ -62,6 +63,9 @@ pub struct NativeCall {
     /// the build could not read. A config recipe needs them: `button({ size })` with a dynamic
     /// `size` and `button()` both arrive as `{}`, and only the first must emit every size.
     pub unresolved_keys: Vec<String>,
+    /// What a call returns that the build knows: the name of a `keyframes()` whose stops it
+    /// read whole, the name the stylesheet writes on its block.
+    pub value: Option<String>,
 }
 
 #[napi(object)]
@@ -99,6 +103,8 @@ pub struct NativeProjectOptions {
     pub paths: Vec<NativePathMapping>,
     pub tokens: Vec<NativeToken>,
     pub jsx: bool,
+    /// The class prefix a `keyframes()` name is written after: `app-kf_feVUdh`.
+    pub class_prefix: Option<String>,
 }
 
 #[napi(object)]
@@ -373,7 +379,7 @@ fn argument_data<'a>(
 /// JSON form, so keeping `null` made the two spellings of one declaration differ — two inline
 /// recipes that name the same class then conflict. Evaluation keeps `null` (`??` needs it);
 /// only the data handed to the encoder drops it.
-fn drop_nullish_properties(value: &mut serde_json::Value) {
+pub(crate) fn drop_nullish_properties(value: &mut serde_json::Value) {
     match value {
         serde_json::Value::Object(object) => {
             object.retain(|_, value| !value.is_null());
@@ -831,6 +837,14 @@ fn analyze_source<'sources>(
         }
 
         let (arguments, complete) = argument_data(&expression.arguments, &mut evaluator);
+        let value = (binding.kind == "css"
+            && binding.imported_name == "keyframes"
+            && complete
+            && arguments.len() == 1)
+            .then(|| arguments.first())
+            .flatten()
+            .filter(|stops| stops.is_object())
+            .map(|stops| project.keyframes_name(stops));
         let unresolved_keys = if binding.kind == "recipe" {
             expression
                 .arguments
@@ -872,6 +886,7 @@ fn analyze_source<'sources>(
             complete,
             losses,
             unresolved_keys,
+            value,
         });
     }
     if capture_jsx {
@@ -901,6 +916,7 @@ fn analyze_source<'sources>(
                 complete,
                 losses: Vec::new(),
                 unresolved_keys,
+                value: None,
             });
         }
     }
@@ -1034,6 +1050,8 @@ pub struct NativeFoldOptions {
     pub pattern_names: Vec<String>,
     /// Collect survivor-check references and runtime shapes. Off for a provisional re-fold.
     pub references: bool,
+    /// The class prefix a `keyframes()` name is written after.
+    pub class_prefix: Option<String>,
 }
 
 /// Per-module facts for the Vite compiler, for each of `sources`. See `fold/model.rs`.
@@ -1057,6 +1075,7 @@ pub fn compile_modules(
                 "cx".into(),
                 "fallback".into(),
                 "viewTransition".into(),
+                "keyframes".into(),
             ],
         },
         NativeEntrypoint {
@@ -1096,6 +1115,7 @@ pub fn compile_modules(
             })
             .collect(),
         jsx: false,
+        class_prefix: options.class_prefix.clone(),
     };
     let project = ProjectEvaluator::new(
         sources

@@ -31,6 +31,8 @@ export interface NativeCall {
   losses: NativeLoss[]
   /** Top-level keys (or JSX attributes) of a recipe call whose value the build could not read. */
   unresolvedKeys: string[]
+  /** The name a `keyframes()` call whose stops the build read whole returns. */
+  value?: string
 }
 
 export interface NativeAnalysis {
@@ -66,6 +68,8 @@ export interface NativeProjectOptions {
   paths: NativePathMapping[]
   tokens: NativeToken[]
   jsx: boolean
+  /** The class prefix a `keyframes()` name is written after. */
+  classPrefix?: string
 }
 
 export interface NativeFileAnalysis extends NativeAnalysis {
@@ -139,7 +143,18 @@ export interface FoldCxArgument {
 
 export interface FoldCall {
   name: string
-  kind: 'css' | 'pattern' | 'recipe' | 'token' | 'tokenValue' | 'viewTransition' | 'cva-call' | 'cva' | 'sva' | 'cx'
+  kind:
+    | 'css'
+    | 'pattern'
+    | 'recipe'
+    | 'token'
+    | 'tokenValue'
+    | 'viewTransition'
+    | 'keyframes'
+    | 'cva-call'
+    | 'cva'
+    | 'sva'
+    | 'cx'
   span: FoldSpan
   slot?: string
   slotEnd?: number
@@ -157,6 +172,8 @@ export interface FoldCall {
   origin?: { filePath: string; name: string }
   binding?: string
   cxArguments: FoldCxArgument[]
+  /** For an exact `keyframes()` call: the name it returns, which the fold writes in its place. */
+  value?: string
 }
 
 /**
@@ -240,6 +257,8 @@ export interface NativeFoldOptions {
   recipeNames: string[]
   patternNames: string[]
   references: boolean
+  /** The class prefix a `keyframes()` name is written after. */
+  classPrefix?: string
 }
 
 export function compileModules(

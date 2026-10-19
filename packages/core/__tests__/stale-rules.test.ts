@@ -35,7 +35,7 @@ const read = (ctx: Context, file: string, code: string) => {
 }
 
 const IMPORTS = `
-  import { css, cva, sva, viewTransition } from 'styled-system/css'
+  import { css, cva, sva, keyframes, viewTransition } from 'styled-system/css'
   import { buttonStyle, badge } from 'styled-system/recipes'
 `
 
@@ -142,9 +142,33 @@ describe('an edited file', () => {
     expect(css).not.toContain('view-transition-old')
     expect(css).toContain('view-transition-new')
   })
+
+  test('loses the keyframes it no longer declares', () => {
+    const ctx = context()
+
+    read(ctx, 'src/a.tsx', `${IMPORTS} export const fadeIn = keyframes({ from: { opacity: 0 }, to: { opacity: 1 } })`)
+    expect(stylesheet(ctx)).toContain('@keyframes kf_feVUdh')
+
+    read(ctx, 'src/a.tsx', `${IMPORTS} export const fadeIn = keyframes({ from: { opacity: 0.5 }, to: { opacity: 1 } })`)
+
+    const css = stylesheet(ctx)
+    expect(css).not.toContain('@keyframes kf_feVUdh')
+    expect(css.match(/@keyframes/g)).toHaveLength(1)
+  })
 })
 
 describe('what an edit may not take', () => {
+  test('keyframes another file still writes', () => {
+    const ctx = context()
+    const fadeIn = `${IMPORTS} export const fadeIn = keyframes({ from: { opacity: 0 }, to: { opacity: 1 } })`
+
+    read(ctx, 'src/a.tsx', fadeIn)
+    read(ctx, 'src/b.tsx', fadeIn)
+    read(ctx, 'src/a.tsx', `${IMPORTS} export const A = () => <div className={css({ color: 'blue' })} />`)
+
+    expect(stylesheet(ctx)).toContain('@keyframes kf_feVUdh')
+  })
+
   test('a declaration another file still writes', () => {
     const ctx = context()
 
@@ -323,6 +347,7 @@ describe('a restored encoder dump', () => {
       'src/donor.tsx',
       `${IMPORTS}
         export const slide = viewTransition({ old: { opacity: '0' } })
+        export const fadeIn = keyframes({ from: { opacity: 0 }, to: { opacity: 1 } })
         export const A = () => <div className={css({ color: 'red' })} />
         export const B = () => <button className={buttonStyle({ size: 'sm' })} />
       `,
@@ -336,6 +361,7 @@ describe('a restored encoder dump', () => {
       'src/a.tsx',
       `${IMPORTS}
         export const slide = viewTransition({ old: { opacity: '0' } })
+        export const fadeIn = keyframes({ from: { opacity: 0 }, to: { opacity: 1 } })
         export const A = () => <div className={css({ color: 'red' })} />
         export const B = () => <button className={buttonStyle({ size: 'sm' })} />
       `,
@@ -344,6 +370,7 @@ describe('a restored encoder dump', () => {
 
     const css = stylesheet(ctx)
     expect(css).toContain('view-transition-old')
+    expect(css).toContain('@keyframes kf_feVUdh')
     expect(css).toContain('color: red')
     expect(css).toContain('buttonStyle--size_sm')
   })

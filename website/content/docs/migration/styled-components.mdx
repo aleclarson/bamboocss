@@ -337,7 +337,27 @@ const Button = styled.button`
 `
 ```
 
-In Bamboo, you define keyframes in the `theme.keyframes` key of the `bamboo.config` function.
+In Bamboo, `keyframes()` takes the stops as an object, imported from `styled-system/css`:
+
+```ts
+import { css, keyframes } from '../styled-system/css'
+
+const rotate = keyframes({
+  from: { transform: 'rotate(0deg)' },
+  to: { transform: 'rotate(360deg)' },
+})
+
+// usage
+const button = css({
+  _hover: {
+    animation: `${rotate} 200ms`,
+  },
+})
+```
+
+The stops have to be known at build time. See [keyframes](/docs/concepts/keyframes).
+
+A keyframe the whole app shares by name can go in the `theme.keyframes` key of the `bamboo.config` function instead:
 
 ```ts
 import { defineConfig } from '@bamboocss/dev'

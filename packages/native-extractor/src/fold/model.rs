@@ -66,6 +66,8 @@ pub struct FoldCall {
     pub binding: Option<String>,
     /// For a `cx()` call: its arguments, classified.
     pub cx_arguments: Vec<FoldCxArgument>,
+    /// For an exact `keyframes()` call: the name it returns, which the fold writes in its place.
+    pub value: Option<String>,
 }
 
 /// Code the evaluator does not run, which is why a call's arguments are not known.

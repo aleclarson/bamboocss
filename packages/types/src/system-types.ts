@@ -116,6 +116,16 @@ export interface ViewTransitionStyleObject {
 
 export type ViewTransitionFn = (options: ViewTransitionStyleObject) => string
 
+/**
+ * The stops of one `@keyframes` block: `from`, `to` or a percentage, each the declarations at that
+ * point, as a theme keyframe takes them.
+ */
+export interface KeyframeStops {
+  [stop: string]: CssProperties
+}
+
+export type KeyframesFn = (stops: KeyframeStops) => string
+
 export interface GlobalStyleObject {
   [selector: string]: SystemStyleObject
 }

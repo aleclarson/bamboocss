@@ -10,7 +10,17 @@ export interface ResultItem {
    * Both live in `ParserResult.token`, since every consumer that reads a token *path* out of
    * a result wants both.
    */
-  type?: 'css' | 'cva' | 'sva' | 'token' | 'tokenValue' | 'viewTransition' | 'pattern' | 'recipe' | 'jsx-recipe'
+  type?:
+    | 'css'
+    | 'cva'
+    | 'sva'
+    | 'token'
+    | 'tokenValue'
+    | 'viewTransition'
+    | 'keyframes'
+    | 'pattern'
+    | 'recipe'
+    | 'jsx-recipe'
   /** The call site, for a stylesheet source map. */
   atomOrigin?: { filePath: string; line: number; column: number }
   /** Root binding range for a token call, as UTF-16 offsets into its file. */
@@ -24,6 +34,7 @@ export interface ParserResultInterface {
   sva: Set<ResultItem>
   token: Set<ResultItem>
   viewTransition: Set<ResultItem>
+  keyframes: Set<ResultItem>
   recipe: Map<string, Set<ResultItem>>
   pattern: Map<string, Set<ResultItem>>
   filePath: string | undefined
@@ -35,6 +46,7 @@ export interface ParserResultInterface {
   setSva: (result: ResultItem) => void
   setToken: (result: ResultItem, kind?: 'token' | 'tokenValue') => void
   setViewTransition: (result: ResultItem) => void
+  setKeyframes: (result: ResultItem, name: string) => void
   setPattern: (name: string, result: ResultItem) => void
   setRecipe: (name: string, result: ResultItem, unresolved?: ReadonlySet<string>) => void
 }
@@ -49,6 +61,10 @@ export interface EncoderJson {
     /** Bag class -> the `::view-transition-*` slot styles behind it. */
     viewTransitions?: {
       [className: string]: Record<string, any>
+    }
+    /** `keyframes()` name -> the stops written under it. */
+    keyframes?: {
+      [name: string]: Record<string, any>
     }
   }
 }

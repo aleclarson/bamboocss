@@ -48,6 +48,13 @@ export interface GroupedStyleResultDetails extends Pick<AtomicStyleResult, 'hash
   result: StyleResultObject
 }
 
+export interface KeyframesResult {
+  /** What the `keyframes()` call returns, and the name of the block. */
+  name: string
+  /** Stop -> authored style object, serialized whole at emit as a theme keyframe is. */
+  stops: StyleResultObject
+}
+
 export interface ViewTransitionResult {
   className: string
   /**

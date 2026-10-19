@@ -381,6 +381,7 @@ describe('style encoder', () => {
     expect(processor.encoder?.results).toMatchInlineSnapshot(`
       {
         "atomic": Set {},
+        "keyframes": Map {},
         "recipes": Map {
           "button" => Set {},
         },
@@ -502,6 +503,7 @@ describe('style encoder', () => {
     expect(processor.encoder?.results).toMatchInlineSnapshot(`
       {
         "atomic": Set {},
+        "keyframes": Map {},
         "recipes": Map {
           "button" => Set {},
         },
@@ -620,6 +622,7 @@ describe('style encoder', () => {
           "backgroundGradient]___[value:to-b",
           "gradientFrom]___[value:rgb(200 200 200 / .4)",
         },
+        "keyframes": Map {},
         "recipes": Map {
           "checkbox" => Set {
             "size]___[value:md]___[recipe:checkbox]___[slot:container",
@@ -723,5 +726,61 @@ describe('style encoder', () => {
         },
       }
     `)
+  })
+})
+
+/**
+ * `processKeyframes` takes the name the extractor computed, so the encoder only has to keep the
+ * block under it. What it must not do is let one name stand for two sets of stops: the
+ * declarations animating that name would then play whichever block was read last.
+ */
+describe('keyframes', () => {
+  const FADE = { from: { opacity: 0 }, to: { opacity: 1 } }
+
+  test('keeps one block per name', () => {
+    const { encoder } = createGeneratorContext()
+    encoder.processKeyframes('kf_feVUdh', FADE)
+    encoder.processKeyframes('kf_feVUdh', { from: { opacity: 0 }, to: { opacity: 1 } })
+
+    expect(Object.fromEntries(encoder.keyframes)).toEqual({ kf_feVUdh: FADE })
+  })
+
+  test('refuses different stops under a name already held', () => {
+    const { encoder } = createGeneratorContext()
+    encoder.processKeyframes('kf_feVUdh', FADE)
+
+    expect(() => encoder.processKeyframes('kf_feVUdh', { from: { opacity: 1 } })).toThrow(
+      'keyframes "kf_feVUdh" collides with different stops',
+    )
+  })
+
+  // Order is part of what the stops are: the extractor named the two orders apart.
+  test('the same stops in another order are different stops', () => {
+    const { encoder } = createGeneratorContext()
+    encoder.processKeyframes('kf_feVUdh', FADE)
+
+    expect(() => encoder.processKeyframes('kf_feVUdh', { to: { opacity: 1 }, from: { opacity: 0 } })).toThrow(
+      'collides with different stops',
+    )
+  })
+
+  test('a later mutation of the stops object does not reach the block', () => {
+    const { encoder } = createGeneratorContext()
+    const stops = { from: { opacity: 0 }, to: { opacity: 1 } }
+    encoder.processKeyframes('kf_feVUdh', stops)
+    stops.to.opacity = 0.5
+
+    expect(encoder.keyframes.get('kf_feVUdh')).toEqual(FADE)
+  })
+
+  test('survives a round trip through toJSON and fromJSON', () => {
+    const { encoder } = createGeneratorContext()
+    encoder.processKeyframes('kf_feVUdh', FADE)
+
+    const dump = encoder.toJSON()
+    expect(dump.styles.keyframes).toEqual({ kf_feVUdh: FADE })
+
+    const restored = createGeneratorContext().encoder.fromJSON(dump)
+    expect(Object.fromEntries(restored.keyframes)).toEqual({ kf_feVUdh: FADE })
   })
 })

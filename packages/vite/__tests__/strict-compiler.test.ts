@@ -59,6 +59,24 @@ describe('strict compiler', () => {
     expect(end).toThrow(/raw-call/)
   }, 60_000)
 
+  test('fails on keyframes() whose stops it cannot read, and says why', async () => {
+    const end = await run(
+      `import { keyframes } from 'styled-system/css'\nexport const fade = (to) => keyframes({ from: { opacity: 0 }, to: { opacity: to } })\n`,
+      'src/strict-keyframes.tsx',
+    )
+
+    expect(end).toThrow(/keyframes\(\) — dynamic: the name it returns is a hash of its stops/)
+  }, 60_000)
+
+  test('passes keyframes() whose stops it can read', async () => {
+    const end = await run(
+      `import { css, keyframes } from 'styled-system/css'\nconst fadeIn = keyframes({ from: { opacity: 0 }, to: { opacity: 1 } })\nexport const toast = css({ animation: \`\${fadeIn} 0.2s\` })\n`,
+      'src/strict-keyframes-static.tsx',
+    )
+
+    expect(end).not.toThrow()
+  }, 60_000)
+
   test('fails on a runtime style leaf', async () => {
     const end = await run(src(`export const f = (tone) => css({ color: tone })`), 'src/strict-leaf.tsx')
     expect(end).toThrow(/dynamic|runtime-binding/)

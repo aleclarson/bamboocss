@@ -242,7 +242,7 @@ function setupPatterns(ctx: Context, filters?: ArtifactFilters): Artifact | unde
 function setupCssIndex(ctx: Context): Artifact {
   const index = {
     js: outdent`
-  ${ctx.file.reExport('css, fallback, viewTransition', './css')}
+  ${ctx.file.reExport('css, fallback, keyframes, viewTransition', './css')}
   ${ctx.file.reExport('cx', './cx')}
   ${ctx.file.reExport('cva', './cva')}
   ${ctx.file.reExport('sva', './sva')}
@@ -258,7 +258,7 @@ function setupCssIndex(ctx: Context): Artifact {
   ${ctx.file.reExport('cvaMap, splitProps', './cx')}
  `,
     dts: outdent`
-  ${ctx.file.reExportDts('css, fallback, viewTransition', './css')}
+  ${ctx.file.reExportDts('css, fallback, keyframes, viewTransition', './css')}
   ${ctx.file.reExportDts('cx', './cx')}
   ${ctx.file.reExportDts('cva', './cva')}
   ${ctx.file.exportType('RecipeVariant, RecipeVariantProps', './cva')}

@@ -4,7 +4,7 @@ import { outdent } from 'outdent'
 export function generateCssFn(ctx: Context) {
   return {
     dts: outdent`
-    ${ctx.file.importType('SystemStyleObject, ViewTransitionFn', '../types/index')}
+    ${ctx.file.importType('KeyframesFn, SystemStyleObject, ViewTransitionFn', '../types/index')}
 
     type Styles = SystemStyleObject | undefined | null | false
 
@@ -50,6 +50,22 @@ export function generateCssFn(ctx: Context) {
      */
     export declare const viewTransition: ViewTransitionFn;
 
+    /**
+     * Write a \`@keyframes\` block from these stops and get back its name, to animate with.
+     *
+     * The name is a hash of the stops as written, so the same stops anywhere in the project are
+     * one block. The call is replaced by the name at build time, which is why the stops have to
+     * be known then.
+     *
+     * @example
+     * const fadeIn = keyframes({ from: { opacity: 0 }, to: { opacity: 1 } })
+     *
+     * css({ animation: \`\${fadeIn} 0.2s ease-out\` })
+     *
+     * @see https://bamboocss.com/docs/concepts/keyframes
+     */
+    export declare const keyframes: KeyframesFn;
+
     `,
     js: outdent`
     ${ctx.file.import('cloneStyles, uncompiledStyle', '../helpers')}
@@ -66,6 +82,8 @@ export function generateCssFn(ctx: Context) {
     export const fallback = (...values) => \`fallback($\{values.join(', ')})\`
 
     export const viewTransition = (_options) => uncompiledStyle('viewTransition')
+
+    export const keyframes = (_stops) => uncompiledStyle('keyframes')
 
 `,
   }

@@ -1,7 +1,14 @@
 import merge from 'lodash.merge'
 import { logger } from '@bamboocss/logger'
 import { getPropertyPriority, isImportant } from '@bamboocss/shared'
-import type { CascadeLayer, ConditionDetails, Dict, SystemStyleObject, ViewTransitionResult } from '@bamboocss/types'
+import type {
+  CascadeLayer,
+  ConditionDetails,
+  Dict,
+  KeyframesResult,
+  SystemStyleObject,
+  ViewTransitionResult,
+} from '@bamboocss/types'
 import postcss, { CssSyntaxError } from 'postcss'
 import { stringifyCustomProperties } from './global-vars'
 import type { UtilitySublayerKey } from './layers'
@@ -302,6 +309,10 @@ export class Stylesheet {
     decoder.view_transitions.forEach((viewTransition) => {
       this.processViewTransition(viewTransition)
     })
+
+    decoder.keyframes.forEach((keyframes) => {
+      this.processKeyframes(keyframes)
+    })
   }
 
   /**
@@ -316,6 +327,16 @@ export class Stylesheet {
     // Serialized rather than appended raw: the slot bodies are authored style objects, so
     // tokens, shorthands and conditions inside them resolve the same as anywhere else.
     this.processUtility(this.serialize(viewTransition.styles), undefined, getPropertyPriority)
+  }
+
+  /**
+   * The token layer, beside the theme's `@keyframes`. Both pruning passes scan it, so a token
+   * the stops read is kept, and `pruneKeyframes` only removes a name the theme declared: a
+   * block whose name nothing in the sheet reads still ships, since the name the call returned
+   * may be read where the sheet cannot see, an inline `style` among them.
+   */
+  processKeyframes = ({ name, stops }: KeyframesResult) => {
+    this.process({ layer: 'tokens', styles: this.serialize({ [`@keyframes ${name}`]: stops }) })
   }
 
   getLayerCss = (...layers: CascadeLayer[]) => {

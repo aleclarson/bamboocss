@@ -94,6 +94,7 @@ export const docsNavigation: NavItem = {
         { title: 'Global Styles', url: 'global-styles' },
         { title: 'Conditional Styles', url: 'conditional-styles' },
         { title: 'Responsive Design', url: 'responsive-design' },
+        { title: 'Keyframes', url: 'keyframes' },
         { title: 'View Transitions', url: 'view-transitions' },
         { title: 'Virtual Color', url: 'virtual-color' },
         { title: 'Patterns', url: 'patterns' },

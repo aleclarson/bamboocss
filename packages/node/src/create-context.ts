@@ -73,6 +73,14 @@ const unresolvedReasons: Record<ParserResult['unresolved'][number]['reason'], (p
  * its wording says which half is missing rather than implying the element is unstyled.
  */
 export function explainUnresolvedStyle(entry: Pick<UnresolvedStyle, 'kind' | 'prop' | 'reason'>) {
+  if (entry.kind === 'keyframes') {
+    return {
+      what: 'these stops will not reach the stylesheet because they are not statically known',
+      why: 'The name `keyframes()` returns is a hash of its stops, so the build names a block, and writes it, only from stops it can read whole.',
+      fix: "Write the stops out. What has to vary can be a custom property a stop reads, `opacity: 'var(--to)'`, or a property of the animation itself.",
+      see: 'https://bamboocss.com/docs/concepts/keyframes',
+    }
+  }
   const [loss] = unresolvedReasons[entry.reason](entry.prop ? `\`${entry.prop}\`` : 'a property')
   // The path is what makes several losses in one config distinguishable — without it they read
   // as identical lines at the same position.
@@ -472,6 +480,7 @@ export class BambooContext extends Generator {
       recipeNames: this.recipes.keys,
       patternNames: this.patterns.keys,
       references: options.references,
+      classPrefix: this.utility.prefix || undefined,
     })
   }
 
@@ -625,7 +634,7 @@ export class BambooContext extends Generator {
       {
         kind: 'css',
         modules: this.imports.value.css,
-        names: ['css', 'cva', 'sva', 'cx', 'fallback', 'viewTransition'],
+        names: ['css', 'cva', 'sva', 'cx', 'fallback', 'viewTransition', 'keyframes'],
       },
       { kind: 'token', modules: this.imports.value.tokens, names: ['token'] },
       { kind: 'recipe', modules: this.imports.value.recipe, names: this.recipes.keys },
@@ -638,6 +647,7 @@ export class BambooContext extends Generator {
       paths: Object.entries(paths).map(([pattern, values]) => ({ pattern, paths: values })),
       tokens: this.nativeTokens,
       jsx: this.jsx.isEnabled,
+      classPrefix: this.utility.prefix || undefined,
     }
     let analyses: NativeFileAnalysis[]
     try {
@@ -762,7 +772,8 @@ export class BambooContext extends Generator {
       const recipeConfig = call.kind === 'css' && (call.importedName === 'cva' || call.importedName === 'sva')
       const explicitlyNamed =
         recipeConfig && item.data.every((data) => typeof data.className === 'string' && data.className !== '')
-      if (!explicitlyNamed) {
+      const keyframes = call.kind === 'css' && call.importedName === 'keyframes'
+      if (!explicitlyNamed && !keyframes) {
         for (const loss of call.losses) {
           result.unresolved.push({
             kind: recipeConfig ? 'recipe' : 'atomic',
@@ -778,6 +789,19 @@ export class BambooContext extends Generator {
         result.set(call.importedName as 'css' | 'cva' | 'sva', item)
       } else if (call.kind === 'css' && call.importedName === 'viewTransition') {
         result.setViewTransition(item)
+      } else if (keyframes) {
+        // No name when the stops were not read whole, and so no block: the build cannot say what
+        // the call returns. One loss for the call, as a missing declaration loses the block whole.
+        if (call.value !== undefined) result.setKeyframes(item, call.value)
+        else {
+          result.unresolved.push({
+            kind: 'keyframes',
+            filePath,
+            line: call.line,
+            column: call.column,
+            reason: 'unresolvable-value',
+          })
+        }
       } else if (call.kind === 'pattern') result.setPattern(call.importedName, item)
       else if (call.kind === 'recipe') result.setRecipe(call.importedName, item, new Set(call.unresolvedKeys))
       else if (call.kind === 'token' || call.kind === 'tokenValue') {

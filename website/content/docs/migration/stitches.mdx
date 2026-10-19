@@ -386,7 +386,27 @@ const Button = styled('button', {
 })
 ```
 
-In Bamboo, you define keyframes in the `theme.keyframes` key of the `bamboo.config` function.
+In Bamboo, `keyframes()` works the same way, imported from `styled-system/css`:
+
+```ts
+import { css, keyframes } from '../styled-system/css'
+
+const scaleUp = keyframes({
+  '0%': { transform: 'scale(1)' },
+  '100%': { transform: 'scale(1.5)' },
+})
+
+// usage
+const button = css({
+  '&:hover': {
+    animation: `${scaleUp} 200ms`,
+  },
+})
+```
+
+The stops have to be known at build time. See [keyframes](/docs/concepts/keyframes).
+
+A keyframe the whole app shares by name can go in the `theme.keyframes` key of the `bamboo.config` function instead:
 
 ```ts
 import { defineConfig } from '@bamboocss/dev'

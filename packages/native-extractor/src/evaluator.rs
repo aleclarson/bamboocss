@@ -645,6 +645,8 @@ pub(crate) struct ProjectEvaluator<'a> {
     base_url: Option<PathBuf>,
     paths: Vec<(String, Vec<String>)>,
     tokens: HashMap<String, (Option<serde_json::Value>, Option<String>)>,
+    /// The class prefix a `keyframes()` name is written after.
+    class_prefix: Option<String>,
     /// Exports being evaluated or called right now, and for a called one what a call re-entering
     /// it from another module finds — see `Site` and `call_export`.
     export_stack: RefCell<HashMap<ExportKey, Site>>,
@@ -723,6 +725,7 @@ impl<'a> ProjectEvaluator<'a> {
             base_url,
             paths,
             tokens,
+            class_prefix: options.and_then(|options| options.class_prefix.clone()),
             export_stack: RefCell::new(HashMap::new()),
             active_owner: RefCell::new(None),
             dependencies: RefCell::new(HashMap::new()),
@@ -733,6 +736,11 @@ impl<'a> ProjectEvaluator<'a> {
 
     pub fn begin_file(&self, filename: &str) {
         *self.active_owner.borrow_mut() = Some(normalize_path(filename));
+    }
+
+    /// The name `keyframes(stops)` returns in this project. See `names::keyframes_name`.
+    pub fn keyframes_name(&self, stops: &serde_json::Value) -> String {
+        crate::names::keyframes_name(stops, self.class_prefix.as_deref())
     }
 
     pub fn end_file(&self, filename: &str) -> ProjectReads {
@@ -838,6 +846,8 @@ impl<'a> ProjectEvaluator<'a> {
                 .collect();
             token_keys.sort();
             token_keys.hash(&mut hasher);
+            // A name `keyframes()` folded to under another prefix is not the one this project writes.
+            self.class_prefix.hash(&mut hasher);
             for entrypoint in self.entrypoints {
                 entrypoint.kind.hash(&mut hasher);
                 entrypoint.modules.hash(&mut hasher);
@@ -3552,6 +3562,32 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
                                 .join(", ")
                         ));
                     }
+                    if entrypoint.kind == "css"
+                        && path.first().is_some_and(|name| name == "keyframes")
+                        && path.len() == 1
+                    {
+                        // The name hashed from the stops, which is the one the stylesheet writes on
+                        // the block. Of stops not wholly known, or one of several sets, no name is
+                        // the one it returns; nor of a second argument, which the call site's own
+                        // analysis would not write a block for.
+                        let Some(stops) = arguments
+                            .first()
+                            .filter(|value| {
+                                arguments.len() == 1
+                                    && value.complete
+                                    && !value.is_undecided()
+                                    && !value.nullish
+                            })
+                            .and_then(|value| value.value.as_ref())
+                            .filter(|value| value.is_object())
+                        else {
+                            return EvalResult {
+                                refusal: arguments.first().and_then(|value| value.refusal.clone()),
+                                ..EvalResult::unknown()
+                            };
+                        };
+                        return EvalResult::known(self.project.keyframes_name(stops));
+                    }
                     if path.get(1).is_some_and(|name| name == "raw") {
                         // What holds no style is left out, as `compactStyles` leaves it, and an
                         // array throws there. Of one style object left, that object, as
@@ -5878,7 +5914,7 @@ fn to_js_string(value: &serde_json::Value) -> String {
 ///
 /// Rust's own formatting agrees on the digits but not on where the exponent starts, so `1e21`
 /// came out as twenty-two digits and `0.000001` as `1e-6`.
-fn js_number_string(number: f64) -> String {
+pub(crate) fn js_number_string(number: f64) -> String {
     if number.is_nan() {
         return "NaN".to_string();
     }

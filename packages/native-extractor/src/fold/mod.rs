@@ -368,7 +368,7 @@ fn classify_binding(
     let property = rest.first().cloned();
     let kind = match binding.kind {
         "css" => match imported.as_str() {
-            "css" | "cva" | "sva" | "cx" | "viewTransition" => imported.clone(),
+            "css" | "cva" | "sva" | "cx" | "viewTransition" | "keyframes" => imported.clone(),
             _ => return None,
         },
         "token" => {
@@ -423,7 +423,7 @@ fn not_imported_call(
             ("token", _) if members.first().is_some_and(|m| m == "value") => "tokenValue",
             ("token", _) => "token",
             ("css", other) => match other {
-                "css" | "viewTransition" => other,
+                "css" | "viewTransition" | "keyframes" => other,
                 _ => return None,
             },
             ("pattern", _) => "pattern",
@@ -992,6 +992,7 @@ fn analyze_facts<'a>(
                     origin: None,
                     binding: None,
                     cx_arguments: Vec::new(),
+                    value: None,
                 });
             }
             continue;
@@ -1024,6 +1025,7 @@ fn analyze_facts<'a>(
                 origin: None,
                 binding,
                 cx_arguments: Vec::new(),
+                value: None,
             });
             continue;
         }
@@ -1052,6 +1054,7 @@ fn analyze_facts<'a>(
                     .iter()
                     .map(|argument| cx_argument(argument, &utf16))
                     .collect(),
+                value: None,
             });
             continue;
         }
@@ -1088,8 +1091,10 @@ fn analyze_facts<'a>(
                         evaluator: &mut evaluator,
                         // With more than one argument it does not: `css()` drops an argument
                         // whose values are all `undefined` before merging, and keeps one holding
-                        // `null`, which then overrides what came before.
-                        drops_nullish: kind == "css" && call.arguments.len() == 1,
+                        // `null`, which then overrides what came before. `keyframes()` is named
+                        // for, and written from, its stops without them.
+                        drops_nullish: (kind == "css" || kind == "keyframes")
+                            && call.arguments.len() == 1,
                     }
                     .check(expression),
                     None => false,
@@ -1100,6 +1105,12 @@ fn analyze_facts<'a>(
             .skip(1)
             .all(|argument| argument.as_expression().is_some_and(is_inert_literal));
         let (slot, slot_end) = slot_access(semantic, node.id(), &utf16);
+        // The name an exact `keyframes()` returns, which replaces the call.
+        let value = (kind == "keyframes" && exact && data.len() == 1)
+            .then(|| data.first())
+            .flatten()
+            .filter(|stops| stops.is_object())
+            .map(|stops| project.keyframes_name(stops));
         calls.push(FoldCall {
             name,
             kind,
@@ -1121,6 +1132,7 @@ fn analyze_facts<'a>(
             origin: None,
             binding: None,
             cx_arguments: Vec::new(),
+            value,
         });
     }
 
@@ -1492,6 +1504,7 @@ fn recipe_invocation<'a>(
         origin,
         binding: None,
         cx_arguments: Vec::new(),
+        value: None,
     }
 }
 

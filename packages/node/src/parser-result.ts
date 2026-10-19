@@ -10,8 +10,10 @@ export interface UnresolvedStyle {
    *   did not have no rule behind them, so they are simply absent.
    * - `recipe` — a `cva`/`sva` config. A declaration the build cannot see has no rule behind
    *   any selection that includes it.
+   * - `keyframes` — a `keyframes()` call. Its name is a hash of its stops, so of stops the build
+   *   cannot read whole there is no name, and no block.
    */
-  kind: 'atomic' | 'recipe'
+  kind: 'atomic' | 'recipe' | 'keyframes'
   /** The property the build could not resolve, or `undefined` when only the count differs. */
   prop?: string
   filePath: string
@@ -43,6 +45,7 @@ export class ParserResult implements ParserResultInterface {
   sva = new Set<ResultItem>()
   token = new Set<ResultItem>()
   viewTransition = new Set<ResultItem>()
+  keyframes = new Set<ResultItem>()
 
   recipe = new Map<string, Set<ResultItem>>()
   pattern = new Map<string, Set<ResultItem>>()
@@ -167,6 +170,12 @@ export class ParserResult implements ParserResultInterface {
     result.data.forEach((obj) => encoder.processViewTransition(obj))
   }
 
+  /** @param name What the call returns, which the extractor computed from the same stops. */
+  setKeyframes(result: ResultItem, name: string) {
+    this.keyframes.add(this.append(Object.assign({ type: 'keyframes' }, result)))
+    this.encoder.processKeyframes(name, result.data[0])
+  }
+
   setPattern(name: string, result: ResultItem) {
     const set = getOrCreateSet(this.pattern, name)
     set.add(this.append(Object.assign({ type: 'pattern', name }, result)))
@@ -238,6 +247,7 @@ export class ParserResult implements ParserResultInterface {
       sva: Array.from(this.sva),
       token: Array.from(this.token),
       viewTransition: Array.from(this.viewTransition),
+      keyframes: Array.from(this.keyframes),
       recipe: Object.fromEntries(Array.from(this.recipe.entries()).map(([key, value]) => [key, Array.from(value)])),
       pattern: Object.fromEntries(Array.from(this.pattern.entries()).map(([key, value]) => [key, Array.from(value)])),
     }
