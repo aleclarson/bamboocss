@@ -146,6 +146,23 @@ describe('fold: token()', () => {
     const reparsed = createFoldFixture().fold(result.code)
     expect(reparsed.code).toBe(result.code)
   })
+
+  // The stylesheet reads the value out of the config, so the call goes with the declaration the
+  // fold erases. Rewritten in place, it was an edit the erasure collided with, and the
+  // declaration stayed behind, reported as `cva — runtime-binding`.
+  test('a call inside a recipe config is erased with the declaration', () => {
+    const fixture = createFoldFixture()
+    const result = fixture.foldStrict(`
+      import { cva } from 'styled-system/css'
+      import { token } from 'styled-system/tokens'
+      const badge = cva({ base: { outline: \`2px solid \${token('colors.blue.300')}\` } })
+      export const cls = badge()
+    `)
+
+    expect(result.code).toContain('const badge = undefined')
+    expect(result.skipped).toEqual([expect.objectContaining({ name: 'token', reason: 'overlapping' })])
+    expect(fixture.getStyleSetCss()).toContain('outline: 2px solid var(--colors-blue-300)')
+  })
 })
 
 /**

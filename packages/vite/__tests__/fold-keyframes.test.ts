@@ -42,6 +42,22 @@ describe('keyframes', () => {
     expect(css).toMatch(/animation-name: kf_fcamfv/)
   })
 
+  test('a call inside a recipe config is erased with the declaration', () => {
+    const fixture = createFoldFixture()
+    const result = fixture.foldStrict(`
+      import { cva, keyframes } from 'styled-system/css'
+      const spinner = cva({ base: { animation: \`\${keyframes({ to: { rotate: '360deg' } })} 1s linear infinite\` } })
+      export const className = spinner()
+    `)
+
+    expect(result.code).toContain('const spinner = undefined')
+    expect(result.skipped).toEqual([expect.objectContaining({ name: 'keyframes', reason: 'overlapping' })])
+    const css = fixture.getStyleSetCss()
+    const name = css.match(/@keyframes (kf_\w+)/)?.[1]
+    expect(name).toBeDefined()
+    expect(css).toContain(`animation: ${name} 1s linear infinite`)
+  })
+
   test('the name carries the class prefix', () => {
     const fixture = createFoldFixture({ prefix: 'app' })
     const result = fixture.foldStrict(`

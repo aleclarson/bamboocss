@@ -903,11 +903,20 @@ export const foldSource = (options: FoldOptions): FoldResult => {
   }
 
   const collides = (start: number, end: number) => applied.some(([from, to]) => start < to && from < end)
+  /**
+   * A call written inside a recipe config the loop below erases: `token()` or `keyframes()` in a
+   * `cva` base. The stylesheet read its value out of the config, so it goes with the declaration.
+   * Rewritten in place first, it was an edit the erasure then collided with, which left the
+   * declaration, and the `cva` import with it, standing.
+   */
+  const withinDefinition = (start: number, end: number) =>
+    recipeDefinitions.some((definition) => definition.start <= start && end <= definition.end)
+
   for (const candidate of candidates) {
     if (candidate.subsumed || candidate.failed) continue
     const { name, start, end } = candidate
 
-    if (collides(start, end)) {
+    if (collides(start, end) || withinDefinition(start, end)) {
       skipped.push({ name, reason: 'overlapping', start, end })
       continue
     }
