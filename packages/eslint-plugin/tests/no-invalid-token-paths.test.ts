@@ -64,9 +64,36 @@ eslintTester.run(RULE_NAME, rule, {
     {
       code: multiline`
   import { css } from './bamboo/css';
-  
+
   ${invalidLiteral}`,
       errors: [{ messageId: 'noInvalidTokenPaths' }],
+    },
+
+    // `base` is not a property, so the value under it was skipped while `_hover` beside it was
+    // read; and a quoted key was skipped whatever it named.
+    {
+      code: multiline`
+  import { css } from './bamboo/css';
+
+  const styles = css({ color: { base: 'token(colors.nope)', _hover: 'token(colors.nope2)' } })`,
+      errors: [{ messageId: 'noInvalidTokenPaths' }, { messageId: 'noInvalidTokenPaths' }],
+    },
+
+    {
+      code: multiline`
+  import { css } from './bamboo/css';
+
+  const styles = css({ '--accent': 'token(colors.nope)' })`,
+      errors: [{ messageId: 'noInvalidTokenPaths' }],
+    },
+
+    // A value under a condition is judged against the property holding it, not the condition.
+    {
+      code: multiline`
+  import { css } from './bamboo/css';
+
+  const styles = css({ color: { base: 'mutedd', _hover: 'mutedd2' } })`,
+      errors: [{ messageId: 'unresolvedValue' }, { messageId: 'unresolvedValue' }],
     },
   ],
   valid: [
@@ -83,6 +110,14 @@ eslintTester.run(RULE_NAME, rule, {
   import { css } from './bamboo/css';
 
   const styles = css({ bg: 'token(colors.red.300) 50%' })`,
+    },
+
+    // The build resolves a colour with an opacity through the colour, and so does the rule.
+    {
+      code: multiline`
+  import { css } from './bamboo/css';
+
+  const styles = css({ color: { base: 'token(colors.red.300/50)', _hover: 'red.300' }, '--accent': 'token(colors.red.300)' })`,
     },
 
     /**

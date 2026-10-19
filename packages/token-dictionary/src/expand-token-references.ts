@@ -20,3 +20,12 @@ export const expandTokenReferences = (str: string, resolve: (path: string) => st
     return resolve(trimmed) ?? esc(trimmed)
   })
 }
+
+const NONE: readonly string[] = []
+
+/** The path of every `token(path)` reference in a string, trimmed — the ones `expandTokenReferences` expands. */
+export const tokenReferencePaths = (str: string): readonly string[] => {
+  // Asked of every value the build transforms, and almost none hold a reference.
+  if (!str.includes('token(')) return NONE
+  return Array.from(str.matchAll(REFERENCE), (match) => match[1].trim())
+}

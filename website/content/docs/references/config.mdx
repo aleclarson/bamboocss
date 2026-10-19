@@ -1176,10 +1176,10 @@ What to do about a style value that names neither a token nor anything the CSS p
 
 **The two halves are graded apart, because they are not equally certain.**
 
-| half      | when                                                                    | decided by               | default |
-| --------- | ----------------------------------------------------------------------- | ------------------------ | ------- |
-| `token`   | the property draws from a token category, or the value is a dotted path | bamboo's own bookkeeping | `error` |
-| `grammar` | a bare name on a property with no token category                        | the CSS grammar          | `warn`  |
+| half      | when                                                                                                     | decided by               | default |
+| --------- | -------------------------------------------------------------------------------------------------------- | ------------------------ | ------- |
+| `token`   | the property draws from a token category, the value is a dotted path, or a `token()` reference names one | bamboo's own bookkeeping | `error` |
+| `grammar` | a bare name on a property with no token category                                                         | the CSS grammar          | `warn`  |
 
 `color: 'mutedd'` and `top: 'navH'` are the first: `color` reads `colors` and `top` reads `spacing`, so a name that is
 not one of those is bamboo's own answer and there is nothing else to be wrong about it.
@@ -1196,6 +1196,12 @@ Pass a single severity to apply it to both:
   "unresolvedToken": "error"
 }
 ```
+
+A `token()` reference inside a value is the `token` half too: `border: '1px solid token(colors.nope)'` fails the build
+by default. The reference reaches the stylesheet as text rather than a variable, so the declaration never takes a
+token's value, and where the property accepts a name at all, such as a custom property or `font-family`, nothing else
+would object. A reference written without its category, `token(red.300)`, is reported with the path it was probably
+meant to be, `token(colors.red.300)`.
 
 A missing token such as `css({ background: 'accent.default' })` fails the build by default. If you lower the token
 severity to `warn` or `off`, resolution falls back to the original value: `background: accent.default` can reach the

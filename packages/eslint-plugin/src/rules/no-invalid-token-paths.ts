@@ -1,6 +1,7 @@
 import { createRule } from '../utils'
 import {
   getInvalidTokens,
+  getStyleProperty,
   getUnresolvedValueMessage,
   getTaggedTemplateCaller,
   isBambooAttribute,
@@ -8,7 +9,7 @@ import {
   isRecipeVariant,
   isStyledTaggedTemplate,
 } from '../utils/helpers'
-import { isIdentifier, isJSXExpressionContainer, isJSXIdentifier, isLiteral, isTemplateLiteral } from '../utils/nodes'
+import { isJSXExpressionContainer, isJSXIdentifier, isLiteral, isTemplateLiteral } from '../utils/nodes'
 import { AST_NODE_TYPES, type TSESTree } from '@typescript-eslint/utils'
 import { isNodeOfTypes } from '@typescript-eslint/utils/ast-utils'
 
@@ -94,16 +95,18 @@ const rule = createRule({
       },
 
       Property(node: TSESTree.Property) {
-        if (
-          !isIdentifier(node.key) ||
-          !isNodeOfTypes([AST_NODE_TYPES.Literal, AST_NODE_TYPES.TemplateLiteral])(node.value) ||
-          !isBambooAttribute(node, context) ||
-          isRecipeVariant(node, context)
-        ) {
+        if (!isNodeOfTypes([AST_NODE_TYPES.Literal, AST_NODE_TYPES.TemplateLiteral])(node.value)) {
           return
         }
 
-        handleValue(node.value, node.key.name)
+        // A quoted key — `'--accent'` — is a property like any other, and a value under `base` or
+        // a condition is judged against the property that holds it.
+        const property = getStyleProperty(node, context)
+        if (!property || !isBambooAttribute(property.node, context) || isRecipeVariant(property.node, context)) {
+          return
+        }
+
+        handleValue(node.value, property.name)
       },
 
       TaggedTemplateExpression(node: TSESTree.TaggedTemplateExpression) {

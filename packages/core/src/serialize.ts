@@ -16,7 +16,9 @@ export function transformStyles(context: SerializeContext, styleObj: Dict, key: 
   const hashSet = new Set<string>()
   encoder.hashStyleObject(hashSet, styleObj)
 
-  const group = decoder.getGroup(hashSet, key)
+  // Decoded into a clone, so `decoder.atomic` never holds these, and an unresolved token in them
+  // is only ever seen here. @see Utility.serializedUnresolvedTokens
+  const group = context.utility.withinSerializedStyles(() => decoder.getGroup(hashSet, key))
 
   return group.result
 }

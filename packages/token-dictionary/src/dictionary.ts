@@ -37,7 +37,7 @@ import {
   opacityPercent,
   referenceOf,
 } from './utils'
-import { expandTokenReferences } from './expand-token-references'
+import { expandTokenReferences, tokenReferencePaths } from './expand-token-references'
 
 type EnforcePhase = 'pre' | 'post'
 
@@ -507,6 +507,45 @@ export class TokenDictionary {
       return tokenPathRegex.test(path) ? esc(path) : path
     })
   }
+
+  /**
+   * Whether `expandReferenceInValue` resolves a `token()` path to a variable.
+   *
+   * A `path/opacity` resolves when its colour does. `colorMix` fails loudly on an opacity it
+   * cannot read, but hands an unknown colour through as text:
+   * `color-mix(in srgb, colors.nope 50%, transparent)`.
+   */
+  resolvesReference(path: string) {
+    const slash = path.indexOf('/')
+    return Boolean(this.view.getVar(slash === -1 ? path : path.slice(0, slash)))
+  }
+
+  /**
+   * The `token()` paths in a value that name no token.
+   *
+   * `expandReferenceInValue` writes each one into the css as the escaped path, so
+   * `calc(token(sizes.nope) + 2px)` ships as `calc(sizes\.nope + 2px)` and the declaration never
+   * takes a token's value. Where the property accepts a name — a custom property, `font-family`,
+   * `animation-name` — nothing downstream objects at all. The build's report and the lint rule
+   * both ask this, so they cannot disagree about which references resolve.
+   */
+  unresolvedReferences(value: string): readonly string[] {
+    const cached = this.unresolvedReferenceCache.get(value)
+    if (cached) return cached
+
+    const paths = tokenReferencePaths(value)
+    if (!paths.length) return paths
+
+    const found = paths.filter((path) => !this.resolvesReference(path))
+    this.unresolvedReferenceCache.set(value, found)
+    return found
+  }
+
+  /**
+   * By value, because the build asks again of every atom in the sheet on every build, and a
+   * dictionary does not change under its context: a config edit builds a new one.
+   */
+  private unresolvedReferenceCache = new Map<string, readonly string[]>()
 
   /**
    * Get the value of a token reference

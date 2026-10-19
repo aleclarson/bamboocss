@@ -274,6 +274,105 @@ describe('across rebuilds', () => {
     expect(() => run()).not.toThrow()
     expect(() => run()).not.toThrow()
   })
+
+  /**
+   * The other half of the same question. The record of findings lives as long as the context,
+   * and the error pass used to start from it, so a typo fixed in source went on failing every
+   * rebuild of a dev server or a watch until the process was restarted.
+   */
+  test('a source fixed in the same context goes green on the next build', () => {
+    const { run, write } = build('error', styled('accent.default'))
+
+    expect(() => run()).toThrow()
+    write(styled('red.300'))
+    expect(() => run()).not.toThrow()
+  })
+
+  test('a reference fixed in the same context goes green on the next build', () => {
+    const { run, write } = build('error', styled('1px solid token(colors.nope)', 'border'))
+
+    expect(() => run()).toThrow()
+    write(styled('1px solid token(colors.red.300)', 'border'))
+    expect(() => run()).not.toThrow()
+  })
+})
+
+/**
+ * A `token()` reference inside a value is the same mistake as a bare value naming no token,
+ * reached another way. The reference is written into the css as text — `token(colors.nope)` as
+ * `colors\.nope` — so the declaration never takes a token's value. Where the property accepts a
+ * name or anything at all, which is a custom property, `font-family`, or a `calc()` the grammar
+ * does not look inside, nothing objected; elsewhere only the grammar did, in its own voice, as a
+ * warning.
+ */
+describe('a token() reference', () => {
+  const silent = {
+    'a calc()': ['calc(token(sizes.nope) + 2px)', 'width'],
+    'a custom property': ['token(colors.nope)', `'--accent'`],
+    'a font family': ['token(fonts.nope)', 'fontFamily'],
+    "a var()'s fallback": ['var(--x, token(colors.nope))', 'outlineColor'],
+    'a fallback() candidate': ['fallback(token(colors.nope), red)', 'color'],
+    "a colour's opacity": ['token(colors.nope/50)', 'color'],
+  }
+
+  for (const [name, [value, prop]] of Object.entries(silent)) {
+    test(`the default fails on one in ${name}`, () => {
+      const { run } = build(undefined, styled(value, prop))
+
+      expect(() => run()).toThrowError(/token\(colors\.nope|token\(sizes\.nope|token\(fonts\.nope/)
+    })
+  }
+
+  test('names the property and the path, and says what happens to it', () => {
+    const { run } = build('error', styled('1px solid token(colors.nope)', 'border'))
+
+    expect(() => run()).toThrowError(
+      "`border: token(colors.nope)` — no such token. It reaches the css as text instead of a variable, so the declaration never takes a token's value. Check the path, or add the token to your theme.",
+    )
+  })
+
+  test('names the path it was probably meant to be', () => {
+    expect(() => build('error', styled('1px solid token(red.300)', 'border')).run()).toThrowError(
+      /Did you mean `token\(colors\.red\.300\)`\?/,
+    )
+    expect(() => build('error', styled('1px solid token(color.red.300/50)', 'border')).run()).toThrowError(
+      /Did you mean `token\(colors\.red\.300\/50\)`\?/,
+    )
+  })
+
+  test("'warn' reports it once, and the grammar does not report it again", () => {
+    const spy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const { run } = build('warn', styled('1px solid token(colors.nope)', 'border'))
+
+    expect(() => run()).not.toThrow()
+    expect(() => run()).not.toThrow()
+    const reported = messages(spy)
+    expect(reported.match(/token\(colors\.nope\)/g)).toHaveLength(1)
+    expect(reported).not.toMatch(/not valid/)
+  })
+
+  test("'off' says nothing, in either check's voice", () => {
+    const spy = vi.spyOn(logger, 'warn').mockImplementation(() => {})
+    const { run } = build('off', styled('1px solid token(colors.nope)', 'border'))
+
+    expect(() => run()).not.toThrow()
+    expect(messages(spy)).not.toMatch(/colors.nope/)
+  })
+
+  test('a reference that resolves is not a finding', () => {
+    for (const value of ['1px solid token(colors.red.300)', 'token(colors.red.300/50)']) {
+      expect(() => build('error', styled(value, 'outlineColor')).run()).not.toThrow()
+    }
+  })
+
+  test('a config-derived reference fails every rebuild', () => {
+    const { run } = build('error', styled('red.300'), {
+      global: { css: { body: { border: '1px solid token(colors.nope)' } } },
+    })
+
+    expect(() => run()).toThrowError(/`border: token\(colors\.nope\)`/)
+    expect(() => run()).toThrowError(/`border: token\(colors\.nope\)`/)
+  })
 })
 
 /**

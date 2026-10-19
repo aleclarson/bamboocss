@@ -390,6 +390,37 @@ export const isInJSXProp = (node: TSESTree.Property, context: RuleContext<any, a
   return true
 }
 
+/** A property key as written, when it is a name rather than a computed expression. */
+const getKeyName = (key: TSESTree.Property['key']) => {
+  if (isIdentifier(key)) return key.name
+  if (isLiteral(key) && typeof key.value === 'string') return key.value
+}
+
+/**
+ * The style property a literal value is written for, and the node naming it.
+ *
+ * Its own key, or, for a value under `base` or a condition inside a property's object —
+ * `color: { base: 'x', _hover: 'y' }` — the property that object belongs to. `base` is no
+ * property at all, so a check reading the value's own key skipped it, and a condition is not
+ * what the value has to be valid for.
+ */
+export const getStyleProperty = (
+  node: TSESTree.Property,
+  context: RuleContext<any, any>,
+): { name: string; node: TSESTree.Property } | undefined => {
+  let current = node
+  for (;;) {
+    const name = getKeyName(current.key)
+    if (name === undefined) return
+    if (!syncAction('isCondition', getSyncOptions(context), name)) return { name, node: current }
+
+    const object = current.parent
+    const owner = object?.parent
+    if (object?.type !== 'ObjectExpression' || owner?.type !== 'Property' || owner.value !== object) return
+    current = owner
+  }
+}
+
 export const isBambooAttribute = (node: TSESTree.Property, context: RuleContext<any, any>) => {
   const callAncestor = getAncestor(isCallExpression, node)
 

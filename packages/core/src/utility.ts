@@ -103,7 +103,17 @@ export interface UnresolvedTokenRef {
    * and it is the thing a type error structurally cannot say.
    */
   declaredIn?: string[]
+  /**
+   * A `token(path)` reference inside the value rather than a bare value naming a token. `value`
+   * is then the path the reference names, category included, and the finding is always `token`:
+   * the author said it was one.
+   */
+  reference?: true
+  /** For a reference, the paths that do resolve one slip away: the category left out or misspelled. */
+  suggestions?: string[]
 }
+
+const NO_FINDINGS: ReadonlyArray<[string, UnresolvedTokenRef]> = []
 
 export interface UtilityOptions {
   config?: UtilityConfig
@@ -825,22 +835,43 @@ export class Utility {
   /**
    * Every unresolved token path this utility has transformed, keyed on `property:path`.
    *
-   * One structure for two jobs — the dedup set behind the warning, and the record
-   * `unresolvedToken: 'error'` fails on — because two would be two chances for the modes to
-   * disagree about what counts as one finding.
-   *
-   * `'error'` cannot read this off the finished sheet the way it reads atomic styles.
-   * `globalCss`, the reset, config recipes and compositions all serialize through
-   * `transformStyles`, which decodes into a *clone* of the decoder, so nothing they contain
-   * ever reaches `decoder.atomic`. Transforming them is the only moment they are visible.
-   *
-   * Accumulating is safe here in a way it is not for atomic styles, and for a reason specific
-   * to what is being recorded: all of it is config-derived, transformed once when the context
-   * is built, and a config edit constructs a whole new context. So nothing here outlives the
-   * config it describes — where a record cleared per build would report these on the first
-   * build and pass every build after it.
+   * The dedup set behind the warning, so a finding is said once per process, and how the
+   * emitted-sheet check (`invalidDeclaration`) knows a declaration is this check's to judge.
+   * It is not what `unresolvedToken: 'error'` fails on: it holds every finding the process has
+   * ever transformed, so a typo fixed in source stayed in it, and a dev server went on failing
+   * every rebuild until it was restarted. See `serializedUnresolvedTokens`.
    */
   unresolvedTokens = new Map<string, UnresolvedTokenRef>()
+
+  /**
+   * The findings in styles serialized through `transformStyles`: the half of what
+   * `unresolvedToken: 'error'` fails on that the finished sheet cannot show.
+   *
+   * `globalCss`, the reset, config recipes, mixins, view transitions and `keyframes()` stops all
+   * decode into a *clone* of the decoder, so nothing they contain ever reaches `decoder.atomic`,
+   * and transforming them is the only moment they are visible. Most of them are transformed
+   * once, when the context is built, so a record cleared per build would report them on the
+   * first build and pass every build after it. A config edit builds a whole new context, so
+   * nothing config-derived outlives the config it describes. A view transition or a
+   * `keyframes()` call fixed in source does stay recorded until the process restarts.
+   *
+   * Source styles are kept out of this on purpose. `decoder.atomic` is what the sheet is built
+   * from, so the error pass reads them off it, statelessly, on every build.
+   */
+  serializedUnresolvedTokens = new Map<string, UnresolvedTokenRef>()
+
+  /** How deep inside `transformStyles` the current transform is. @see serializedUnresolvedTokens */
+  private serializing = 0
+
+  /** Run `transform` calls as part of a serialized style, so their findings are kept. */
+  withinSerializedStyles = <T>(fn: () => T): T => {
+    this.serializing++
+    try {
+      return fn()
+    } finally {
+      this.serializing--
+    }
+  }
 
   /**
    * Whether a style value is shaped like a token path and names no token.
@@ -1033,26 +1064,73 @@ export class Utility {
    * rejects, and `off` here has to mean silence about it rather than the same mistake
    * reported in the other check's voice. `assertNoUnresolvedTokens` reads the record through
    * each half's severity, so an `off` entry never fails a build.
+   *
+   * A `token()` reference naming no token is the same mistake reached another way:
+   * `expandReferenceInValue` writes it into the css as text, so `calc(token(sizes.nope) + 2px)`
+   * shipped as `calc(sizes\.nope + 2px)` with nothing said, and where the property takes a name
+   * — a custom property, `font-family` — the grammar has nothing to object to either.
    */
-  private recordUnresolvedToken = (key: string, value: string) => {
-    if (!this.isUnresolvedTokenValue(key, value)) return
+  private recordUnresolvedTokens = (key: string, value: unknown, fallbackValues: readonly string[] | undefined) => {
+    const found = fallbackValues ? this.unresolvedIn(key, fallbackValues) : this.unresolvedInValue(key, value)
+    if (found === NO_FINDINGS) return
 
-    // One record per mistake, keyed on the path rather than on the value as written: the same
+    for (const [id, ref] of found) {
+      if (this.serializing) this.serializedUnresolvedTokens.set(id, ref)
+      if (this.unresolvedTokens.has(id)) continue
+      this.unresolvedTokens.set(id, ref)
+
+      // `error` reports the whole set at the end of the build instead — warning here as well
+      // would print every finding twice and bury the line that failed it.
+      if (this.unresolvedToken[ref.kind] !== 'warn') continue
+
+      logger.warn('utility', this.explainUnresolvedToken(ref))
+    }
+  }
+
+  /**
+   * Every finding in one style value, keyed `property:path`: the value naming no token, and any
+   * `token()` reference in it naming none, for each candidate of a `fallback(...)`.
+   *
+   * The one predicate both modes ask — `transform` as it runs, the error pass of each atom in the
+   * finished sheet — so they cannot disagree about what counts as a finding, or about how many.
+   */
+  findUnresolvedTokens = (prop: string, value: string) => {
+    const key = this.resolveShorthand(prop)
+    const written = value.includes('!') ? withoutImportant(value) : value
+    const fallbackValues = parseFallbackValue(written)
+    return fallbackValues ? this.unresolvedIn(key, fallbackValues) : this.unresolvedInValue(key, written)
+  }
+
+  private unresolvedIn = (key: string, candidates: readonly unknown[]) => {
+    let found: Array<[string, UnresolvedTokenRef]> | undefined
+    for (const candidate of candidates) {
+      const own = this.unresolvedInValue(key, candidate)
+      if (own !== NO_FINDINGS) (found ??= []).push(...own)
+    }
+    return found ?? NO_FINDINGS
+  }
+
+  /** Asked of every value the build transforms, so a value with nothing to find allocates nothing. */
+  private unresolvedInValue = (key: string, value: unknown) => {
+    if (!isString(value)) return NO_FINDINGS
+    let found: Array<[string, UnresolvedTokenRef]> | undefined
+
+    // One finding per mistake, keyed on the path rather than on the value as written: the same
     // typo reached through `red.3000`, `red.3000!` and `red.3000/50` is one thing to fix.
     // `transform` also runs once per condition, so a single bad token under `base`, `_hover`
     // and two breakpoints is four identical findings without this.
-    const bare = this.bareTokenPath(key, value)
-    const id = `${key}:${bare}`
-    if (this.unresolvedTokens.has(id)) return
+    if (this.isUnresolvedTokenValue(key, value)) {
+      const bare = this.bareTokenPath(key, value)
+      found = [[`${key}:${bare}`, this.unresolvedTokenRef(key, bare)]]
+    }
 
-    const ref = this.unresolvedTokenRef(key, bare)
-    this.unresolvedTokens.set(id, ref)
+    if (value.includes('token(')) {
+      for (const path of this.tokens.unresolvedReferences(value)) {
+        ;(found ??= []).push([`${key}:token(${path})`, this.unresolvedReferenceRef(key, path)])
+      }
+    }
 
-    // `error` reports the whole set at the end of the build instead — warning here as well
-    // would print every finding twice and bury the line that failed it.
-    if (this.unresolvedToken[ref.kind] !== 'warn') return
-
-    logger.warn('utility', this.explainUnresolvedToken(ref))
+    return found ?? NO_FINDINGS
   }
 
   /**
@@ -1122,6 +1200,40 @@ export class Utility {
   }
 
   /**
+   * A `token(path)` reference naming no token, with the paths it was probably meant to be.
+   *
+   * A reference takes the whole path, category included, where a bare value takes the name
+   * alone: `color: 'red.300'` but `border: '1px solid token(colors.red.300)'`. Writing the
+   * reference the bare way, or misspelling its category, are the slips worth naming.
+   */
+  unresolvedReferenceRef = (key: string, path: string): UnresolvedTokenRef => {
+    // A colour's opacity rides along, and the colour is what has to resolve.
+    const slash = path.indexOf('/')
+    const name = slash === -1 ? path : path.slice(0, slash)
+    const opacity = slash === -1 ? '' : path.slice(slash)
+
+    const suggestions = new Set<string>()
+    const dot = name.indexOf('.')
+    // Under a category that exists the slip is in the name, and there is nothing to guess from.
+    const categories: ReadonlyMap<string, unknown> = this.tokens.view.valuesByCategory
+    if (!categories.has(dot === -1 ? name : name.slice(0, dot))) {
+      for (const candidate of dot === -1 ? [name] : [name, name.slice(dot + 1)]) {
+        for (const category of this.categoriesDeclaring(candidate, undefined) ?? []) {
+          suggestions.add(`${category}.${candidate}${opacity}`)
+        }
+      }
+    }
+
+    return {
+      prop: key,
+      value: path,
+      kind: 'token',
+      reference: true,
+      ...(suggestions.size ? { suggestions: [...suggestions].slice(0, 2) } : {}),
+    }
+  }
+
+  /**
    * The token categories that *do* declare this name, other than the one being read.
    *
    * This is the whole of what a build-time check can say and a type error cannot. `top: 'navH'`
@@ -1149,7 +1261,17 @@ export class Utility {
    * describe the same finding differently — which they did once before, over whether `!` was
    * part of the value.
    */
-  explainUnresolvedToken = ({ prop, value, category, declaredIn }: UnresolvedTokenRef) => {
+  explainUnresolvedToken = ({ prop, value, category, declaredIn, reference, suggestions }: UnresolvedTokenRef) => {
+    if (reference) {
+      const fix = suggestions?.length
+        ? `Did you mean ${suggestions.map((path) => `\`token(${path})\``).join(' or ')}?`
+        : `Check the path, or add the token to your theme.`
+      return (
+        `\`${prop}: token(${value})\` — no such token. It reaches the css as text instead of a ` +
+        `variable, so the declaration never takes a token's value. ${fix}`
+      )
+    }
+
     const dropped = `It is emitted as written, and the browser will drop it.`
     // Two spellings rather than one lowercased on the fly: `literal.toLowerCase()` also folded
     // the value inside it, so a token named `navH` was reported with the fix written `[navh]` —
@@ -1221,9 +1343,7 @@ export class Utility {
     // whole string has parentheses so it is not path-shaped, and the working candidate hides
     // the broken one for good. That is the same silent failure as the bare case, wearing a
     // fallback that makes it look deliberate.
-    for (const candidate of fallbackValues ?? [value]) {
-      if (isString(candidate)) this.recordUnresolvedToken(key, candidate)
-    }
+    this.recordUnresolvedTokens(key, value, fallbackValues)
 
     return compact({
       layer: this.configs.get(key)?.layer,

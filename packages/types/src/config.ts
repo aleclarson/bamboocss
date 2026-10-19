@@ -762,6 +762,11 @@ export interface Config
    * on properties with no token category. That half defaults to `'warn'`, so a build is never
    * failed by how fresh a grammar is.
    *
+   * A `token()` reference inside a value is the token half too: `border: '1px solid token(colors.nope)'`
+   * reaches the stylesheet as text rather than a variable, so the declaration never takes a token's
+   * value, and where the property accepts a name — a custom property, `font-family` — nothing else
+   * objects to it.
+   *
    * A single severity applies to both.
    *
    * @default { token: 'error', grammar: 'warn' }

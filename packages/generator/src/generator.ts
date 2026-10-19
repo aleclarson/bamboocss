@@ -516,28 +516,17 @@ export class Generator extends Context {
     const severity = this.utility.unresolvedToken
     if (severity.token !== 'error' && severity.grammar !== 'error') return
 
-    const found = new Map<string, UnresolvedTokenRef>(this.utility.unresolvedTokens)
+    const found = new Map<string, UnresolvedTokenRef>(this.utility.serializedUnresolvedTokens)
 
     for (const atom of this.decoder.atomic) {
       const { prop, value } = atom.entry
       if (typeof value !== 'string' || typeof prop !== 'string') continue
 
-      if (!this.utility.isUnresolvedTokenValue(prop, value)) continue
-
-      // Resolved, so an atom written as `bg` keys and prints the same as the `background` the
-      // transform-side record holds. The encoder resolves shorthands before hashing so these
-      // arrive resolved already; doing it here as well means the two halves cannot key
-      // differently on the same mistake and report it twice.
-      const key = this.utility.resolveShorthand(prop)
-
-      // The path the value names, with `!important` and a `/opacity` modifier stripped. The
-      // predicate above normalizes the same way — this asks for the result of it, rather than
-      // repeating the rule and letting the two drift.
-      const bare = this.utility.bareTokenPath(key, value)
-
-      // One finding per mistake: the same typo under `base`, `_hover` and two breakpoints is
-      // four atoms and one thing to fix.
-      found.set(`${key}:${bare}`, this.utility.unresolvedTokenRef(key, bare))
+      // The predicate `transform` records with, so the two halves key one mistake the same way
+      // — shorthand resolved, `!important` and a `/opacity` modifier stripped — and a value both
+      // can see is one finding. Keyed per mistake, too: the same typo under `base`, `_hover` and
+      // two breakpoints is four atoms and one thing to fix.
+      for (const [id, ref] of this.utility.findUnresolvedTokens(prop, value)) found.set(id, ref)
     }
 
     // Only the half that is graded `error` fails the build. The other half has already been
@@ -564,7 +553,7 @@ export class Generator extends Context {
         `Each is emitted as written, which parses — so the stylesheet is valid and nothing ` +
         `downstream objects. The browser drops the declaration at compute time and the style is ` +
         `simply absent from the element, which surfaces as "this never applied" a long way from ` +
-        `the typo that caused it. Write \`[value]\` to mark one as a literal, or set ` +
+        `the typo that caused it. Write \`[value]\` to mark a bare value as a literal, or set ` +
         `\`unresolvedToken: 'warn'\` to report these without failing.`,
     )
   }
@@ -602,12 +591,29 @@ export class Generator extends Context {
     if (severity === 'off') return
 
     const owned = new Set<string>()
+    // A reference is not the whole value, so it owns any declaration of its property holding the
+    // text it was written into the css as: `1px solid colors\.nope`.
+    const references = new Map<string, string[]>()
     for (const ref of this.utility.unresolvedTokens.values()) {
-      owned.add(`${this.utility.cssPropertyOf(ref.prop)}:${ref.value}`)
+      const property = this.utility.cssPropertyOf(ref.prop)
+      if (!ref.reference) {
+        owned.add(`${property}:${ref.value}`)
+        continue
+      }
+      const slash = ref.value.indexOf('/')
+      const paths = references.get(property) ?? []
+      paths.push(slash === -1 ? ref.value : ref.value.slice(0, slash))
+      references.set(property, paths)
     }
 
     const id = (finding: InvalidDeclaration) => `${finding.prop}:${finding.value}`
-    const findings = sheet.invalidDeclarations.filter((finding) => !owned.has(id(finding)))
+    const referenced = (finding: InvalidDeclaration) => {
+      const paths = references.get(finding.prop)
+      if (!paths) return false
+      const text = finding.value.replaceAll('\\', '')
+      return paths.some((path) => text.includes(path))
+    }
+    const findings = sheet.invalidDeclarations.filter((finding) => !owned.has(id(finding)) && !referenced(finding))
     if (!findings.length) return
 
     const describe = ({ prop, value, selector, layer, count }: InvalidDeclaration) => {

@@ -148,9 +148,17 @@ const filterDeprecatedTokens = (context: Generator, tokens: DeprecatedToken[]): 
   })
 }
 
-// Refactored to arrow function, removed async
+/**
+ * The `token()` paths that name no token, by the build's own resolution, so the squiggle and the
+ * build agree about a colour's opacity — `token(colors.red.300/50)` — as about everything else.
+ */
 const filterInvalidTokens = (context: Generator, paths: string[]): string[] => {
-  return paths.filter((path) => !context.utility.tokens.view.get(path))
+  return paths.filter((path) => !context.utility.tokens.resolvesReference(path.trim()))
+}
+
+/** Whether a key is a condition, `base` included, rather than a property. */
+const isCondition = (context: Generator, name: string): boolean => {
+  return name === 'base' || context.conditions.isCondition(name)
 }
 
 /**
@@ -277,6 +285,8 @@ export function run(action: 'isColorToken', options: Options, value: string): bo
 
 export function run(action: 'isColorAttribute', options: Options, attribute: string): boolean
 
+export function run(action: 'isCondition', options: Options, name: string): boolean
+
 export function run(action: 'isValidFile', options: Options): boolean
 
 export function run(action: 'resolveShorthands', options: Options, name: string): string[] | undefined
@@ -310,6 +320,7 @@ export function runAsync(
 ): Promise<string | undefined>
 export function runAsync(action: 'isColorToken', options: Options, value: string): Promise<boolean>
 export function runAsync(action: 'isColorAttribute', options: Options, attribute: string): Promise<boolean>
+export function runAsync(action: 'isCondition', options: Options, name: string): Promise<boolean>
 export function runAsync(action: 'isValidFile', options: Options, fileName: string): Promise<string>
 export function runAsync(action: 'resolveShorthands', options: Options, name: string): Promise<string[] | undefined>
 export function runAsync(action: 'resolveLongHand', options: Options, name: string): Promise<string | undefined>
@@ -360,6 +371,9 @@ export async function runAsync(action: string, options: Options, ...args: any): 
     case 'isColorToken':
       // @ts-expect-error cast
       return isColorToken(context, ...args)
+    case 'isCondition':
+      // @ts-expect-error cast
+      return isCondition(context, ...args)
     case 'isValidFile':
       return isValidFile(context, path.resolve(options.cwd ?? process.cwd(), options.currentFile))
     case 'isValidProperty':

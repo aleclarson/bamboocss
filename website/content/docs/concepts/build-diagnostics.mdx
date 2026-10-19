@@ -140,18 +140,19 @@ might be wrong about your code; escalating is a choice you make once you know yo
 [`unresolvedToken`](/docs/references/config#unresolvedtoken) defaults to `{ token: 'error', grammar: 'warn' }`. The two
 checks have independent severities:
 
-| Check                                                                    | Example                     | Default |
-| ------------------------------------------------------------------------ | --------------------------- | ------- |
-| Missing token or unknown name on a token-backed property                 | `color: 'brand.foreground'` | `error` |
-| Bare name rejected by CSS grammar on a property without a token category | `display: 'flexx'`          | `warn`  |
+| Check                                                                    | Example                                  | Default |
+| ------------------------------------------------------------------------ | ---------------------------------------- | ------- |
+| Missing token or unknown name on a token-backed property                 | `color: 'brand.foreground'`              | `error` |
+| A `token()` reference naming no token, anywhere in a value               | `border: '1px solid token(colors.nope)'` | `error` |
+| Bare name rejected by CSS grammar on a property without a token category | `display: 'flexx'`                       | `warn`  |
 
 A missing token fails the build:
 
 ```text
 ERR_BAMBOO_UNRESOLVED_TOKEN: 2 style value(s) name a token that does not exist:
 
-- `background: accent.default`. Check the path against your `colors` tokens.
-- `color: brand.foreground`. Check the path against your `colors` tokens.
+- `color: brand.foreground` — no such `colors` token. It is emitted as written, and the browser will drop it. Write `[brand.foreground]` to mean it literally.
+- `border: token(colors.nope)` — no such token. It reaches the css as text instead of a variable, so the declaration never takes a token's value. Check the path, or add the token to your theme.
 ```
 
 Set either half to `off`, `warn`, or `error`, or pass one severity to apply it to both. At `warn` the build carries on;
