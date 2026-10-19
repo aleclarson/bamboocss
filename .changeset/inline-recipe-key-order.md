@@ -7,4 +7,4 @@ another order, or the values of one variant in another order, is named the same 
 with keys sorted, and registering it compared the configs key order and all: the build failed with
 `could not be extracted` over two valid programs. Each call's classes still come from its own config, so where two
 variants set the same property, the one declared later in that call's config still wins. A different recipe under one
-declared `className` is still a conflict.
+declared `className` is still a conflict, and a recipe both files stop declaring is released as before.

@@ -1,4 +1,4 @@
-import { viewTransitionClassName } from '@bamboocss/shared'
+import { getRecipeIdentity, viewTransitionClassName } from '@bamboocss/shared'
 import { describe, expect, test } from 'vitest'
 import { createFoldFixture, selectorsFor } from './fixture'
 
@@ -425,6 +425,31 @@ describe('inline recipes that differ only in key order', () => {
     expect(() => fixture.ctx.assertExtracted(fixture.ctx.parseFailures.keys())).toThrowError(
       /inline recipe "btn" conflicts with another owner/,
     )
+  })
+
+  // A file that joined another's registration holds it in its own key order, and letting go of it
+  // last has to release it as the first file would have.
+  test('a registration both files let go of is released', () => {
+    const fixture = createFoldFixture()
+    const declare = (file: string, recipe: string) =>
+      fixture.foldStrict(
+        `
+      import { cva } from 'styled-system/css'
+      const r = ${recipe}
+      export const x = r({ visual: 'solid', size: 'sm' })
+    `,
+        file,
+      )
+    declare('src/first.tsx', solidFirst)
+    declare('src/second.tsx', sizeFirst)
+    const name = getRecipeIdentity({
+      variants: { visual: { solid: { padding: '1px' } }, size: { sm: { padding: '4px' } } },
+    })
+    expect(fixture.ctx.recipes.getInlineConfig(name)).toBeDefined()
+
+    fixture.foldStrict(`export const x = 1`, 'src/first.tsx')
+    fixture.foldStrict(`export const y = 1`, 'src/second.tsx')
+    expect(fixture.ctx.recipes.getInlineConfig(name)).toBeUndefined()
   })
 
   // Values of one variant are exclusive, so their order decides nothing at all.

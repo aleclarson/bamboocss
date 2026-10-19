@@ -705,7 +705,8 @@ export class Recipes {
 
   unregisterInline = (name: string, expected: InlineRecipeConfig) => {
     if (!this.inlineRegistered.has(name)) return false
-    if (!sameValue(this.inlineState.inlineConfigs.get(name), expected)) return false
+    // Without key order: an owner that joined another's registration holds it in its own order.
+    if (!sameValueIgnoringObjectOrder(this.inlineState.inlineConfigs.get(name), expected)) return false
     this.inlineRegistered.delete(name)
 
     this.inlineState.inlineKeys.get(name)?.forEach((key) => {
@@ -822,5 +823,28 @@ const sameValue = (left: unknown, right: unknown): boolean => {
   return (
     leftKeys.length === rightKeys.length &&
     leftKeys.every((key, index) => rightKeys[index] === key && sameValue(leftRecord[key], rightRecord[key]))
+  )
+}
+
+/** `sameValue` with object keys in any order, as an inline recipe's name is derived. */
+const sameValueIgnoringObjectOrder = (left: unknown, right: unknown): boolean => {
+  if (Object.is(left, right)) return true
+  if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return false
+  if (Array.isArray(left) || Array.isArray(right)) {
+    return (
+      Array.isArray(left) &&
+      Array.isArray(right) &&
+      left.length === right.length &&
+      left.every((value, index) => sameValueIgnoringObjectOrder(value, right[index]))
+    )
+  }
+  const leftRecord = left as Record<string, unknown>
+  const rightRecord = right as Record<string, unknown>
+  const leftKeys = Object.keys(leftRecord)
+  return (
+    leftKeys.length === Object.keys(rightRecord).length &&
+    leftKeys.every(
+      (key) => Object.hasOwn(rightRecord, key) && sameValueIgnoringObjectOrder(leftRecord[key], rightRecord[key]),
+    )
   )
 }
