@@ -1,7 +1,7 @@
 import { resolveTsPathPattern } from '@bamboocss/config/ts-path'
 import type { Context } from '@bamboocss/core'
 import type { FoldAnalysis, FoldCall, FoldCxArgument, FoldRefusal } from '@bamboocss/native-extractor'
-import { viewTransitionClassName } from '@bamboocss/shared'
+import { BambooError, viewTransitionClassName } from '@bamboocss/shared'
 import type { Dict } from '@bamboocss/types'
 import MagicString from 'magic-string'
 import { dirname, relative, resolve as resolvePath } from 'node:path'
@@ -165,6 +165,16 @@ const LEADING_RELATIVE = /^(?:\.\.?\/)+/
 const TRAILING_SLASH = /\/$/
 const MODULE_EXTENSION = /\.[mc]?[jt]sx?$/
 const TRAILING_INDEX = /\/index$/
+
+/**
+ * What the build says of a style it cannot write, as the reason a call was not compiled: a value
+ * holding the retired `token(path, fallback)` form or a curly reference, which `bamboo cssgen` names
+ * with what to write instead. The compiler said `css() — dynamic` of it, and to make its values
+ * finite, of a value written as a literal. The first paragraph names both, and fits the line the
+ * call is reported on.
+ */
+const styleErrorDetail = (error: unknown) =>
+  error instanceof BambooError ? { detail: error.message.split('\n\n')[0]! } : undefined
 
 const hasStyles = (data: unknown[]): data is Dict[] =>
   data.length > 0 && data.every((entry) => entry != null && typeof entry === 'object')
@@ -1022,7 +1032,7 @@ export const foldSource = (options: FoldOptions): FoldResult => {
       className = styleCompiler.className(candidate.styleSet ?? {})
     } catch (error) {
       if (error instanceof UnknownConditionError) reportUnknownCondition(name, start, end, error)
-      else skipped.push({ name, reason: 'dynamic', start, end })
+      else skipped.push({ name, reason: 'dynamic', start, end, ...styleErrorDetail(error) })
       continue
     }
 

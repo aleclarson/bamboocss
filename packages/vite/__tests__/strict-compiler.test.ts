@@ -66,6 +66,8 @@ describe('strict compiler', () => {
     )
 
     expect(end).toThrow(/keyframes\(\) — dynamic: the name it returns is a hash of its stops/)
+    // Nothing was refused: the parameter is the caller's.
+    expect(end).not.toThrow(/a helper's body may declare values/)
   }, 60_000)
 
   test('passes keyframes() whose stops it can read', async () => {
@@ -387,4 +389,37 @@ describe('a token() call whose result is tested or defaulted', () => {
     expect(end).toThrow(/unresolved-token/)
     expect(end).toThrow(/`token\('colors\.brand'\)` names no token/)
   }, 60_000)
+})
+
+/**
+ * A value holding the retired `token(path, fallback)` form, or a curly reference, is a literal the
+ * stylesheet cannot write, and `bamboo cssgen` says so with what to write instead. The compiler
+ * said `css() — dynamic`, and to make the values finite.
+ */
+describe('a value holding a retired token reference', () => {
+  test.each([
+    [
+      'the fallback form',
+      `'token(colors.red.300, #fff)'`,
+      'css() — dynamic: `token(colors.red.300, #fff)` in the value `token(colors.red.300, #fff)` uses the retired `token(path, fallback)` form. Write `token(colors.red.300)` instead.\n',
+    ],
+    [
+      'the curly form',
+      `'{colors.red.300}'`,
+      'css() — dynamic: `{colors.red.300}` in the value `{colors.red.300}` is the retired token reference syntax. Write `token(colors.red.300)` instead.\n',
+    ],
+  ])(
+    'fails in the build’s own words: %s',
+    async (label, value, line) => {
+      const end = await run(
+        src(`export const a = css({ color: ${value} })`),
+        `src/strict-retired-${label.replaceAll(' ', '-')}.tsx`,
+      )
+
+      expect(end).toThrow(line)
+      // Which is not code the compiler refused to run.
+      expect(end).not.toThrow(/a helper's body may declare values/)
+    },
+    60_000,
+  )
 })

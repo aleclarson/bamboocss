@@ -445,7 +445,15 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
    */
   const host = createCompilationHost({ configPath, cwd })
 
-  type Survivor = { file: string; line: number; name: string; reason: SkipReason; detail?: string }
+  type Survivor = {
+    file: string
+    line: number
+    name: string
+    reason: SkipReason
+    detail?: string
+    /** `detail` is code the evaluator refused, which the error explains after the list. */
+    refused?: true
+  }
   interface TransformArtifactPayload {
     version: typeof TRANSFORM_ARTIFACT_VERSION
     moduleId: string
@@ -477,7 +485,13 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
       artifact.file,
       artifact.folded,
       artifact.skipped.map(([reason, count]) => [reason, count]),
-      artifact.survivors.map(({ line, name, reason, detail }) => [line, name, reason, detail ?? null]),
+      artifact.survivors.map(({ line, name, reason, detail, refused }) => [
+        line,
+        name,
+        reason,
+        detail ?? null,
+        refused ?? false,
+      ]),
       artifact.transformedFile,
       [...artifact.classNames],
       [...artifact.literalClassNames],
@@ -561,7 +575,8 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
           typeof entry.name === 'string' &&
           typeof entry.reason === 'string' &&
           skipReasons.has(entry.reason as SkipReason) &&
-          (entry.detail === undefined || typeof entry.detail === 'string'),
+          (entry.detail === undefined || typeof entry.detail === 'string') &&
+          (entry.refused === undefined || entry.refused === true),
       )
     ) {
       return false
@@ -847,7 +862,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
           ? `\`compile-failed\` is a module the compiler threw on — see the error logged for it above. ` +
             `Nothing was established about its calls either way.\n\n`
           : '') +
-        (entries.some((entry) => entry.reason === 'dynamic' && entry.detail)
+        (entries.some((entry) => entry.refused)
           ? `A \`dynamic\` call with a reason is code the compiler will not run rather than guess at: a ` +
             `helper's body may declare values, branch with \`if\` and return, and a value a style reads must not ` +
             `be written after its declaration.\n\n`
@@ -3026,7 +3041,7 @@ export const bamboocss = (options: BambooVitePluginOptions = {}): Plugin[] => {
         reason: entry.reason,
         ...(entry.detail
           ? { detail: entry.detail }
-          : entry.refusal && { detail: describeRefusal(entry.refusal, root) }),
+          : entry.refusal && { detail: describeRefusal(entry.refusal, root), refused: true as const }),
       })
     }
 
