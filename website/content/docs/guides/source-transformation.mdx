@@ -168,8 +168,10 @@ conflict-resolution guarantee for that shape.
 
 ### Tokens
 
-`token()` and `token.value()` calls with a statically known path compile to string literals. Unknown paths and dynamic
-paths fail rather than retaining the complete runtime token dictionary.
+`token()` and `token.value()` calls with a statically known path compile to what they return: a string literal, or a
+number where `token.value()` reads one, such as the default preset's `zIndex` tokens. A path naming no token compiles to
+`undefined` where the call's result is tested or defaulted, `token(path) ?? '#fff'`, and fails otherwise, as a dynamic
+path does, rather than retaining the complete runtime token dictionary.
 
 Inside a `cva`/`sva` config, a `token()` call is erased with the declaration: the stylesheet has already read its value
 out of the config. The same holds for `keyframes()`.

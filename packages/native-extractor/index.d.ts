@@ -188,6 +188,11 @@ export interface FoldCall {
    * the call is compiled to the `undefined` it returns.
    */
   guarded: boolean
+  /**
+   * A `token.value()` call written first in an expression statement. What replaces it there cannot
+   * open with `(` or `-`, which would continue the line before it where that line has no semicolon.
+   */
+  statementStart: boolean
 }
 
 /**

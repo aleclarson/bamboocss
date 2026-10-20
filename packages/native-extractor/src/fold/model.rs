@@ -72,6 +72,10 @@ pub struct FoldCall {
     /// `token('colors.brand') ?? '#fff'`: a path naming no token is a case its author handled,
     /// and the call is compiled to the `undefined` it returns. See `result_guarded`.
     pub guarded: bool,
+    /// A `token.value()` call written first in an expression statement,
+    /// `token.value('zIndex.hide').toFixed()` standing as one. What replaces it there cannot open
+    /// with `(` or `-`, which would continue the line before it where that line has no semicolon.
+    pub statement_start: bool,
 }
 
 /// Code the evaluator does not run, which is why a call's arguments are not known.

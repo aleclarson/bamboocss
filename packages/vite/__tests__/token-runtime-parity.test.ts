@@ -58,11 +58,11 @@ describe('fold token table matches the generated runtime', () => {
           drift.push({ path, half: 'variable', generated: entry.variable, fold: folded })
         }
 
-        // The value side declines a non-string rather than inlining it, since a number folded
-        // as `123` is not the number the runtime returns. That is a deliberate decline, not
-        // drift, so only string values are compared.
+        // The value side declines what no literal stands in for rather than inlining it: anything
+        // but a string or a number. That is a deliberate decline, not drift, so only those two are
+        // compared — a number as the number, which is what the generated table holds too.
         const foldedValue = runtimeTokenValue(path)
-        if (typeof entry.value === 'string' && foldedValue !== entry.value) {
+        if ((typeof entry.value === 'string' || typeof entry.value === 'number') && foldedValue !== entry.value) {
           drift.push({ path, half: 'value', generated: entry.value, fold: foldedValue })
         }
       }
@@ -77,5 +77,14 @@ describe('fold token table matches the generated runtime', () => {
 
     expect(createRuntimeToken(ctx)('spacing.-4')).toBe('calc(var(--spacing-4) * -1)')
     expect(createRuntimeTokenValue(ctx)('spacing.-4')).toBe('calc(var(--spacing-4) * -1)')
+  })
+
+  /** The default preset's `zIndex` tokens are numbers, which the comparison above has to reach. */
+  test('a number stays a number on both sides', () => {
+    const ctx = createContext()
+
+    expect(parseGeneratedMap(generateTokenJs(ctx).js)['zIndex.hide']!.value).toBe(-1)
+    expect(createRuntimeTokenValue(ctx)('zIndex.hide')).toBe(-1)
+    expect(createRuntimeToken(ctx)('zIndex.hide')).toBe('var(--z-index-hide)')
   })
 })

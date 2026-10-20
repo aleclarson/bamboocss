@@ -225,6 +225,25 @@ export const standing${index} = token('colors.${index % 2 ? TONES[index % 3] : '
 ).join('')}
 `
 
+/**
+ * `token.value()` of a number, the default preset's `zIndex`: in a style, standing alone, and with a
+ * method called on it, negative ones included. Each standing alone is written as the number,
+ * parenthesized where it is negative.
+ */
+const NUMERIC_TOKEN_MODULE = `
+import { css } from 'styled-system/css'
+import { token } from 'styled-system/tokens'
+
+${Array.from({ length: 12 }, (_, index) => {
+  const layer = ['modal', 'hide', 'base'][index % 3]
+  return `
+export const styled${index} = css({ zIndex: token.value('zIndex.${layer}'), padding: '${index % 4}' })
+export const standing${index} = token.value('zIndex.${layer}')
+export const fixed${index} = token.value('zIndex.${layer}').toFixed()
+`
+}).join('')}
+`
+
 const layered = (depth: number): string =>
   depth > 0 ? `{ '& > div': ${layered(depth - 1)}, padding: '2' }` : `{ color: 'blue.500' }`
 
@@ -336,6 +355,10 @@ describe('per-module transform cost', () => {
 
   bench('analyze + fold (guarded token module)', () => {
     parseAndFold(GUARDED_TOKEN_MODULE)
+  })
+
+  bench('analyze + fold (numeric token module)', () => {
+    parseAndFold(NUMERIC_TOKEN_MODULE)
   })
 
   // The control for the one below: the same styles, with no helper to call.

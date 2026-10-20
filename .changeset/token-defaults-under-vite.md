@@ -14,5 +14,4 @@ where `colors.brand` names no token, and to its variable where it does.
   of `!` or `typeof`, a side of an equality — compiles to the `undefined` it returns, standing alone as well. One whose
   result is used as it is still fails, with the path it was probably meant to be.
 - A `token.value()` of a number inside a style failed the compile as `unresolved-token` though the style compiled around
-  it, `css({ zIndex: token.value('zIndex.modal') })`. It goes with the style now. Standing alone it still has no string
-  literal to stand in for it, and still fails.
+  it, `css({ zIndex: token.value('zIndex.modal') })`. It goes with the style now.

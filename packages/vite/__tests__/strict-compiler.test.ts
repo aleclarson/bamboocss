@@ -392,6 +392,25 @@ describe('a token() call whose result is tested or defaulted', () => {
 })
 
 /**
+ * A `token.value()` of a number, `zIndex.modal` in the default preset, failed every build standing
+ * alone as `token() — unresolved-token`, a token that exists: the compiler wrote string literals only.
+ */
+describe('a token.value() of a number', () => {
+  test('compiles to the number', async () => {
+    const end = await run(
+      [
+        `import { token } from 'styled-system/tokens'`,
+        `export const modal = token.value('zIndex.modal')`,
+        `export const hidden = token.value('zIndex.hide')`,
+      ].join('\n'),
+      'src/strict-token-number.tsx',
+    )
+
+    expect(end).not.toThrow()
+  }, 60_000)
+})
+
+/**
  * A value holding the retired `token(path, fallback)` form, or a curly reference, is a literal the
  * stylesheet cannot write, and `bamboo cssgen` says so with what to write instead. The compiler
  * said `css() — dynamic`, and to make the values finite.

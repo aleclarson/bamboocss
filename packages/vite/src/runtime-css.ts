@@ -69,6 +69,11 @@ export const createRuntimeCss = (ctx: Context): RuntimeCss => {
   return memo((...styles: Dict[]) => cssFn(mergeCssUncached(...styles)))
 }
 
+/** The generated runtime's `token()`: see `createRuntimeToken`. */
+export interface RuntimeToken {
+  (path: string): string | undefined
+}
+
 /**
  * The generated runtime's `token.value`, rebuilt in-process from a resolved context.
  *
@@ -81,8 +86,8 @@ export const createRuntimeCss = (ctx: Context): RuntimeCss => {
  * Built once per context rather than per call site. It is every token in the project, and
  * the fold asks it one question per `token()` call.
  */
-export interface RuntimeToken {
-  (path: string): string | undefined
+export interface RuntimeTokenValue {
+  (path: string): string | number | undefined
 }
 
 /**
@@ -116,13 +121,13 @@ const tokenValuesFor = (ctx: Context) => {
 }
 
 export const createRuntimeTokenValue =
-  (ctx: Context): RuntimeToken =>
+  (ctx: Context): RuntimeTokenValue =>
   (path) => {
     const value = tokenValuesFor(ctx).get(path)?.value
-    // Only a string can stand in for what the runtime returned. A token whose value is a
-    // number would fold to `123` where the runtime returns the number `123` — the same
-    // text, a different type.
-    return typeof value === 'string' ? value : undefined
+    // What a literal can stand in for: a string, or a number, written as one — `zIndex.modal` is
+    // the number 1400 to the runtime too, not the string. One that is not finite the generated
+    // module holds as `null`, its JSON; that, and anything else, is declined.
+    return typeof value === 'string' || Number.isFinite(value) ? (value as string | number) : undefined
   }
 
 /**

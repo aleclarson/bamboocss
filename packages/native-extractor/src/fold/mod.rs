@@ -994,6 +994,7 @@ fn analyze_facts<'a>(
                     cx_arguments: Vec::new(),
                     value: None,
                     guarded: false,
+                    statement_start: false,
                 });
             }
             continue;
@@ -1028,6 +1029,7 @@ fn analyze_facts<'a>(
                 cx_arguments: Vec::new(),
                 value: None,
                 guarded: false,
+                statement_start: false,
             });
             continue;
         }
@@ -1058,6 +1060,7 @@ fn analyze_facts<'a>(
                     .collect(),
                 value: None,
                 guarded: false,
+                statement_start: false,
             });
             continue;
         }
@@ -1116,6 +1119,7 @@ fn analyze_facts<'a>(
             .map(|stops| project.keyframes_name(stops));
         let guarded = (kind == "token" || kind == "tokenValue")
             && crate::result_guarded(semantic.nodes(), node.id());
+        let statement_start = kind == "tokenValue" && is_statement_start(semantic, node.id());
         calls.push(FoldCall {
             name,
             kind,
@@ -1139,6 +1143,7 @@ fn analyze_facts<'a>(
             cx_arguments: Vec::new(),
             value,
             guarded,
+            statement_start,
         });
     }
 
@@ -1367,6 +1372,26 @@ fn fold_refusal(refusal: &Refusal) -> FoldRefusal {
     }
 }
 
+/// Whether `call` is the first thing an expression statement holds,
+/// `token.value('zIndex.hide').toFixed()` written as one. An arrow's expression body is not a
+/// statement here, and follows its `=>`.
+fn is_statement_start(semantic: &Semantic<'_>, call: oxc_semantic::NodeId) -> bool {
+    let nodes = semantic.nodes();
+    let start = nodes.kind(call).span().start;
+    let mut current = call;
+    loop {
+        let parent = nodes.parent_id(current);
+        if parent == current {
+            return false;
+        }
+        match nodes.kind(parent) {
+            AstKind::ExpressionStatement(_) => return true,
+            kind if kind.span().start == start => current = parent,
+            _ => return false,
+        }
+    }
+}
+
 /// `call(...).slot` or `call(...)['slot']` directly around the call.
 fn slot_access(
     semantic: &Semantic<'_>,
@@ -1521,6 +1546,7 @@ fn recipe_invocation<'a>(
         cx_arguments: Vec::new(),
         value: None,
         guarded: false,
+        statement_start: false,
     }
 }
 

@@ -1,6 +1,8 @@
 import { createContext } from '@bamboocss/fixture'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
+// Source rather than the package entry, which does not export it: see token-runtime-parity.test.ts.
+import { generateTokenJs } from '../../generator/src/artifacts/js/token'
 import { foldSource } from '../src/fold'
 import { createRuntimeCss } from '../src/runtime-css'
 import { createStaticStyleSetCompiler } from '../src/style-set'
@@ -293,28 +295,108 @@ describe('fold: a path naming no token', () => {
       }),
     )
   })
+})
 
-  /** It names a token: one whose value is a number, which no string literal can stand in for. */
-  test('says nothing of the kind for a token.value() of a number', () => {
-    const { fold } = createFoldFixture({ theme: { extend: { tokens: { zIndex: { modal: { value: 1400 } } } } } })
-    const result = fold(`
-      import { token } from 'styled-system/tokens'
-      export const z = token.value('zIndex.modal')
+/**
+ * A `token.value()` of a number returns the number, and compiles to it. Standing alone it failed the
+ * compile as `token() — unresolved-token`, a token that exists, with nothing said: the compiler
+ * wrote string literals only. The default preset's `zIndex` tokens are numbers, and `token.value()`
+ * is how one reaches what takes a number, a dialog's `zIndex` prop.
+ */
+describe('fold: a token.value() of a number', () => {
+  const config = {
+    theme: { extend: { tokens: { zIndex: { half: { value: 0.5 }, deep: { value: -2.5 }, huge: { value: 1e21 } } } } },
+  }
+  const fixture = createFoldFixture(config)
+  const head = `import { token } from 'styled-system/tokens'\n`
+
+  /** The generated runtime's `token`, as the module would have called it. */
+  const generated = JSON.parse(generateTokenJs(fixture.ctx).js.match(/const tokens = (\{[\s\S]*?\n\})/)![1]!) as Record<
+    string,
+    { value: unknown; variable: string }
+  >
+  const runtime = Object.assign((path: string) => generated[path]?.variable, {
+    value: (path: string) => generated[path]?.value,
+  })
+  /** What a compiled module is run with: nothing may be left to call it. */
+  const gone = Object.assign(
+    () => {
+      throw new Error('token() was called')
+    },
+    {
+      value: () => {
+        throw new Error('token.value() was called')
+      },
+    },
+  )
+  const run = (body: string, token: unknown) => new Function('token', `${body}\nreturn result`)(token)
+
+  /** Each place a call may stand, as a module setting `result`; `PATH` is the path. */
+  const shapes: Array<[string, string]> = [
+    ['alone', `const result = token.value(PATH)`],
+    ['a method called on it', `const result = token.value(PATH).toFixed(1)`],
+    ['an optional call on it', `const result = token.value(PATH)?.toString()`],
+    ['a member read on the next line', `const result = token.value(PATH)\n  .toString()`],
+    ['the base of `**`', `const result = token.value(PATH) ** 2`],
+    ['negated', `const result = -token.value(PATH)`],
+    ['after a minus, unspaced', `const result = 1-token.value(PATH)`],
+    ['before `in`, unspaced', `const result = token.value(PATH)in [0]`],
+    ['`typeof`', `const result = typeof token.value(PATH)`],
+    ['a template', 'const result = `${token.value(PATH)}px`'],
+    ['an arrow body', `const result = (() => token.value(PATH))()`],
+    ['defaulted', `const result = token.value(PATH) ?? 5`],
+    // `(` or `-` opening the statement would call `record` on the line before.
+    [
+      'first in a statement after a line with no semicolon',
+      [
+        `const calls = []`,
+        `const record = (value) => (calls.push(value), 0)`,
+        `const unused = record`,
+        `token.value(PATH).toFixed()`,
+        `token.value(PATH) && record(1)`,
+        `const result = calls`,
+      ].join('\n'),
+    ],
+    // A `;` before it would be the body, and the rest run whatever the test.
+    ['first in an `if` body', `let result = 0\nif (result !== 0) token.value(PATH) < 1 && (result = 1)`],
+  ]
+  const paths = ['zIndex.modal', 'zIndex.hide', 'zIndex.base', 'zIndex.half', 'zIndex.deep', 'zIndex.huge']
+
+  test.each(shapes.flatMap(([label, body]) => paths.map((path) => [label, path, body] as const)))(
+    'compiles to what the runtime returns: %s, %s',
+    (_label, path, body) => {
+      const source = body.replaceAll('PATH', `'${path}'`)
+      const result = fixture.foldStrict(`${head}${source}`)
+
+      expect(result.skipped).toEqual([])
+      expect(run(result.code.slice(head.length), gone)).toEqual(run(source, runtime))
+    },
+  )
+
+  test('writes the number, parenthesized where it is negative', () => {
+    const result = fixture.foldStrict(`${head}
+      export const modal = token.value('zIndex.modal')
+      export const hidden = token.value('zIndex.hide')
+      export const fixed = token.value('zIndex.modal').toFixed()
+      const unused = 0
+      token.value('zIndex.hide').toFixed()
     `)
 
-    const [declined] = result.skipped.filter((entry) => entry.reason === 'unresolved-token')
-    expect(declined).toBeDefined()
-    expect(declined?.detail).toBeUndefined()
+    expect(result.code).toContain(`export const modal = 1400\n`)
+    expect(result.code).toContain(`export const hidden = (-1)\n`)
+    expect(result.code).toContain(`export const fixed = 1400 .toFixed()\n`)
+    expect(result.code).toContain(`\n      void 0, (-1).toFixed()\n`)
+    expect(result.folded.map((call) => [call.kind, call.value])).toEqual([
+      ['value', 1400],
+      ['value', -1],
+      ['value', 1400],
+      ['value', -1],
+    ])
   })
 
-  /**
-   * A number has no string literal to stand in for it, which matters only where the call stays.
-   * Inside a style that compiles it goes with the style, whose value the analysis read, as a
-   * resolved call does. It failed the compile all the same, as `token() — unresolved-token`.
-   */
-  test('a token.value() of a number goes with the style compiled around it', () => {
-    const config = { theme: { extend: { tokens: { zIndex: { modal: { value: 1400 } } } } } }
-    const result = createFoldFixture(config).foldStrict(`
+  /** Inside a style that compiles it goes with the style, whose value the analysis read. */
+  test('goes with the style compiled around it', () => {
+    const result = fixture.foldStrict(`
       import { css } from 'styled-system/css'
       import { token } from 'styled-system/tokens'
       export const a = css({ zIndex: token.value('zIndex.modal') })
