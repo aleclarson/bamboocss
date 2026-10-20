@@ -1,4 +1,4 @@
-import type { AtomOrigin, DeadImport, ParserOptions } from '@bamboocss/core'
+import type { AtomOrigin, DeadImport, ParserOptions, UnresolvedTokenCall } from '@bamboocss/core'
 import { BambooError, getOrCreateSet } from '@bamboocss/shared'
 import type { ParserResultInterface, ResultItem } from '@bamboocss/types'
 
@@ -30,6 +30,15 @@ export interface UnresolvedStyle {
    *   browser would ask for classes no rule backs.
    */
   reason: 'unresolvable-value' | 'missing-property' | 'unenumerable-keys' | 'unresolved-raw'
+}
+
+/** A `token()` call naming no token, and where it is. @see UnresolvedTokenCall */
+export interface UnresolvedTokenCallFinding {
+  call: UnresolvedTokenCall
+  filePath: string
+  /** One-based, as the native analysis reports the call's start. */
+  line: number
+  column: number
 }
 
 /**
@@ -67,6 +76,15 @@ export class ParserResult implements ParserResultInterface {
    * `assertNoDeadCalls` rather than warned about, for that reason.
    */
   deadCalls: DeadImport[] = []
+
+  /**
+   * `token()` and `token.value()` calls naming no token.
+   *
+   * Each returns `undefined`, so a property it was written into never reaches the encoder and
+   * nothing else records it. Graded by the token half of `unresolvedToken` — see
+   * `Generator.unresolvedTokenCalls` for where they are reported.
+   */
+  unresolvedTokenCalls: UnresolvedTokenCallFinding[] = []
 
   /**
    * Whether each result item is attributed to its call site, for a source map.

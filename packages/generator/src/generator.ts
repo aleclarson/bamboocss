@@ -8,10 +8,11 @@ import {
   type InvalidDeclaration,
   type StyleDecoder,
   type Stylesheet,
+  type UnresolvedTokenCall,
   type UnresolvedTokenRef,
 } from '@bamboocss/core'
 import { logger } from '@bamboocss/logger'
-import { cssVarRefs, dashCase, isObject, truncateList, BambooError } from '@bamboocss/shared'
+import { cssVarRefs, dashCase, groupBy, isObject, truncateList, BambooError } from '@bamboocss/shared'
 import type { ArtifactId, CssArtifactType, LoadConfigResult, SpecFile, SpecType, SpecTypeMap } from '@bamboocss/types'
 import { match } from 'ts-pattern'
 import { generateArtifacts } from './artifacts'
@@ -48,6 +49,14 @@ export interface SplitCssResult {
   /** Content for main styles.css */
   index: string
 }
+
+/** A `token()` call naming no token, and where it is as the build prints it: `src/card.tsx:12:5`. */
+export interface UnresolvedTokenCallSite {
+  call: UnresolvedTokenCall
+  where: string
+}
+
+const NO_CALLS: readonly UnresolvedTokenCallSite[] = []
 
 export class Generator extends Context {
   constructor(conf: LoadConfigResult) {
@@ -448,6 +457,12 @@ export class Generator extends Context {
    * Both halves key on `property:path` with shorthands resolved, so a value that does reach
    * both — every atomic style is transformed once before it is memoized — is one finding.
    *
+   * **A `token()` call naming no token is in neither.** The build evaluates it to `undefined`, as
+   * the runtime would, so the property it was written into is dropped before anything is encoded
+   * and no atom holds the mistake. Extraction records it by file instead — see
+   * `unresolvedTokenCalls` — and it is reported here, beside the values, so one build names every
+   * missing token however it was asked for.
+   *
    * Here rather than beside the asserts in `BambooContext` because this is where the sheet
    * exists: those all run during extraction, before anything has been decoded. Every path
    * that emits css comes through `getCss`.
@@ -548,27 +563,71 @@ export class Generator extends Context {
       if (severity[ref.kind] !== 'error') found.delete(id)
     }
 
-    if (!found.size) return
+    // A call is the token half by construction: it is asked for a token and nothing else.
+    const calls =
+      severity.token === 'error' && this.unresolvedTokenCalls.size
+        ? Array.from(this.unresolvedTokenCalls.values()).flat()
+        : NO_CALLS
 
-    // One line each, so the cap is generous relative to the block-shaped lists elsewhere: a
-    // theme rename can leave a few dozen of these and seeing the shape of them is the point.
-    const detail = truncateList(
-      // The same sentence the warning prints, so the two modes cannot describe one mistake
-      // differently — which is the whole reason both go through `explainUnresolvedToken`.
-      Array.from(found.values(), (ref) => `- ${this.utility.explainUnresolvedToken(ref)}`),
-      { limit: 25, unit: 'value', separator: '\n' },
-    )
+    if (!found.size && !calls.length) return
 
-    throw new BambooError(
-      'UNRESOLVED_TOKEN',
-      `${found.size} style value(s) name a token that does not exist:\n\n${detail}\n\n` +
-        `Each is emitted as written, which parses — so the stylesheet is valid and nothing ` +
-        `downstream objects. The browser drops the declaration at compute time and the style is ` +
-        `simply absent from the element, which surfaces as "this never applied" a long way from ` +
-        `the typo that caused it. Write \`[value]\` to mark a bare value as a literal, or set ` +
-        `\`unresolvedToken: 'warn'\` to report these without failing.`,
-    )
+    const sections: string[] = []
+
+    if (found.size) {
+      // One line each, so the cap is generous relative to the block-shaped lists elsewhere: a
+      // theme rename can leave a few dozen of these and seeing the shape of them is the point.
+      const detail = truncateList(
+        // The same sentence the warning prints, so the two modes cannot describe one mistake
+        // differently — which is the whole reason both go through `explainUnresolvedToken`.
+        Array.from(found.values(), (ref) => `- ${this.utility.explainUnresolvedToken(ref)}`),
+        { limit: 25, unit: 'value', separator: '\n' },
+      )
+
+      sections.push(
+        `${found.size} style value(s) name a token that does not exist:\n\n${detail}\n\n` +
+          `Each is emitted as written, which parses — so the stylesheet is valid and nothing ` +
+          `downstream objects. The browser drops the declaration at compute time and the style is ` +
+          `simply absent from the element, which surfaces as "this never applied" a long way from ` +
+          `the typo that caused it. Write \`[value]\` to mark a bare value as a literal, or set ` +
+          `\`unresolvedToken: 'warn'\` to report these without failing.`,
+      )
+    }
+
+    if (calls.length) {
+      // By the mistake rather than the call site, as a dead binding is reported: a token renamed
+      // away is called across an app at once, and one line per site repeats one sentence.
+      const detail = truncateList(
+        Array.from(
+          groupBy(calls, ({ call }) => `${call.method}\0${call.path}`),
+          ([, sites]) => {
+            const shown = sites.slice(0, 3).map(({ where }) => where)
+            const rest = sites.length > 3 ? ` and ${sites.length - 3} more` : ''
+            return `- ${this.utility.explainUnresolvedTokenCall(sites[0]!.call)} At ${shown.join(', ')}${rest}.`
+          },
+        ),
+        { limit: 25, unit: 'path', separator: '\n' },
+      )
+
+      sections.push(
+        `${calls.length} \`token()\` call(s) name a token that does not exist:\n\n${detail}\n\n` +
+          `A call naming no token returns \`undefined\`, and the build reads it the same way: a style ` +
+          `property it was written into is left out, so no rule is emitted for it and nothing in the ` +
+          `browser says why. Set \`unresolvedToken: 'warn'\` to report these without failing.`,
+      )
+    }
+
+    throw new BambooError('UNRESOLVED_TOKEN', sections.join('\n\n'))
   }
+
+  /**
+   * Every `token()` call extraction found naming no token, by the file it is in.
+   *
+   * Filled by extraction (`BambooContext.parseFile`), which is the only place a call is seen: the
+   * property it was written into is dropped before anything reaches the sheet, so there is no atom
+   * to read the mistake off, and its file is where it lives. Each file's entry is replaced
+   * whenever the file is read again and dropped when it goes, so a fix takes on the next pass.
+   */
+  unresolvedTokenCalls = new Map<string, UnresolvedTokenCallSite[]>()
 
   /**
    * The findings `warn` has already printed, keyed `property:value`.

@@ -29,6 +29,6 @@ export { StyleDecoder } from './style-decoder'
 export { StyleEncoder, type AtomOrigin } from './style-encoder'
 export { Stylesheet } from './stylesheet'
 export type { CssOptions, ParserOptions, RecipeNode, StylesheetContext, TransformResult } from './types'
-export { Utility, type UnresolvedTokenRef } from './utility'
+export { Utility, type UnresolvedTokenCall, type UnresolvedTokenRef } from './utility'
 export { findInvalidDeclarations, type InvalidDeclaration } from './validate-declarations'
 export { messages }

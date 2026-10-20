@@ -144,6 +144,7 @@ checks have independent severities:
 | ------------------------------------------------------------------------ | ---------------------------------------- | ------- |
 | Missing token or unknown name on a token-backed property                 | `color: 'brand.foreground'`              | `error` |
 | A `token()` reference naming no token, anywhere in a value               | `border: '1px solid token(colors.nope)'` | `error` |
+| A `token()` or `token.value()` call naming no token                      | `color: token('colors.nope')`            | `error` |
 | Bare name rejected by CSS grammar on a property without a token category | `display: 'flexx'`                       | `warn`  |
 
 A missing token fails the build:
@@ -159,6 +160,16 @@ Set either half to `off`, `warn`, or `error`, or pass one severity to apply it t
 at `error` the reported list is capped at 25. Both inspect styles from calls, `staticCss`, global CSS, config recipes,
 and mixins. Lowering the token severity can emit the unresolved value as written, leaving a declaration the browser
 drops.
+
+A call naming no token is listed in the same error, by the path it names and where it is called. It returns `undefined`,
+so the property it was written into is dropped rather than emitted: nothing in the stylesheet shows it, and the style
+simply never applies. A call whose result is tested or defaulted, `token('colors.brand') ?? '#fff'`, is not reported.
+
+```text
+1 `token()` call(s) name a token that does not exist:
+
+- `token('colors.nope')` names no token. It returns `undefined`, so whatever reads it gets nothing: in a style, the property is dropped. Check the path, or add the token to your theme. At src/card.tsx:12:19.
+```
 
 The grammar check defaults to `warn` because its data can lag CSS support. `[accent.default]` explicitly marks a literal
 and bypasses token checking; the finished-sheet [`invalidDeclaration`](#a-declaration-the-browser-would-drop) check can

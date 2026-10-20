@@ -92,7 +92,7 @@ export function truncateList(entries: string[], options: TruncateListOptions = {
  * `key` decides what counts as the same mistake and `label` renders it once; the members are
  * whatever locates each occurrence.
  */
-export function groupBy<T>(items: T[], key: (item: T) => string): Map<string, T[]> {
+export function groupBy<T>(items: readonly T[], key: (item: T) => string): Map<string, T[]> {
   const groups = new Map<string, T[]>()
 
   for (const item of items) {

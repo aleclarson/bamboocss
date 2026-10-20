@@ -377,6 +377,74 @@ describe('native extraction analysis', () => {
     ])
   })
 
+  /**
+   * A token's path is its first argument; what follows is the retired fallback, which the runtime
+   * ignores. Recorded beside the path it read as one more — `#fff`, a path naming no token — and a
+   * dynamic one left the path itself undecided.
+   */
+  test('records the path of a token call alone, not the fallback after it', () => {
+    const tokenEntrypoints: NativeEntrypoint[] = [
+      ...entrypoints,
+      { kind: 'token', modules: ['styled-system/tokens'], names: ['token'] },
+    ]
+    const [analysis] = analyzeMany(
+      [
+        {
+          filename: '/project/app.ts',
+          source: `import { token } from 'styled-system/tokens'
+            token('colors.brand', '#fff')
+            token.value('colors.brand', fallback())`,
+        },
+      ],
+      tokenEntrypoints,
+      {
+        cwd: '/project',
+        paths: [],
+        tokens: [{ path: 'colors.brand', value: '#123456', variable: 'var(--colors-brand)' }],
+        jsx: false,
+      },
+    )
+
+    expect(analysis.calls).toMatchObject([
+      { kind: 'token', arguments: ['colors.brand'], complete: true },
+      { kind: 'tokenValue', arguments: ['colors.brand'], complete: true },
+    ])
+  })
+
+  /**
+   * A token call whose result is tested or defaulted asks whether its token exists: with the
+   * fallback argument retired, `token(path) ?? '#fff'` is how a path that may name nothing is written.
+   */
+  test('marks a token call whose result is tested or defaulted', () => {
+    const source = `import { token } from 'styled-system/tokens'
+      token('colors.a') ?? '#fff'
+      ;(token('colors.b') as string) || 'red'
+      token.value('colors.c') ? 1 : 2
+      if (!token('colors.d')) {}
+      typeof token('colors.e') === 'string'
+      token('colors.f')
+      fallback ?? token('colors.g')
+      css({ color: token('colors.h') })`
+    const tokenEntrypoints: NativeEntrypoint[] = [
+      ...entrypoints,
+      { kind: 'token', modules: ['styled-system/tokens'], names: ['token'] },
+    ]
+
+    const calls = analyze('source.ts', source, tokenEntrypoints).calls.filter(
+      (call) => call.kind === 'token' || call.kind === 'tokenValue',
+    )
+    expect(calls.map((call) => [call.arguments[0], call.guarded])).toEqual([
+      ['colors.a', true],
+      ['colors.b', true],
+      ['colors.c', true],
+      ['colors.d', true],
+      ['colors.e', true],
+      ['colors.f', false],
+      ['colors.g', false],
+      ['colors.h', false],
+    ])
+  })
+
   test('reports recipe raw composition that cannot be extracted as atomic styles', () => {
     const source = `import { css } from 'styled-system/css'
       import { button } from 'styled-system/recipes'

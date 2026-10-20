@@ -14,9 +14,9 @@ use oxc_ast::{
     },
 };
 use oxc_parser::Parser;
-use oxc_semantic::{Scoping, SemanticBuilder};
+use oxc_semantic::{AstNodes, NodeId, Scoping, SemanticBuilder};
 use oxc_span::{GetSpan, SourceType};
-use oxc_syntax::symbol::SymbolId;
+use oxc_syntax::{operator::UnaryOperator, symbol::SymbolId};
 
 mod evaluator;
 mod fold;
@@ -66,6 +66,9 @@ pub struct NativeCall {
     /// What a call returns that the build knows: the name of a `keyframes()` whose stops it
     /// read whole, the name the stylesheet writes on its block.
     pub value: Option<String>,
+    /// A `token()` call whose result is tested or defaulted rather than used as it is. See
+    /// `result_guarded`.
+    pub guarded: bool,
 }
 
 #[napi(object)]
@@ -331,7 +334,7 @@ fn classify_call(
 }
 
 fn argument_data<'a>(
-    arguments: &'a oxc_allocator::Vec<'a, Argument<'a>>,
+    arguments: &'a [Argument<'a>],
     evaluator: &mut FileEvaluator<'a, '_, '_>,
 ) -> (Vec<serde_json::Value>, bool) {
     let mut output = Vec::new();
@@ -371,6 +374,40 @@ fn argument_data<'a>(
         drop_nullish_properties(value);
     }
     (output, complete)
+}
+
+/// Whether a call's result is tested or defaulted rather than used as it is: the left of `??`,
+/// `||` or `&&`, a conditional's or an `if`'s test, the operand of `!` or `typeof`, or a side of
+/// an equality. A `token()` call there asks whether its token exists — with the fallback argument
+/// retired, `token('colors.brand') ?? '#fff'` is how a path that may name nothing is written — so
+/// naming nothing is a case its author handled, not a mistake.
+fn result_guarded(nodes: &AstNodes<'_>, call: NodeId) -> bool {
+    let mut current = call;
+    loop {
+        let span = nodes.kind(current).span();
+        let parent = nodes.parent_id(current);
+        if parent == current {
+            return false;
+        }
+        match nodes.kind(parent) {
+            AstKind::ParenthesizedExpression(_)
+            | AstKind::TSAsExpression(_)
+            | AstKind::TSSatisfiesExpression(_)
+            | AstKind::TSNonNullExpression(_)
+            | AstKind::TSTypeAssertion(_) => current = parent,
+            AstKind::LogicalExpression(logical) => return logical.left.span() == span,
+            AstKind::ConditionalExpression(conditional) => return conditional.test.span() == span,
+            AstKind::IfStatement(statement) => return statement.test.span() == span,
+            AstKind::UnaryExpression(unary) => {
+                return matches!(
+                    unary.operator,
+                    UnaryOperator::LogicalNot | UnaryOperator::Typeof
+                );
+            }
+            AstKind::BinaryExpression(binary) => return binary.operator.is_equality(),
+            _ => return false,
+        }
+    }
 }
 
 /// Style data carries no nullish declarations.
@@ -836,7 +873,15 @@ fn analyze_source<'sources>(
             continue;
         }
 
-        let (arguments, complete) = argument_data(&expression.arguments, &mut evaluator);
+        // A token's path is its first argument. Whatever follows is the retired fallback, which the
+        // runtime ignores, and read as one more path `token('colors.x', '#fff')` would name `#fff`
+        // — or, dynamic, would leave the path itself undecided.
+        let read = if matches!(binding.kind.as_str(), "token" | "tokenValue") {
+            &expression.arguments[..expression.arguments.len().min(1)]
+        } else {
+            &expression.arguments[..]
+        };
+        let (arguments, complete) = argument_data(read, &mut evaluator);
         let value = (binding.kind == "css"
             && binding.imported_name == "keyframes"
             && complete
@@ -871,6 +916,8 @@ fn analyze_source<'sources>(
             binding.kind
         };
         let callee_span = callee_root_span(&expression.callee);
+        let guarded = matches!(kind.as_str(), "token" | "tokenValue")
+            && result_guarded(semantic.nodes(), node.id());
         calls.push(NativeCall {
             name: display,
             imported_name: binding.imported_name,
@@ -887,6 +934,7 @@ fn analyze_source<'sources>(
             losses,
             unresolved_keys,
             value,
+            guarded,
         });
     }
     if capture_jsx {
@@ -917,6 +965,7 @@ fn analyze_source<'sources>(
                 losses: Vec::new(),
                 unresolved_keys,
                 value: None,
+                guarded: false,
             });
         }
     }

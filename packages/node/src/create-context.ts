@@ -712,6 +712,9 @@ export class BambooContext extends Generator {
     this.nativeConfigurationFiles.delete(file)
     this.nativeExtractions.delete(file)
     this.nativeSourceMetadata.delete(file)
+    // Every caller is a deletion, and nothing parses a deleted file again to replace these. Keyed
+    // as `parseFile` keys them, with the platform's separators.
+    this.unresolvedTokenCalls.delete(this.runtime.path.abs(this.config.cwd, filePath))
   }
 
   private parseNativeFile = (filePath: string, native: NativeFileAnalysis, encoder: StyleEncoder) => {
@@ -728,6 +731,7 @@ export class BambooContext extends Generator {
     for (const dependency of native.dependencies) result.addDependency(dependency)
     const metadata = this.nativeSourceMetadata.get(filePath.replaceAll('\\', '/'))
     result.origins = metadata?.origins ?? true
+    let tokenTable: ReadonlyMap<string, unknown> | undefined
     for (const call of native.calls) {
       const atomOrigin =
         encoder.recordOrigins && result.origins ? { filePath, line: call.line, column: call.column } : undefined
@@ -807,6 +811,24 @@ export class BambooContext extends Generator {
       else if (call.kind === 'recipe') result.setRecipe(call.importedName, item, new Set(call.unresolvedKeys))
       else if (call.kind === 'token' || call.kind === 'tokenValue') {
         result.setToken(item, call.kind)
+        // Only paths the build is sure of, used as they are. One it guessed is not the path the
+        // runtime looks up, an argument it could not read whole may hold others it did not see,
+        // and `token(path) ?? '#fff'` is written for a path that may name nothing.
+        if (call.complete && !call.guarded) {
+          // Every call extraction reads passes through here, and almost every path names a token,
+          // so that much is one lookup; only a miss asks `unresolvedTokenCall` why.
+          tokenTable ??= this.tokens.view.values
+          for (let index = 0; index < call.arguments.length; index++) {
+            const path = call.arguments[index]
+            if (typeof path !== 'string' || tokenTable.has(path)) continue
+            // Branches of a ternary can repeat a path, which is one mistake.
+            if (call.arguments.indexOf(path) !== index) continue
+            const unresolved = this.utility.unresolvedTokenCall(call.kind === 'token' ? 'token' : 'token.value', path)
+            if (unresolved) {
+              result.unresolvedTokenCalls.push({ call: unresolved, filePath, line: call.line, column: call.column })
+            }
+          }
+        }
       } else if (call.kind === 'dead') {
         result.deadCalls.push({
           name: call.importedName,
@@ -843,6 +865,7 @@ export class BambooContext extends Generator {
           encoder.releaseFile(file)
           this.parseFailures.delete(file)
           this.deadCalls.delete(file)
+          this.unresolvedTokenCalls.delete(file)
           measure()
           return undefined
         }
@@ -870,10 +893,52 @@ export class BambooContext extends Generator {
       // later build. Recorded rather than thrown here so one pass names every file.
       if (result.deadCalls.length) this.deadCalls.set(file, result.deadCalls)
       else this.deadCalls.delete(file)
+
+      this.recordUnresolvedTokenCalls(file, result)
     }
 
     measure()
     return result
+  }
+
+  /**
+   * Keep a file's `token()` calls naming no token for the sheet's check, and warn about them when
+   * the token half of `unresolvedToken` is `warn`.
+   *
+   * Set or deleted on every parse, like `deadCalls` and for the same reason: a file read again
+   * without them has fixed them, and an entry outliving the fix would fail every later build. A
+   * file under `outdir` is left out, as `reportUnresolvedStyles` leaves it: nothing there is the
+   * author's to rewrite.
+   */
+  private recordUnresolvedTokenCalls = (file: string, result: ParserResult) => {
+    const found = this.isGenerated(file) ? [] : result.unresolvedTokenCalls
+    if (!found.length) {
+      this.unresolvedTokenCalls.delete(file)
+      return
+    }
+
+    const sites = found.map(({ call, line, column }) => ({ call, where: `${this.relative(file)}:${line}:${column}` }))
+    this.unresolvedTokenCalls.set(file, sites)
+
+    // `error` reports them with the sheet instead, every missing token in one list.
+    if (this.utility.unresolvedToken.token !== 'warn') return
+    for (const { call, where } of sites) {
+      logger.warn('token', `${where} — ${this.utility.explainUnresolvedTokenCall(call)}`)
+    }
+  }
+
+  /**
+   * Drop the `token()` call findings of every file outside `files`, as `assertNoDeadCalls` drops
+   * its own: one deleted or taken out of `include` is not parsed again, so its entry would fail
+   * every later sheet, naming a file that is no longer part of the build.
+   */
+  forgetUnresolvedTokenCallsOutside = (files: Iterable<string>) => {
+    if (!this.unresolvedTokenCalls.size) return
+
+    const inScope = new Set(Array.from(files, (file) => this.runtime.path.abs(this.config.cwd, file)))
+    for (const file of this.unresolvedTokenCalls.keys()) {
+      if (!inScope.has(file)) this.unresolvedTokenCalls.delete(file)
+    }
   }
 
   /**
@@ -974,6 +1039,7 @@ export class BambooContext extends Generator {
       filesWithCss.push(file)
     })
 
+    this.forgetUnresolvedTokenCallsOutside(files)
     this.assertExtracted(files)
     this.assertNoDeadCalls(files)
 

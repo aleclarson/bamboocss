@@ -98,9 +98,12 @@ async function createContext(configPath: string): Promise<Generator> {
 }
 
 /**
- * The styles in `text` the build could not read: where they are, what is lost and what to do —
- * what `bamboo` warns about at build time, each declaration it names absent from the stylesheet.
- * Asked only of a file that imports bamboo and that `include` reaches (`getUnresolvedStyles`).
+ * What the build says of `text` as it extracts it. The styles it could not read: where they are,
+ * what is lost and what to do — what `bamboo` warns about at build time, each declaration it names
+ * absent from the stylesheet. And the `token()` calls naming no token, each of which drops the
+ * property it was written into the same way, in the sentence the build fails with. Asked only of a
+ * file that imports bamboo and that `include` reaches (`getExtractionFindings`), once per lint of
+ * it, however many rules report from it.
  *
  * None for a file under `outdir`, which nothing the author writes would change, as the build skips
  * it too; nor for one the build reads rewritten — a `.vue`, `.svelte` or `.astro` file, or one a
@@ -109,24 +112,31 @@ async function createContext(configPath: string): Promise<Generator> {
  * importing this one reads what is on disk. Its styles are encoded apart, and dropped: nothing in
  * the worker emits CSS, and a long editor session would otherwise keep every version linted.
  */
-const unresolvedStyles = async (options: Options, text: string) => {
+const extractionFindings = async (options: Options, text: string): Promise<ExtractionFindings> => {
   const [context, { BambooContext, explainUnresolvedStyle }] = await Promise.all([getContext(options), loadNode()])
-  if (!(context instanceof BambooContext)) return []
+  if (!(context instanceof BambooContext)) return NO_EXTRACTION_FINDINGS
   const file = path.resolve(options.cwd ?? process.cwd(), options.currentFile)
-  if (context.isGenerated(file)) return []
+  if (context.isGenerated(file)) return NO_EXTRACTION_FINDINGS
 
   // ESLint drops a byte order mark from the text it lints.
   const overlaid = readIfExists(file)?.replace(/^\uFEFF/, '') !== text
   if (overlaid) context.project.addSourceFile(file, text)
   try {
-    if (context.parsedSourceText(file) !== text) return []
+    if (context.parsedSourceText(file) !== text) return NO_EXTRACTION_FINDINGS
     const result = context.parseFile(file, context.encoder.clone())
-    return (result?.unresolved ?? [])
-      .filter((entry) => path.resolve(entry.filePath) === file)
-      .map((entry) => {
+    const own = <T extends { filePath: string }>(entries: T[] = []) =>
+      entries.filter((entry) => path.resolve(entry.filePath) === file)
+    return {
+      styles: own(result?.unresolved).map((entry) => {
         const { fix, what } = explainUnresolvedStyle(entry)
         return { column: entry.column, fix, line: entry.line, what }
-      })
+      }),
+      tokenCalls: own(result?.unresolvedTokenCalls).map(({ call, column, line }) => ({
+        column,
+        line,
+        message: context.utility.explainUnresolvedTokenCall(call),
+      })),
+    }
   } finally {
     if (overlaid) context.project.removeOverlay(file)
   }
@@ -268,6 +278,14 @@ const isColorToken = (context: Generator, value: string): boolean => {
 /** A style the build could not read: where it is, what is lost, and what to do about it. */
 export type UnresolvedStyleReport = { column: number; fix: string; line: number; what: string }
 
+/** A `token()` call naming no token: where it starts, and what the build says of it. */
+export type UnresolvedTokenCallReport = { column: number; line: number; message: string }
+
+/** @see extractionFindings */
+export type ExtractionFindings = { styles: UnresolvedStyleReport[]; tokenCalls: UnresolvedTokenCallReport[] }
+
+const NO_EXTRACTION_FINDINGS: ExtractionFindings = { styles: [], tokenCalls: [] }
+
 type MatchImportResult = {
   alias: string
   mod: string
@@ -300,7 +318,7 @@ export function run(action: 'matchImports', options: Options, result: MatchImpor
 export function run(action: 'filterImports', options: Options, imports: MatchImportResult[]): MatchImportResult[]
 export function run(action: 'getPropCategory', options: Options, property: string): string
 export function run(action: 'filterDeprecatedTokens', options: Options, tokens: DeprecatedToken[]): DeprecatedToken[]
-export function run(action: 'unresolvedStyles', options: Options, text: string): UnresolvedStyleReport[]
+export function run(action: 'extractionFindings', options: Options, text: string): ExtractionFindings
 export function run(
   action: 'tokensWithValue',
   options: Options,
@@ -346,7 +364,7 @@ export function runAsync(
   tokens: DeprecatedToken[],
 ): Promise<DeprecatedToken[]>
 export async function runAsync(action: string, options: Options, ...args: any): Promise<any> {
-  if (action === 'unresolvedStyles') return unresolvedStyles(options, args[0])
+  if (action === 'extractionFindings') return extractionFindings(options, args[0])
 
   const context = await getContext(options)
 

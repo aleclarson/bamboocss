@@ -4,6 +4,7 @@ import {
   getStyleProperty,
   getUnresolvedValueMessage,
   getTaggedTemplateCaller,
+  getUnresolvedTokenCalls,
   isBambooAttribute,
   isBambooProp as isBambooProperty,
   isInBambooStyle,
@@ -13,8 +14,22 @@ import {
 import { isJSXExpressionContainer, isJSXIdentifier, isLiteral, isTemplateLiteral } from '../utils/nodes'
 import { AST_NODE_TYPES, type TSESTree } from '@typescript-eslint/utils'
 import { isNodeOfTypes } from '@typescript-eslint/utils/ast-utils'
+import type { SourceCode } from '@typescript-eslint/utils/ts-eslint'
 
 export const RULE_NAME = 'no-invalid-token-paths'
+
+/** The call starting where the build says one does, so the report covers the call whole. */
+const callAt = (sourceCode: Readonly<SourceCode>, loc: { column: number; line: number }) => {
+  let index: number
+  try {
+    index = sourceCode.getIndexFromLoc(loc)
+  } catch {
+    return undefined
+  }
+  let node: TSESTree.Node | null | undefined = sourceCode.getNodeByRangeIndex(index)
+  while (node && !(node.type === AST_NODE_TYPES.CallExpression && node.range[0] === index)) node = node.parent
+  return node ?? undefined
+}
 
 const rule = createRule({
   create(context) {
@@ -81,6 +96,21 @@ const rule = createRule({
     }
 
     return {
+      /**
+       * `token('colors.nope')` — the call form, read off the build's own extraction rather than the
+       * tree, so a path it resolves through a constant or a ternary is judged as the build judges
+       * it, and the retired fallback after a path is not taken for one. Each returns `undefined`,
+       * dropping the property it was written into.
+       */
+      'Program:exit'() {
+        for (const { column, line, message } of getUnresolvedTokenCalls(context)) {
+          const loc = { column: column - 1, line }
+          const node = callAt(context.sourceCode, loc)
+          if (node) context.report({ data: { message }, messageId: 'unresolvedTokenCall', node })
+          else context.report({ data: { message }, loc, messageId: 'unresolvedTokenCall' })
+        }
+      },
+
       JSXAttribute(node: TSESTree.JSXAttribute) {
         if (!node.value || !isBambooProperty(node, context)) {
           return
@@ -169,10 +199,12 @@ const rule = createRule({
   defaultOptions: [],
   meta: {
     docs: {
-      description: 'Disallow the use of invalid token paths within token function syntax.',
+      description: 'Disallow token paths that name no token, in a `token()` reference or a `token()` call.',
     },
     messages: {
       noInvalidTokenPaths: '`{{token}}` is an invalid token path.',
+      // The sentence the build fails with, passed through like `unresolvedValue`.
+      unresolvedTokenCall: '{{message}}',
       // The build's own sentence, passed through rather than restated, so the editor and the
       // build cannot describe one mistake differently.
       unresolvedValue: '{{message}}',

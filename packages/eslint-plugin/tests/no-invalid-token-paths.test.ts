@@ -5,6 +5,10 @@ import multiline from 'multiline-ts'
 const validLiteral = 'const className = css`\n  font-size: token(fontSizes.md);\n`'
 const invalidLiteral = 'const className = css`\n  font-size: token(fontSizes.emd);\n`'
 
+/** The build's sentence for a call naming no token, which the rule passes through. */
+const noSuchToken = (call: string, fix = 'Check the path, or add the token to your theme.') =>
+  `${call} names no token. It returns \`undefined\`, so whatever reads it gets nothing: in a style, the property is dropped. ${fix}`
+
 eslintTester.run(RULE_NAME, rule, {
   invalid: [
     /**
@@ -104,6 +108,52 @@ eslintTester.run(RULE_NAME, rule, {
   const styles = css({ color: { base: 'mutedd', _hover: 'mutedd2' } })`,
       errors: [{ messageId: 'unresolvedValue' }, { messageId: 'unresolvedValue' }],
     },
+
+    /**
+     * The call form returns `undefined`, so the property it is written into is dropped: no rule, and
+     * nothing in the build said so. Reported over the call, in the sentence the build fails with.
+     */
+    {
+      code: multiline`
+  import { css } from './bamboo/css';
+  import { token } from './bamboo/tokens';
+
+  const styles = css({ color: token('colors.ghost') })`,
+      errors: [
+        {
+          column: 29,
+          data: { message: noSuchToken("`token('colors.ghost')`") },
+          endColumn: 50,
+          line: 4,
+          messageId: 'unresolvedTokenCall',
+        },
+      ],
+    },
+
+    // `token.value()` too, wherever its result goes, and with the path it was probably meant to be.
+    {
+      code: multiline`
+  import { token } from './bamboo/tokens';
+
+  export const accent = token.value('red.300')`,
+      errors: [
+        {
+          data: { message: noSuchToken("`token.value('red.300')`", "Did you mean `token.value('colors.red.300')`?") },
+          messageId: 'unresolvedTokenCall',
+        },
+      ],
+    },
+
+    // A path the build reads through a constant is judged as the build judges it.
+    {
+      code: multiline`
+  import { css } from './bamboo/css';
+  import { token } from './bamboo/tokens';
+
+  const shade = 'colors.ghost';
+  export const styles = css({ color: token(shade) })`,
+      errors: [{ data: { message: noSuchToken("`token('colors.ghost')`") }, messageId: 'unresolvedTokenCall' }],
+    },
   ],
   valid: [
     // A keyword the property enumerates, a `<custom-ident>` the grammar asks for, and a raw
@@ -168,6 +218,41 @@ eslintTester.run(RULE_NAME, rule, {
   import { css } from './bamboo/css';
   
   ${validLiteral}`,
+    },
+
+    // A call naming a token, and one after the retired fallback argument, which is not a path.
+    {
+      code: multiline`
+  import { css } from './bamboo/css';
+  import { token } from './bamboo/tokens';
+
+  export const styles = css({ color: token('colors.red.300'), bg: token('colors.red.300', '#fff') })`,
+    },
+
+    // A call whose result is defaulted handles a path naming nothing itself, as the docs say to.
+    {
+      code: multiline`
+  import { css } from './bamboo/css';
+  import { token } from './bamboo/tokens';
+
+  export const styles = css({ color: token('colors.ghost') ?? '#fff' })`,
+    },
+
+    // A path known only at runtime, which the build does not judge, and somebody else's `token`.
+    {
+      code: multiline`
+  import { css } from './bamboo/css';
+  import { token } from './bamboo/tokens';
+
+  export const styles = (shade: string) => css({ color: token(shade) })`,
+    },
+    {
+      code: multiline`
+  import { css } from './bamboo/css';
+
+  const token = (path: string) => path;
+  export const label = token('colors.ghost');
+  export const styles = css({ color: 'red.300' })`,
     },
   ],
 })

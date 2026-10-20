@@ -33,6 +33,12 @@ export interface NativeCall {
   unresolvedKeys: string[]
   /** The name a `keyframes()` call whose stops the build read whole returns. */
   value?: string
+  /**
+   * A `token()` call whose result is tested or defaulted rather than used as it is — the left of
+   * `??`, `||` or `&&`, a test, `!`, `typeof` or an equality — so a path naming nothing is a case
+   * its author handled.
+   */
+  guarded: boolean
 }
 
 export interface NativeAnalysis {

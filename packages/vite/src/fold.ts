@@ -432,7 +432,18 @@ export const foldSource = (options: FoldOptions): FoldResult => {
       const path = call.data[0] as string
       const value = wantsValue ? runtimeTokenValue(path) : runtimeToken(path)
       if (!value) {
-        skipped.push({ name, reason: 'unresolved-token', start, end })
+        // A path naming no token, in the build's own words for it — without what the call
+        // returns, which `token(path) ?? fallback` handles and this declines all the same. A
+        // `token.value()` whose token holds a number names one, and has no string to stand in
+        // for it: no detail.
+        const unresolved = ctx.utility.unresolvedTokenCall(wantsValue ? 'token.value' : 'token', path)
+        skipped.push({
+          name,
+          reason: 'unresolved-token',
+          start,
+          end,
+          ...(unresolved && { detail: ctx.utility.explainUnresolvedTokenCall(unresolved, { consequence: false }) }),
+        })
         continue
       }
 

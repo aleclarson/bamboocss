@@ -240,6 +240,7 @@ Perf-sensitive code has Vitest benchmarks in `{packages,sandbox}/*/__tests__/**/
 | `native-extractor/analyze`                      | batched Rust parsing, analysis and compact result transfer      |
 | `node/source-glob`                              | the source glob every inventory scan runs                       |
 | `node/extractable-files`                        | which files a cold extraction pass parses (`selectExtractable`) |
+| `node/parse-file`                               | decoding one file's native analysis (`parseNativeFile`)         |
 | `shared/split-props`, `shared/leaf-class`       | runtime helpers on the per-render path                          |
 | `vite/fold`                                     | native analysis per module, and the JS fold on top of it        |
 | `vite/output-pass`                              | the early output pass: pruning and naming a sheet, per output   |

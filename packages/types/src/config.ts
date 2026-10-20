@@ -767,6 +767,10 @@ export interface Config
    * value, and where the property accepts a name — a custom property, `font-family` — nothing else
    * objects to it.
    *
+   * So is a `token()` or `token.value()` call naming no token. It returns `undefined`, and the build
+   * reads it the same way, so `css({ color: token('colors.nope') })` drops `color` with nothing in the
+   * stylesheet to show for it.
+   *
    * A single severity applies to both.
    *
    * @default { token: 'error', grammar: 'warn' }

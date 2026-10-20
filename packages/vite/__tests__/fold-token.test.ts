@@ -273,6 +273,42 @@ describe('fold: token() declines', () => {
 })
 
 /**
+ * A call the fold declines for naming no token fails a build, and the failure said only
+ * `token() — unresolved-token`. It says what the build says of it now, path suggested and all.
+ */
+describe('fold: a path naming no token', () => {
+  test('is declined with the build’s own sentence for it', () => {
+    const { fold } = createFoldFixture()
+    const result = fold(`
+      import { token } from 'styled-system/tokens'
+      export const nope = token('red.300')
+    `)
+
+    expect(result.skipped).toContainEqual(
+      expect.objectContaining({
+        reason: 'unresolved-token',
+        detail: expect.stringMatching(
+          /^`token\('red\.300'\)` names no token\. .*Did you mean `token\('colors\.red\.300'\)`\?$/,
+        ),
+      }),
+    )
+  })
+
+  /** It names a token: one whose value is a number, which no string literal can stand in for. */
+  test('says nothing of the kind for a token.value() of a number', () => {
+    const { fold } = createFoldFixture({ theme: { extend: { tokens: { zIndex: { modal: { value: 1400 } } } } } })
+    const result = fold(`
+      import { token } from 'styled-system/tokens'
+      export const z = token.value('zIndex.modal')
+    `)
+
+    const [declined] = result.skipped.filter((entry) => entry.reason === 'unresolved-token')
+    expect(declined).toBeDefined()
+    expect(declined?.detail).toBeUndefined()
+  })
+})
+
+/**
  * `token.value()` is the explicit opt-out — the resolved literal, for the cases where a css
  * variable cannot be resolved.
  *

@@ -1176,10 +1176,10 @@ What to do about a style value that names neither a token nor anything the CSS p
 
 **The two halves are graded apart, because they are not equally certain.**
 
-| half      | when                                                                                                     | decided by               | default |
-| --------- | -------------------------------------------------------------------------------------------------------- | ------------------------ | ------- |
-| `token`   | the property draws from a token category, the value is a dotted path, or a `token()` reference names one | bamboo's own bookkeeping | `error` |
-| `grammar` | a bare name on a property with no token category                                                         | the CSS grammar          | `warn`  |
+| half      | when                                                                                                                  | decided by               | default |
+| --------- | --------------------------------------------------------------------------------------------------------------------- | ------------------------ | ------- |
+| `token`   | the property draws from a token category, the value is a dotted path, or a `token()` reference or call names no token | bamboo's own bookkeeping | `error` |
+| `grammar` | a bare name on a property with no token category                                                                      | the CSS grammar          | `warn`  |
 
 `color: 'mutedd'` and `top: 'navH'` are the first: `color` reads `colors` and `top` reads `spacing`, so a name that is
 not one of those is bamboo's own answer and there is nothing else to be wrong about it.
@@ -1203,6 +1203,26 @@ token's value, and where the property accepts a name at all, such as a custom pr
 would object. A reference written without its category, `token(red.300)`, is reported with the path it was probably
 meant to be, `token(colors.red.300)`.
 
+So is a `token()` **call** naming no token: `css({ color: token('colors.nope') })`, or `token.value('colors.nope')`
+anywhere in a source the build reads. The call returns `undefined`, and the build evaluates it the same way, so the
+property it was written into is dropped — there is no rule for it and no declaration for the browser to reject, only a
+style that never applies. The error names each call and where it is, and the path it was probably meant to be:
+
+```text
+1 `token()` call(s) name a token that does not exist:
+
+- `token('red.300')` names no token. It returns `undefined`, so whatever reads it gets nothing: in a style, the property is dropped. Did you mean `token('colors.red.300')`? At src/card.tsx:12:19.
+```
+
+Only a path the build is sure of is judged: one it reads through a constant or enumerates from a ternary, not one built
+from a value known only at runtime. Nor is a call whose result is tested or defaulted,
+`token('colors.brand') ?? '#fff'`: that is how a path that may name nothing is written, and the property keeps a value.
+The call looks the path up whole, so `token('colors.red.300/50')` names nothing — write the opacity in a value instead,
+`'token(colors.red.300/50)'`.
+
+Under Vite this is also a compile error, whatever the severity: a call naming no token has no value to be compiled to,
+so it would stay in the bundle, and the compiler names it as `unresolved-token` with the same sentence.
+
 A missing token such as `css({ background: 'accent.default' })` fails the build by default. If you lower the token
 severity to `warn` or `off`, resolution falls back to the original value: `background: accent.default` can reach the
 stylesheet, where the browser drops it. Use `[accent.default]` only when you intend a literal value; that bypasses this
@@ -1225,7 +1245,9 @@ value in `font: 12px/1.5 serif`.
 
 Under `error` the check is asked of the stylesheet being emitted rather than of the calls that built it, so it reports
 what the file about to be written contains. The Vite builder re-extracts affected sources when they change, including
-removing contributions from deleted files.
+removing contributions from deleted files. A `token()` call is the exception, since nothing of it reaches the
+stylesheet: it is read off its file's last extraction, and goes as soon as the file is fixed, deleted or taken out of
+`include`.
 
 A **binding that does not exist** is not graded here and always fails the build; see below.
 

@@ -113,6 +113,24 @@ export interface UnresolvedTokenRef {
   suggestions?: string[]
 }
 
+/**
+ * A `token()` or `token.value()` call naming no token.
+ *
+ * Not an `UnresolvedTokenRef`, which is a value judged against the property holding it. A call is
+ * asked for a path alone, whatever reads its result — a style, a `style` attribute, a chart's
+ * options — and for a path naming nothing it returns `undefined`.
+ */
+export interface UnresolvedTokenCall {
+  /** The path the call names, as written. */
+  path: string
+  /** `token()` returns the token's variable, `token.value()` its value. */
+  method: 'token' | 'token.value'
+  /** The paths that do resolve one slip away: the category left out or misspelled. */
+  suggestions?: string[]
+  /** A colour that resolves, written with an opacity: `colors.red.300/50`. */
+  opacity?: true
+}
+
 const NO_FINDINGS: ReadonlyArray<[string, UnresolvedTokenRef]> = []
 
 export interface UtilityOptions {
@@ -1218,10 +1236,47 @@ export class Utility {
     const slash = path.indexOf('/')
     const name = slash === -1 ? path : path.slice(0, slash)
     const opacity = slash === -1 ? '' : path.slice(slash)
+    const suggestions = this.suggestedPaths(name, opacity)
 
+    return {
+      prop: key,
+      value: path,
+      kind: 'token',
+      reference: true,
+      ...(suggestions && { suggestions }),
+    }
+  }
+
+  /**
+   * A `token()` or `token.value()` call naming no token, or `undefined` for a path that names one.
+   *
+   * Looked up as the generated runtime looks it up — the path whole, in the token table the
+   * build's evaluator is handed — so a call this reports is one whose result the build has already
+   * dropped. A colour's opacity is therefore not read: `token('colors.red.300/50')` names nothing,
+   * where `token(colors.red.300/50)` written in a value resolves.
+   */
+  unresolvedTokenCall = (method: 'token' | 'token.value', path: string): UnresolvedTokenCall | undefined => {
+    // One table answers for both methods: every token in it has its variable, which `token()`
+    // returns, and its value, which `token.value()` does. Asked of every call extraction reads,
+    // so a plain lookup rather than the memoized readers.
+    const { values } = this.tokens.view
+    if (values.has(path)) return undefined
+
+    const slash = path.indexOf('/')
+    if (slash !== -1 && values.has(path.slice(0, slash))) return { path, method, opacity: true }
+
+    const suggestions = this.suggestedPaths(path)
+    return { path, method, ...(suggestions && { suggestions }) }
+  }
+
+  /**
+   * The paths a token path naming nothing was probably meant to be: its category left out —
+   * `red.300` — or misspelled — `color.red.300`. Under a category that exists the slip is in the
+   * name, and there is nothing to guess from.
+   */
+  private suggestedPaths = (name: string, opacity = '') => {
     const suggestions = new Set<string>()
     const dot = name.indexOf('.')
-    // Under a category that exists the slip is in the name, and there is nothing to guess from.
     const categories: ReadonlyMap<string, unknown> = this.tokens.view.valuesByCategory
     if (!categories.has(dot === -1 ? name : name.slice(0, dot))) {
       for (const candidate of dot === -1 ? [name] : [name, name.slice(dot + 1)]) {
@@ -1230,14 +1285,7 @@ export class Utility {
         }
       }
     }
-
-    return {
-      prop: key,
-      value: path,
-      kind: 'token',
-      reference: true,
-      ...(suggestions.size ? { suggestions: [...suggestions].slice(0, 2) } : {}),
-    }
+    return suggestions.size ? [...suggestions].slice(0, 2) : undefined
   }
 
   /**
@@ -1308,6 +1356,35 @@ export class Utility {
     }
 
     return `\`${prop}: ${value}\` — \`${prop}\` accepts no such value, and it is not a token. ${dropped} ${literal}`
+  }
+
+  /**
+   * Say what a call naming no token does, and what to write instead.
+   *
+   * Shared by the warning, the build's error and the lint rule, so none of them can describe the
+   * same call differently. Without where it is: each says that its own way. `consequence: false`
+   * leaves out what the call returns, for a caller declining the call for its own reason.
+   */
+  explainUnresolvedTokenCall = (
+    { path, method, suggestions, opacity }: UnresolvedTokenCall,
+    { consequence = true }: { consequence?: boolean } = {},
+  ) => {
+    const call = (to: string) => `\`${method}('${to}')\``
+    const returns = consequence
+      ? ` It returns \`undefined\`, so whatever reads it gets nothing: in a style, the property is dropped.`
+      : ''
+
+    if (opacity) {
+      return (
+        `${call(path)} names no token: the call looks the whole path up, and only a value reads an ` +
+        `opacity.${returns} In a style, write the value \`'token(${path})'\` instead.`
+      )
+    }
+
+    const fix = suggestions?.length
+      ? `Did you mean ${suggestions.map(call).join(' or ')}?`
+      : `Check the path, or add the token to your theme.`
+    return `${call(path)} names no token.${returns} ${fix}`
   }
 
   transform = (prop: string, value: string | undefined): TransformResult => {

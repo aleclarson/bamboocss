@@ -970,6 +970,7 @@ export class Builder {
     // After `done()`, so the timing line still reports the pass that just ran rather than
     // being swallowed by the throw. Handed the list this pass walked, so it does not glob
     // a second time to ask which files still exist.
+    ctx.forgetUnresolvedTokenCallsOutside(files)
     ctx.assertExtracted(files)
     ctx.assertNoDeadCalls(files)
   }

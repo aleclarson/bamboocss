@@ -15,7 +15,7 @@ import {
   isVariableDeclarator,
   type Node,
 } from './nodes'
-import { type DeprecatedToken } from './worker'
+import { type DeprecatedToken, type ExtractionFindings } from './worker'
 import { analyze, type ScopeManager } from '@typescript-eslint/scope-manager'
 import { type TSESTree } from '@typescript-eslint/utils'
 import { type RuleContext } from '@typescript-eslint/utils/ts-eslint'
@@ -195,21 +195,42 @@ const isLocalStyledFactory = (node: TSESTree.JSXOpeningElement, context: RuleCon
   return true
 }
 
+const NO_EXTRACTION_FINDINGS: ExtractionFindings = { styles: [], tokenCalls: [] }
+
+/** Each lint's findings, by the `SourceCode` ESLint hands every rule linting one version of a file. */
+const extractionFindingsCache = new WeakMap<object, ExtractionFindings>()
+
 /**
- * The styles in this file the build could not read, as the build explains them. Asked only of a
- * file the build reads — one that imports bamboo, which `include` reaches, and that is a file
- * rather than a code block a processor such as `@eslint/markdown` lifted out of one — which the
- * cached answers settle without sending the file's text. A file reaching bamboo only through
- * `require()` or a re-export is not asked about.
+ * What the build says of this file as it extracts it, in its own words. Asked only of a file the
+ * build reads — one that imports bamboo, which `include` reaches, and that is a file rather than a
+ * code block a processor such as `@eslint/markdown` lifted out of one — which the cached answers
+ * settle without sending the file's text. A file reaching bamboo only through `require()` or a
+ * re-export is not asked about.
+ *
+ * Extracted once per lint however many rules report from it: two rules asking of the same
+ * `SourceCode` share one answer, and the next edit is a new `SourceCode`, read afresh.
  */
-export const getUnresolvedStyles = (context: RuleContext<any, any>) => {
+const getExtractionFindings = (context: RuleContext<any, any>): ExtractionFindings => {
   // `physicalFilename` is ESLint 8.40's; before it, `getPhysicalFilename()`.
   const physicalFilename =
     context.physicalFilename ?? (context as { getPhysicalFilename?: () => string }).getPhysicalFilename?.()
-  if ((physicalFilename ?? context.filename) !== context.filename) return []
-  if (getImports(context).length === 0 || !isValidFile(context)) return []
-  return syncActionUncached('unresolvedStyles', getSyncOptions(context), context.sourceCode.text) ?? []
+  if ((physicalFilename ?? context.filename) !== context.filename) return NO_EXTRACTION_FINDINGS
+  if (getImports(context).length === 0 || !isValidFile(context)) return NO_EXTRACTION_FINDINGS
+
+  const cached = extractionFindingsCache.get(context.sourceCode)
+  if (cached) return cached
+
+  const findings =
+    syncActionUncached('extractionFindings', getSyncOptions(context), context.sourceCode.text) ?? NO_EXTRACTION_FINDINGS
+  extractionFindingsCache.set(context.sourceCode, findings)
+  return findings
 }
+
+/** The styles in this file the build could not read, as the build explains them. */
+export const getUnresolvedStyles = (context: RuleContext<any, any>) => getExtractionFindings(context).styles
+
+/** The `token()` calls in this file naming no token, as the build explains them. */
+export const getUnresolvedTokenCalls = (context: RuleContext<any, any>) => getExtractionFindings(context).tokenCalls
 
 export const isValidFile = (context: RuleContext<any, any>) => {
   return syncAction('isValidFile', getSyncOptions(context))
