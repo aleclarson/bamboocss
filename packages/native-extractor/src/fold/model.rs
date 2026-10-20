@@ -68,6 +68,10 @@ pub struct FoldCall {
     pub cx_arguments: Vec<FoldCxArgument>,
     /// For an exact `keyframes()` call: the name it returns, which the fold writes in its place.
     pub value: Option<String>,
+    /// A `token()` call whose result is tested or defaulted rather than used as it is,
+    /// `token('colors.brand') ?? '#fff'`: a path naming no token is a case its author handled,
+    /// and the call is compiled to the `undefined` it returns. See `result_guarded`.
+    pub guarded: bool,
 }
 
 /// Code the evaluator does not run, which is why a call's arguments are not known.

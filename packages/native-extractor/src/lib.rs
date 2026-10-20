@@ -381,7 +381,7 @@ fn argument_data<'a>(
 /// an equality. A `token()` call there asks whether its token exists — with the fallback argument
 /// retired, `token('colors.brand') ?? '#fff'` is how a path that may name nothing is written — so
 /// naming nothing is a case its author handled, not a mistake.
-fn result_guarded(nodes: &AstNodes<'_>, call: NodeId) -> bool {
+pub(crate) fn result_guarded(nodes: &AstNodes<'_>, call: NodeId) -> bool {
     let mut current = call;
     loop {
         let span = nodes.kind(current).span();

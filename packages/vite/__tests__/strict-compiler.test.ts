@@ -353,3 +353,38 @@ describe('a call inside a recipe config', () => {
     expect(end).not.toThrow()
   }, 60_000)
 })
+
+/**
+ * `token(path) ?? '#fff'` is how the docs say to write a path that may name nothing, now the
+ * fallback argument is retired. Every build failed it whatever the token: the style around it as
+ * `dynamic`, and the call as `unresolved-token` where the path named none.
+ */
+describe('a token() call whose result is tested or defaulted', () => {
+  const withToken = (body: string) =>
+    `import { css } from 'styled-system/css'\nimport { token } from 'styled-system/tokens'\n${body}\n`
+
+  test('compiles, in a style and standing alone, whether or not the token exists', async () => {
+    const end = await run(
+      withToken(
+        [
+          `export const named = css({ color: token('colors.red.300') ?? '#fff' })`,
+          `export const unnamed = css({ color: token('colors.brand') ?? '#fff' })`,
+          `export const alone = token('colors.brand') ?? '#fff'`,
+        ].join('\n'),
+      ),
+      'src/strict-token-default.tsx',
+    )
+
+    expect(end).not.toThrow()
+  }, 60_000)
+
+  test('a call naming no token whose result is used as it is still fails', async () => {
+    const end = await run(
+      withToken(`export const unnamed = css({ color: token('colors.brand') })`),
+      'src/strict-token-unguarded.tsx',
+    )
+
+    expect(end).toThrow(/unresolved-token/)
+    expect(end).toThrow(/`token\('colors\.brand'\)` names no token/)
+  }, 60_000)
+})

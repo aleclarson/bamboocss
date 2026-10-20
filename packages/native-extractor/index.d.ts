@@ -182,6 +182,12 @@ export interface FoldCall {
   cxArguments: FoldCxArgument[]
   /** For an exact `keyframes()` call: the name it returns, which the fold writes in its place. */
   value?: string
+  /**
+   * A `token()` call whose result is tested or defaulted rather than used as it is,
+   * `token('colors.brand') ?? '#fff'`: a path naming no token is a case its author handled, and
+   * the call is compiled to the `undefined` it returns.
+   */
+  guarded: boolean
 }
 
 /**

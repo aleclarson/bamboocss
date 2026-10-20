@@ -306,6 +306,105 @@ describe('fold: a path naming no token', () => {
     expect(declined).toBeDefined()
     expect(declined?.detail).toBeUndefined()
   })
+
+  /**
+   * A number has no string literal to stand in for it, which matters only where the call stays.
+   * Inside a style that compiles it goes with the style, whose value the analysis read, as a
+   * resolved call does. It failed the compile all the same, as `token() — unresolved-token`.
+   */
+  test('a token.value() of a number goes with the style compiled around it', () => {
+    const config = { theme: { extend: { tokens: { zIndex: { modal: { value: 1400 } } } } } }
+    const result = createFoldFixture(config).foldStrict(`
+      import { css } from 'styled-system/css'
+      import { token } from 'styled-system/tokens'
+      export const a = css({ zIndex: token.value('zIndex.modal') })
+      export const b = css({ zIndex: token.value('zIndex.modal') ?? 1 })
+    `)
+
+    expect(result.skipped.map((entry) => entry.reason)).toEqual(['overlapping', 'overlapping'])
+    const written = createFoldFixture(config).foldStrict(`
+      import { css } from 'styled-system/css'
+      export const a = css({ zIndex: 1400 })
+    `)
+    expect(result.folded.map((call) => call.className)).toEqual([
+      written.folded[0]!.className,
+      written.folded[0]!.className,
+    ])
+  })
+})
+
+/**
+ * A call whose result is tested or defaulted, `token('colors.brand') ?? '#fff'`, is how a path that
+ * may name nothing is written now the fallback argument is retired. It returns the token's
+ * variable, or `undefined` for a path naming none, from the table the build holds, and the choice
+ * goes the way that decides — as `bamboo cssgen` already read it. The compiler refused it whatever
+ * the token: a choice decided by a call was not one it accepted, and a call naming nothing failed
+ * as `unresolved-token` though its author had handled that.
+ */
+describe('fold: a token() call whose result is tested or defaulted', () => {
+  const head = `import { css } from 'styled-system/css'\nimport { token } from 'styled-system/tokens'\n`
+
+  /** The class a style compiles to: what the call under test has to compile to as well. */
+  const classOf = (style: string) => createFoldFixture().foldStrict(`${head}export const cls = ${style}`).folded[0]!
+
+  test.each([
+    ['a default, where the token exists', `token('colors.red.300') ?? '#fff'`, `token('colors.red.300')`],
+    ['a default, where the path names none', `token('colors.brand') ?? '#fff'`, `'#fff'`],
+    ['an `||` default', `token('colors.brand') || 'red'`, `'red'`],
+    ['an `&&`, where the token exists', `token('colors.red.300') && 'red'`, `'red'`],
+    ['a test', `token('colors.brand') ? 'red' : 'blue'`, `'blue'`],
+    ['a value lookup', `token.value('colors.brand') ?? '#fff'`, `'#fff'`],
+    // The call looks the whole path up; only a value reads an opacity.
+    ['a path with an opacity', `token('colors.red.300/50') ?? '#fff'`, `'#fff'`],
+  ])('compiles in a style: %s', (_label, color, written) => {
+    const result = createFoldFixture().foldStrict(`${head}export const cls = css({ color: ${color} })`)
+
+    expect(result.skipped).toEqual([expect.objectContaining({ name: 'token', reason: 'overlapping' })])
+    expect(result.folded).toHaveLength(1)
+    expect(result.folded[0]!.className).toBe(classOf(`css({ color: ${written} })`).className)
+  })
+
+  test('standing alone, a path naming none compiles to the undefined the call returns', () => {
+    const result = createFoldFixture().foldStrict(`${head}
+      export const a = token('colors.brand') ?? '#fff'
+      export const b = typeof token.value('colors.brand') === 'string'
+      export const c = !token('colors.brand')
+      export const d = token('colors.brand') === undefined
+      export const e = token('colors.red.300') ?? '#fff'
+    `)
+
+    expect(result.code).toContain(`export const a = undefined ?? '#fff'`)
+    expect(result.code).toContain(`export const b = typeof undefined === 'string'`)
+    expect(result.code).toContain(`export const c = !undefined`)
+    expect(result.code).toContain(`export const d = undefined === undefined`)
+    expect(result.code).toContain(`export const e = "var(--colors-red-300)" ?? '#fff'`)
+    expect(result.skipped).toEqual([])
+    expect(result.folded.map((call) => [call.kind, call.value])).toEqual([
+      ['value', undefined],
+      ['value', undefined],
+      ['value', undefined],
+      ['value', undefined],
+      ['value', 'var(--colors-red-300)'],
+    ])
+  })
+
+  test.each([
+    // Used as it is, the call naming nothing is a mistake, and still fails, with its explanation.
+    ['a call whose result is used as it is', `css({ color: token('colors.brand') })`, 'unresolved-token'],
+    ['the default of another value', `css({ color: shade ?? token('colors.brand') })`, 'unresolved-token'],
+    // The path the runtime looks up is the caller's.
+    ['a path known only at runtime', `(p: string) => css({ color: token(p) ?? '#fff' })`, 'dynamic'],
+    // Compiling the call away would delete what `compute()` does.
+    [
+      'a trailing argument that could run something',
+      `css({ color: token('colors.brand', compute()) ?? '#fff' })`,
+      'dynamic',
+    ],
+  ])('still declines %s', (_label, call, reason) => {
+    const result = createFoldFixture().foldStrict(`${head}const shade = undefined\nexport const cls = ${call}`)
+
+    expect(result.skipped).toContainEqual(expect.objectContaining({ name: 'token', reason }))
+  })
 })
 
 /**

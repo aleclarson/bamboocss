@@ -993,6 +993,7 @@ fn analyze_facts<'a>(
                     binding: None,
                     cx_arguments: Vec::new(),
                     value: None,
+                    guarded: false,
                 });
             }
             continue;
@@ -1026,6 +1027,7 @@ fn analyze_facts<'a>(
                 binding,
                 cx_arguments: Vec::new(),
                 value: None,
+                guarded: false,
             });
             continue;
         }
@@ -1055,6 +1057,7 @@ fn analyze_facts<'a>(
                     .map(|argument| cx_argument(argument, &utf16))
                     .collect(),
                 value: None,
+                guarded: false,
             });
             continue;
         }
@@ -1111,6 +1114,8 @@ fn analyze_facts<'a>(
             .flatten()
             .filter(|stops| stops.is_object())
             .map(|stops| project.keyframes_name(stops));
+        let guarded = (kind == "token" || kind == "tokenValue")
+            && crate::result_guarded(semantic.nodes(), node.id());
         calls.push(FoldCall {
             name,
             kind,
@@ -1133,6 +1138,7 @@ fn analyze_facts<'a>(
             binding: None,
             cx_arguments: Vec::new(),
             value,
+            guarded,
         });
     }
 
@@ -1514,6 +1520,7 @@ fn recipe_invocation<'a>(
         binding: None,
         cx_arguments: Vec::new(),
         value: None,
+        guarded: false,
     }
 }
 

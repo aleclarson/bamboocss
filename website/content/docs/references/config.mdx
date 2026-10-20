@@ -1221,7 +1221,9 @@ The call looks the path up whole, so `token('colors.red.300/50')` names nothing 
 `'token(colors.red.300/50)'`.
 
 Under Vite this is also a compile error, whatever the severity: a call naming no token has no value to be compiled to,
-so it would stay in the bundle, and the compiler names it as `unresolved-token` with the same sentence.
+so it would stay in the bundle, and the compiler names it as `unresolved-token` with the same sentence. A call whose
+result is tested or defaulted is compiled to the `undefined` it returns instead, so
+`css({ color: token('colors.brand') ?? '#fff' })` compiles to `color: #fff`, as `bamboo cssgen` reads it.
 
 A missing token such as `css({ background: 'accent.default' })` fails the build by default. If you lower the token
 severity to `warn` or `off`, resolution falls back to the original value: `background: accent.default` can reach the

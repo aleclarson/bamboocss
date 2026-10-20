@@ -2540,6 +2540,33 @@ impl<'a, 'project, 'sources> FileEvaluator<'a, 'project, 'sources> {
         self.imports.contains_key(&symbol)
     }
 
+    /// Whether `call` is the tokens entrypoint's `token()` or `token.value()`: a lookup in the
+    /// table the build holds, which is the runtime's table too, so what it gives for a path — the
+    /// token's variable or value, or `undefined` for a path naming no token — is what the
+    /// program gets.
+    pub fn is_token_call(&self, call: &CallExpression<'_>) -> bool {
+        let Some((symbol, members)) = callee_symbol_and_members(&call.callee, self.scoping) else {
+            return false;
+        };
+        let Some(binding) = self.imports.get(&symbol) else {
+            return false;
+        };
+        if self
+            .project
+            .entrypoint(&binding.specifier)
+            .is_none_or(|entrypoint| entrypoint.kind != "token")
+        {
+            return false;
+        }
+        let mut path: Vec<&str> = match &binding.imported {
+            ImportedName::Named(name) => vec![name.as_str()],
+            ImportedName::Namespace => Vec::new(),
+            ImportedName::Default => return false,
+        };
+        path.extend(members.iter().map(String::as_str));
+        matches!(path.as_slice(), ["token"] | ["token", "value"])
+    }
+
     pub fn evaluate_jsx_expression(&mut self, expression: &'a JSXExpression<'a>) -> EvalResult {
         expression
             .as_expression()

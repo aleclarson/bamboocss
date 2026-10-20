@@ -63,7 +63,10 @@ export interface FoldedCall {
    * are somebody else's to give a rule, not Bamboo's.
    */
   literalClassNames?: string[]
-  /** The literal written in place of the call, for a `value` fold. */
+  /**
+   * The literal written in place of the call, for a `value` fold. Absent where the call names no
+   * token and its result is tested or defaulted: `undefined` is written instead.
+   */
   value?: string
   start: number
   end: number
@@ -317,8 +320,10 @@ export const foldSource = (options: FoldOptions): FoldResult => {
     outputKind?: 'slots'
     /** Replacement text for a compiled call, in place of a bare class string. */
     replacement?: string
-    /** The resolved value, for a `token()` call. Its presence is what marks one. */
+    /** The resolved value, for a `token()` call. Its presence, or `missing`, is what marks one. */
     value?: string
+    /** A guarded `token()` call naming no token, compiled to the `undefined` it returns. */
+    missing?: true
     /** Bindings to add to an existing import, by name so duplicates can be dropped. */
     insert?: HelperInsert
     /** Modules another module's recipe was read from, or through. */
@@ -328,6 +333,12 @@ export const foldSource = (options: FoldOptions): FoldResult => {
   }
 
   const candidates: Candidate[] = []
+  /**
+   * `token.value()` calls whose token holds a number, which no string literal stands in for. Not
+   * candidates, since nothing is written for one: a style compiled around it takes it with it, and
+   * where nothing does, it stays and is reported.
+   */
+  const numericTokens: Array<{ name: string; start: number; end: number }> = []
   const seenRanges = new Set<string>()
   const recipeDefinitions: Array<{ name: string; factory: string; start: number; end: number }> = []
 
@@ -432,17 +443,28 @@ export const foldSource = (options: FoldOptions): FoldResult => {
       const path = call.data[0] as string
       const value = wantsValue ? runtimeTokenValue(path) : runtimeToken(path)
       if (!value) {
-        // A path naming no token, in the build's own words for it — without what the call
-        // returns, which `token(path) ?? fallback` handles and this declines all the same. A
-        // `token.value()` whose token holds a number names one, and has no string to stand in
-        // for it: no detail.
         const unresolved = ctx.utility.unresolvedTokenCall(wantsValue ? 'token.value' : 'token', path)
+        // Tested or defaulted, `token(path) ?? '#fff'`, a path naming no token is a case its
+        // author handled: the runtime returns `undefined` for it, and so does the compiled call.
+        if (unresolved && call.guarded) {
+          candidates.push({ call, name, start, end, missing: true })
+          continue
+        }
+        // A `token.value()` whose token holds a number names one, and has no string literal to
+        // stand in for it. Inside a style that compiles, it goes with the style, whose value
+        // the analysis read; only where nothing replaces it does it stay, and is reported.
+        if (!unresolved) {
+          numericTokens.push({ name, start, end })
+          continue
+        }
+        // A path naming no token, in the build's own words for it — without what the call
+        // returns, which nothing here reads.
         skipped.push({
           name,
           reason: 'unresolved-token',
           start,
           end,
-          ...(unresolved && { detail: ctx.utility.explainUnresolvedTokenCall(unresolved, { consequence: false }) }),
+          detail: ctx.utility.explainUnresolvedTokenCall(unresolved, { consequence: false }),
         })
         continue
       }
@@ -629,7 +651,15 @@ export const foldSource = (options: FoldOptions): FoldResult => {
    * values before any string exists.
    */
   for (const candidate of candidates) {
-    if (candidate.styleSet || candidate.value !== undefined || candidate.replacement || candidate.styleMap) continue
+    if (
+      candidate.styleSet ||
+      candidate.value !== undefined ||
+      candidate.missing ||
+      candidate.replacement ||
+      candidate.styleMap
+    ) {
+      continue
+    }
     if (candidate.failed) continue
 
     const { call } = candidate
@@ -895,7 +925,19 @@ export const foldSource = (options: FoldOptions): FoldResult => {
   /** Ranges the rewrite actually replaced. */
   const applied: Array<[number, number]> = []
 
+  /**
+   * A numeric `token.value()` goes with whatever compiled around it, as a resolved one does, and
+   * stays where nothing did. Settled once every rewrite that can take one is applied.
+   */
+  const settleNumericTokens = () => {
+    for (const { name, start, end } of numericTokens) {
+      const covered = applied.some(([from, to]) => start < to && from < end)
+      skipped.push({ name, reason: covered ? 'overlapping' : 'unresolved-token', start, end })
+    }
+  }
+
   if (candidates.length === 0 && recipeDefinitions.length === 0 && analysis.vueExposures.length === 0) {
+    settleNumericTokens()
     if (reportSurvivors) reportRuntimeBindings()
     return { code, map: null, folded, skipped, dependencies: [] }
   }
@@ -944,10 +986,18 @@ export const foldSource = (options: FoldOptions): FoldResult => {
     for (const dependency of candidate.foreign ?? []) foreignDependencies.add(dependency)
 
     // A `token()` call, which becomes the value itself. No class is involved.
-    if (candidate.value !== undefined) {
-      magic.overwrite(start, end, JSON.stringify(candidate.value))
+    if (candidate.value !== undefined || candidate.missing) {
+      magic.overwrite(start, end, candidate.missing ? 'undefined' : JSON.stringify(candidate.value))
       applied.push([start, end])
-      folded.push({ name, kind: 'value', className: '', classNames: [], value: candidate.value, start, end })
+      folded.push({
+        name,
+        kind: 'value',
+        className: '',
+        classNames: [],
+        ...(candidate.value !== undefined && { value: candidate.value }),
+        start,
+        end,
+      })
       continue
     }
 
@@ -1031,6 +1081,8 @@ export const foldSource = (options: FoldOptions): FoldResult => {
     applied.push([start, end])
     folded.push({ name, kind: 'definition', className: '', classNames: [], start, end })
   }
+
+  settleNumericTokens()
 
   // A `<script setup>` the dev server compiles exposes its imports to the template through
   // `__returned__` getters, and the template reads them off `$setup`. Once every `$setup.css`

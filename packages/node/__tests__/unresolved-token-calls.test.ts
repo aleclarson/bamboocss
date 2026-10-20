@@ -149,6 +149,15 @@ describe('a token() call naming no token', () => {
     expect(build(source).failure()).toBeUndefined()
   })
 
+  /** As in the browser, and as the Vite compiler writes it: `fold-token.test.ts` pins that half. */
+  test('keeps the default a call naming no token falls back to', () => {
+    const source = `${imports}export const a = css({ color: token('colors.brand') ?? '#fff', bg: token('colors.red.500') ?? '#fff' })`
+    const { ctx, files } = build(source)
+
+    const result = ctx.parseFile(files[0]!)!
+    expect(Array.from(result.css, (item) => item.data)).toEqual([[{ color: '#fff', bg: 'var(--colors-red-500)' }]])
+  })
+
   test('still judges the fallback, which is used as it is', () => {
     const source = `${imports}export const a = css({ color: token('colors.brand') ?? token('colors.nope') })`
     const message = build(source).failure()?.message

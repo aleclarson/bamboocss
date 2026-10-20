@@ -188,6 +188,43 @@ export const open${index} = (props) => css(box(...props.steps))
 ).join('')}
 `
 
+/**
+ * `token()` calls, which nothing else here holds: in a style and standing alone, by reference and
+ * by value. Each is a lookup in the build's table, and folds to what it finds.
+ */
+const TOKEN_MODULE = `
+import { css } from 'styled-system/css'
+import { token } from 'styled-system/tokens'
+
+${Array.from(
+  { length: 12 },
+  (_, index) => `
+export const styled${index} = css({ color: token('colors.${TONES[index % 3]}'), padding: '${index % 4}' })
+export const reference${index} = token('colors.${TONES[index % 3]}')
+export const value${index} = token.value('colors.${TONES[index % 3]}')
+`,
+).join('')}
+`
+
+/**
+ * The same calls with their result defaulted, `token(path) ?? '#fff'` — the way a path that may
+ * name nothing is written — half of them naming a token and half naming none. A choice decided by
+ * a call, and a call compiled to the `undefined` it returns, are what this has that the module
+ * above does not.
+ */
+const GUARDED_TOKEN_MODULE = `
+import { css } from 'styled-system/css'
+import { token } from 'styled-system/tokens'
+
+${Array.from(
+  { length: 12 },
+  (_, index) => `
+export const styled${index} = css({ color: token('colors.${index % 2 ? TONES[index % 3] : 'brand'}') ?? '#fff', padding: '${index % 4}' })
+export const standing${index} = token('colors.${index % 2 ? TONES[index % 3] : 'brand'}') ?? '#fff'
+`,
+).join('')}
+`
+
 const layered = (depth: number): string =>
   depth > 0 ? `{ '& > div': ${layered(depth - 1)}, padding: '2' }` : `{ color: 'blue.500' }`
 
@@ -286,6 +323,19 @@ describe('per-module transform cost', () => {
 
   bench('analyze + fold, names cold (recipe module)', () => {
     parseAndFoldCold(RECIPE_MODULE)
+  })
+
+  // The control for the two below.
+  bench('analyze only (token module)', () => {
+    parseOnly(TOKEN_MODULE)
+  })
+
+  bench('analyze + fold (token module)', () => {
+    parseAndFold(TOKEN_MODULE)
+  })
+
+  bench('analyze + fold (guarded token module)', () => {
+    parseAndFold(GUARDED_TOKEN_MODULE)
   })
 
   // The control for the one below: the same styles, with no helper to call.

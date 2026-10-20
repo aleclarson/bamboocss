@@ -11,8 +11,9 @@
 //! - a spread must be an inline literal, or a value the evaluator fully resolved;
 //! - a computed key must evaluate; a method or accessor declines;
 //! - a choice (`?:`, `||`, `&&`, `??`, a comparison) must be *decided* at build time: its
-//!   deciding operand written right there, or reached by a name whose value is itself exact —
-//!   and `undefined`, an option nobody passed, decides as surely as a value;
+//!   deciding operand written right there, reached by a name whose value is itself exact, or a
+//!   `token()` lookup of a path that is — and `undefined`, an option nobody passed or a path
+//!   naming no token, decides as surely as a value;
 //! - a property read off an object literal answers for that property alone: its siblings may be
 //!   unknown, but nothing written after it may replace it;
 //! - a value reached through a destructuring default is a fallback, not a value;
@@ -296,8 +297,9 @@ impl<'a> Exactness<'_, 'a, '_, '_> {
         }
     }
 
-    /// Whether the operand deciding a choice is known for what it is: written right there, or
-    /// reached by a name — a binding, or a property path off one — whose value is itself exact.
+    /// Whether the operand deciding a choice is known for what it is: written right there,
+    /// reached by a name — a binding, or a property path off one — whose value is itself exact, or
+    /// looked up by `token()` from a path that is.
     ///
     /// A name used to be refused outright: a value reached through one recorded the declaration
     /// rather than the value, and truthiness is what that changes. A binding written after its
@@ -316,6 +318,22 @@ impl<'a> Exactness<'_, 'a, '_, '_> {
                     || matches!(unwrap(&member.expression), Expression::NumericLiteral(_)) =>
             {
                 self.accounts(expression)
+            }
+            // `token(path)` is a lookup in the table the runtime looks the path up in, so once the
+            // path is known, so is what it returns: the token's variable or value, or `undefined`
+            // for a path naming none. `token('colors.brand') ?? '#fff'` is how a path that may name
+            // nothing is written now the fallback argument is retired, and was refused here for
+            // being a call. What follows the path goes with the call, so it has to be inert.
+            Expression::CallExpression(call) if self.evaluator.is_token_call(call) => {
+                call.arguments
+                    .first()
+                    .and_then(|argument| argument.as_expression())
+                    .is_some_and(|path| self.accounts(path))
+                    && call
+                        .arguments
+                        .iter()
+                        .skip(1)
+                        .all(|argument| argument.as_expression().is_some_and(is_inert_literal))
             }
             _ => is_written_here(expression),
         }

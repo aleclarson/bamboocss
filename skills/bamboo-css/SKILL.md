@@ -107,7 +107,7 @@ const panel = css({ width: 'var(--panel-width)', md: { width: '100%' } })
 | `recipe-call`       | A recipe selection it cannot enumerate: a spread, a computed key, a responsive object.               |
 | `raw-call`          | `.raw()` used as a value.                                                                            |
 | `runtime-binding`   | A Bamboo import read rather than called, usually an erased recipe aliased, passed on or re-exported. |
-| `unresolved-token`  | A `token()` path that names no token.                                                                |
+| `unresolved-token`  | A `token()` path that names no token. Default one that may: `token(path) ?? '#fff'`.                 |
 | `unknown-condition` | A nested key that is neither a property nor a condition: `_hovr`, or `svg` written without `&`.      |
 | `unsupported-kind`  | A recognised API used in a shape whose result is not a class.                                        |
 | `compile-failed`    | The module threw. Read the error logged above it.                                                    |
