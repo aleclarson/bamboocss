@@ -548,6 +548,43 @@ export const isRecipeCall = (call: TSESTree.CallExpression, context: RuleContext
 }
 
 /**
+ * Whether a property selects a variant rather than styling one: under a recipe's `defaultVariants`,
+ * or among a compound variant's conditions beside its `css`. Its key names a variant axis and its
+ * value a variant, whatever style they happen to share a name with.
+ */
+export const isVariantSelection = (node: TSESTree.Property) => {
+  let current = node.parent as TSESTree.Node | undefined
+  while (current && current.type !== 'CallExpression') {
+    if (current.type === 'Property' && !current.computed) {
+      const key = getKeyName(current.key)
+      if (key === 'defaultVariants') return true
+      if (key === 'css') return false
+    }
+    if (current.type === 'ArrayExpression' && current.parent?.type === 'Property') {
+      if (getKeyName(current.parent.key) === 'compoundVariants') return true
+    }
+    current = current.parent as TSESTree.Node | undefined
+  }
+  return false
+}
+
+/**
+ * Whether a key is one the pattern its object is handed to declares, which the pattern's
+ * transform reads by that name: `size` in `circle({ size: '4' })`. A pattern can declare one named
+ * as a style is — a `padding` it maps onto a scale of its own — and the key is then the
+ * pattern's, not the style's.
+ */
+export const isPatternProperty = (node: TSESTree.Property, context: RuleContext<any, any>) => {
+  const call = node.parent.parent
+  if (node.computed || node.parent.type !== 'ObjectExpression') return false
+  if (call?.type !== 'CallExpression' || call.callee.type !== 'Identifier') return false
+  const name = getKeyName(node.key)
+  const imports = getImports(context)
+  if (name === undefined || imports.length === 0) return false
+  return Boolean(syncAction('isPatternProperty', getSyncOptions(context), name, call.callee.name, imports))
+}
+
+/**
  * The tokens holding `value` as written, in the category of the first of `properties` that reads
  * one, innermost first: what to write instead.
  */

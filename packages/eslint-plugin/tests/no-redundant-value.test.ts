@@ -8,10 +8,9 @@ import { eslintTester } from '../test-utils'
  * written as `16px`, `16px 16px` and `16px 16px 0 16px`, one shadow written four ways. Each spelling
  * earns its own class and its own rule, so the sheet carries the drift.
  *
- * The rule fixes rather than suggests, which is the exception in this plugin — every other rule
- * reports a preference and leaves the edit to the reader. The two spellings here compute to the same
- * thing, so there is nothing to weigh up, and the drift runs to hundreds of call sites in the
- * codebase this came from. `output` is therefore what each case asserts: what `--fix` writes back.
+ * The rule fixes rather than suggests: the two spellings here compute to the same thing, so there is
+ * nothing to weigh up, and the drift runs to hundreds of call sites in the codebase this came from.
+ * `output` is therefore what each case asserts: what `--fix` writes back.
  */
 const invalid = (code: string, output: string) => ({
   code: multiline`

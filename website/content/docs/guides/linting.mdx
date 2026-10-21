@@ -25,7 +25,8 @@ import tsParser from '@typescript-eslint/parser'
 export default [{ files: ['**/*.{ts,tsx}'], languageOptions: { parser: tsParser } }, bamboo.configs['flat/recommended']]
 ```
 
-`bamboo.configs['flat/all']` turns on every rule instead. With `defineConfig`, the same is
+`bamboo.configs['flat/all']` turns on every rule instead, except `prefer-shorthand-properties`, the opposite of
+`prefer-longhand-properties`: with both on, each would undo the other's fixes. With `defineConfig`, the same is
 `extends: ['bamboo/flat/recommended']` beside `plugins: { bamboo }`.
 
 The configs name no parser: TypeScript files take the one your project configures — the line above, or

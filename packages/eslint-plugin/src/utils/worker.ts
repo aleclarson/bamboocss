@@ -314,6 +314,13 @@ export function run(action: 'resolveLongHand', options: Options, name: string): 
 export function run(action: 'isValidProperty', options: Options, name: string, patternName?: string): boolean
 export function run(action: 'matchFile', options: Options, name: string, imports: ImportResult[]): boolean
 export function run(action: 'isRecipe', options: Options, name: string, imports: ImportResult[]): boolean
+export function run(
+  action: 'isPatternProperty',
+  options: Options,
+  property: string,
+  name: string,
+  imports: ImportResult[],
+): boolean
 export function run(action: 'matchImports', options: Options, result: MatchImportResult): boolean
 export function run(action: 'filterImports', options: Options, imports: MatchImportResult[]): MatchImportResult[]
 export function run(action: 'getPropCategory', options: Options, property: string): string
@@ -401,6 +408,9 @@ export async function runAsync(action: string, options: Options, ...args: any): 
     case 'isRecipe':
       // @ts-expect-error cast
       return isRecipe(context, ...args)
+    case 'isPatternProperty':
+      // @ts-expect-error cast
+      return isPatternProperty(context, ...args)
     case 'matchFile':
       // @ts-expect-error cast
       return matchFile(context, ...args)
@@ -466,6 +476,17 @@ const matchFile = (context: Generator, name: string, imports: ImportResult[]) =>
 /** Whether `name`, among a file's imports, is a recipe: a call to it selects variants. */
 const isRecipe = (context: Generator, name: string, imports: ImportResult[]) => {
   return context.imports.file(imports).isValidRecipe(name)
+}
+
+/**
+ * Whether `property` is one the pattern `name` calls declares, which its transform reads by that
+ * name: `size` in `circle({ size: '4' })`.
+ */
+const isPatternProperty = (context: Generator, property: string, name: string, imports: ImportResult[]) => {
+  const file = context.imports.file(imports)
+  if (!file.isValidPattern(name)) return false
+  const properties = context.patterns.getConfig(file.getName(name))?.properties
+  return properties !== undefined && Object.hasOwn(properties, property)
 }
 
 // Refactored to arrow function, removed async

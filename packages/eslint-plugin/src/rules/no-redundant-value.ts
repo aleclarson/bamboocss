@@ -114,9 +114,7 @@ const rule = createRule({
 
       context.report({
         data,
-        // Fixed rather than suggested, which is the exception in this plugin. The rest report a
-        // *preference* — `marginLeft` over `ml` is a choice a reader may disagree with, so the
-        // edit is theirs to make. Here the two spellings compute to the same thing, which is the
+        // Fixed rather than suggested: the two spellings compute to the same thing, which is the
         // rule's whole premise, so there is nothing to weigh up. It also only pays in bulk: the
         // codebase this was written from holds the drift in the hundreds.
         fix: (fixer) => {

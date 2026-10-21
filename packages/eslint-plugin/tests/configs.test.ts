@@ -71,11 +71,12 @@ describe('configs', () => {
   })
 
   // An error where what the build emits would be wrong; every other rule warns.
-  test('all turns every rule on, three of them as errors', () => {
+  test('all turns every rule on but the opposite of one it keeps, three of them as errors', () => {
     const rules = bamboo.configs['flat/all'].rules ?? {}
 
     expect(Object.keys(rules).sort()).toEqual(
       Object.keys(bamboo.rules)
+        .filter((rule) => rule !== 'prefer-shorthand-properties')
         .map((rule) => `bamboo/${rule}`)
         .sort(),
     )
@@ -84,6 +85,23 @@ describe('configs', () => {
       'bamboo/no-config-function-in-source',
       'bamboo/no-invalid-token-paths',
     ])
+  })
+
+  // `--fix` reruns until nothing changes. With `prefer-shorthand-properties` on beside
+  // `prefer-longhand-properties`, each undid the other's renames, and the run ended on whichever
+  // spelling its last pass wrote: `ml` came back `marginLeft`, `paddingInline` came back `px`.
+  test('all settles a property on its longhand under --fix', () => {
+    const linter = new Linter({ configType: 'flat' })
+    const source = `import { css } from './bamboo/css'\nexport const styles = css({ ml: '4', paddingInline: '2' })\n`
+
+    const { messages, output } = linter.verifyAndFix(
+      source,
+      [{ files: ['**/*.ts'], languageOptions: { parser: tsParser } }, bamboo.configs['flat/all']],
+      'styles.ts',
+    )
+
+    expect(output).toContain(`css({ marginLeft: '4', paddingInline: '2' })`)
+    expect(messages.map((message) => message.ruleId)).not.toContain('bamboo/prefer-longhand-properties')
   })
 
   // The guide's table is written by hand, so it is held to the plugin here.

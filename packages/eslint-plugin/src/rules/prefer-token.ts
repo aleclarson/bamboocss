@@ -1,5 +1,5 @@
 import { createRule } from '../utils'
-import { getAncestor, getTokensWithValue, isBambooAttribute, isRecipeCall } from '../utils/helpers'
+import { getAncestor, getTokensWithValue, isBambooAttribute, isRecipeCall, isVariantSelection } from '../utils/helpers'
 import { isCallExpression, isLiteral, isTemplateLiteral } from '../utils/nodes'
 import { type TSESTree } from '@typescript-eslint/utils'
 
@@ -21,27 +21,6 @@ const keysOf = (node: TSESTree.Property) => {
     current = current.parent as TSESTree.Node | undefined
   }
   return keys
-}
-
-/**
- * Whether a property selects a variant rather than styling one: under a recipe's `defaultVariants`,
- * or among a compound variant's conditions beside its `css`. Its value names a variant, and a token
- * written in its place would select none.
- */
-const isVariantSelection = (node: TSESTree.Property) => {
-  let current = node.parent as TSESTree.Node | undefined
-  while (current && current.type !== 'CallExpression') {
-    if (current.type === 'Property' && !current.computed) {
-      const key = keyName(current.key)
-      if (key === 'defaultVariants') return true
-      if (key === 'css') return false
-    }
-    if (current.type === 'ArrayExpression' && current.parent?.type === 'Property') {
-      if (keyName(current.parent.key) === 'compoundVariants') return true
-    }
-    current = current.parent as TSESTree.Node | undefined
-  }
-  return false
 }
 
 /**

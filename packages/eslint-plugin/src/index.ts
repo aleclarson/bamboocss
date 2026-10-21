@@ -7,11 +7,11 @@ import { rules } from './rules'
 type Configs = {
   /** The rules meant for any project, for `.eslintrc`: `extends: ['plugin:bamboo/recommended']`. */
   recommended: Linter.LegacyConfig
-  /** Every rule, for `.eslintrc`: `extends: ['plugin:bamboo/all']`. */
+  /** Every rule except `prefer-shorthand-properties`, for `.eslintrc`: `extends: ['plugin:bamboo/all']`. */
   all: Linter.LegacyConfig
   /** The rules meant for any project, for flat config: `export default [bamboo.configs['flat/recommended']]`. */
   'flat/recommended': Linter.Config
-  /** Every rule, for flat config. */
+  /** Every rule except `prefer-shorthand-properties`, for flat config. */
   'flat/all': Linter.Config
 }
 

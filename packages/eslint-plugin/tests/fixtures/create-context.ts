@@ -20,6 +20,23 @@ const sandboxConfig = defineConfig({
   },
   include: ['./src/**/*.{tsx,jsx}', './pages/**/*.{jsx,tsx}'],
   outdir: 'styled-system',
+  patterns: {
+    extend: {
+      // A pattern declaring properties named as styles are — `padding`, and `rounded`, the
+      // shorthand for `borderRadius` — which its transform reads by those names: a key renamed to
+      // another spelling of the style would stop reaching it.
+      panel: {
+        properties: {
+          padding: { type: 'token', value: 'spacing' },
+          rounded: { type: 'boolean' },
+        },
+        transform(props) {
+          const { padding, rounded, ...rest } = props
+          return { borderRadius: rounded ? 'md' : undefined, padding, ...rest }
+        },
+      },
+    },
+  },
   preflight: true,
   theme: {
     extend: {
