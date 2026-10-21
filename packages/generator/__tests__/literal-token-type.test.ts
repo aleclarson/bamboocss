@@ -1,5 +1,6 @@
 import { createContext } from '@bamboocss/fixture'
 import { describe, expect, test } from 'vitest'
+import { generateTokenJs } from '../src/artifacts/js/token'
 import { generateTokenTypes } from '../src/artifacts/types/token-types'
 
 /**
@@ -125,5 +126,68 @@ describe('LiteralToken', () => {
     expect(tokens.has('sizes.probe')).toBe(false)
     // The control: an ordinary size in the same build still qualifies.
     expect(tokens.has('sizes.4')).toBe(true)
+  })
+})
+
+/**
+ * `NumericToken` is the part of `LiteralToken` whose literal is a number, which `token.value()`
+ * returns as one: the runtime's table is JSON, so `zIndex.modal` comes back as 1400, not "1400".
+ * Typed `string`, it failed a prop taking a number and let a string method through to a runtime
+ * that has none.
+ */
+describe('NumericToken', () => {
+  const numericTokens = (config?: Parameters<typeof createContext>[0]) => {
+    const types = generateTokenTypes(createContext(config))
+    const match = types.match(/export type NumericToken = ([^\n]*)/)
+
+    return new Set((match?.[1] ?? '').split('|').map((entry) => entry.trim().replace(/^"|"$/g, '')))
+  }
+
+  test('includes a token whose value is a number, negative and zero too', () => {
+    const tokens = numericTokens()
+
+    expect(tokens.has('zIndex.modal')).toBe(true)
+    expect(tokens.has('zIndex.hide')).toBe(true)
+    expect(tokens.has('zIndex.base')).toBe(true)
+  })
+
+  test('excludes a literal written as a string, however much it reads as a number', () => {
+    const tokens = numericTokens()
+
+    expect(tokens.has('fontWeights.bold')).toBe(false)
+    expect(tokens.has('colors.red.300')).toBe(false)
+  })
+
+  test('excludes a conditional token holding numbers, which has no single literal', () => {
+    const config = {
+      theme: { extend: { semanticTokens: { zIndex: { layer: { value: { base: 10, _dark: 20 } } } } } },
+    } as never
+
+    expect(generateTokenTypes(createContext(config))).toMatch(/export type ZIndexToken = [^\n]*"layer"/)
+    expect(numericTokens(config).has('zIndex.layer')).toBe(false)
+  })
+
+  test('excludes a number JSON cannot write, which the runtime holds as null', () => {
+    const config = { theme: { extend: { tokens: { zIndex: { top: { value: Infinity } } } } } } as never
+
+    expect(literalTokens(config).has('zIndex.top')).toBe(true)
+    expect(numericTokens(config).has('zIndex.top')).toBe(false)
+    expect(numericTokens(config).has('zIndex.modal')).toBe(true)
+  })
+
+  /** What the type says against what the generated runtime returns, for every literal path. */
+  test('agrees with the numbers the generated runtime holds', () => {
+    const ctx = createContext()
+    const generated = JSON.parse(generateTokenJs(ctx).js.match(/const tokens = (\{[\s\S]*?\n\})/)![1]!) as Record<
+      string,
+      { value: unknown }
+    >
+    const numeric = numericTokens()
+
+    const disagreeing = [...literalTokens()].filter(
+      (path) => numeric.has(path) !== (typeof generated[path]?.value === 'number'),
+    )
+    expect(numeric.size).toBeGreaterThan(0)
+    expect(disagreeing).toEqual([])
   })
 })

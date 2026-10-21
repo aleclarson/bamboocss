@@ -39,6 +39,7 @@ export function generateTokenTypes(ctx: Context) {
 
   const tokenSet = new Set<string>()
   const literalTokenSet = new Set<string>()
+  const numericTokenSet = new Set<string>()
 
   const result = new Set<string>(['export type Tokens = {'])
 
@@ -93,6 +94,9 @@ export function generateTokenTypes(ctx: Context) {
       if (typeof resolved === 'string' && COMPUTED_BY_CSS.test(resolved)) continue
 
       literalTokenSet.add(`${category}.${prop}`)
+      // The runtime's table is JSON, so a number comes back as one: `zIndex.modal` is 1400, not
+      // "1400". One that is not finite JSON writes as `null`, which is no number either.
+      if (Number.isFinite(resolved)) numericTokenSet.add(`${category}.${prop}`)
     }
   }
 
@@ -118,6 +122,8 @@ export function generateTokenTypes(ctx: Context) {
     // at all, on the same condition `Token` uses, since a theme that declares none constrains
     // nothing.
     `export type LiteralToken = ${unionType(literalTokenSet, { fallback: tokenSet.size ? 'never' : 'string' })}`,
+    // The subset of those whose literal is a number, which `token.value()` returns as one.
+    `export type NumericToken = ${unionType(numericTokenSet, { fallback: 'never' })}`,
   )
 
   return outdent.string(arr.join('\n\n'))

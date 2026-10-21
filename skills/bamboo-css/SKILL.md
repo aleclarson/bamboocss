@@ -134,7 +134,8 @@ Not failures: `not-imported` (a local function with the same name), `overlapping
 - Inside a composite value, reference a token as `token(path)`: `border: '1px solid token(colors.gray.200)'`. The curly
   form, `{colors.gray.200}`, is retired and is an error.
 - In JavaScript, `token('colors.blue.500')` from `<outdir>/tokens` is `var(--colors-blue-500)`, and `token.value()` is
-  the raw value, for a canvas or a chart. Neither takes a fallback: write `token(path) ?? '#fff'`.
+  the raw value, for a canvas or a chart, and a number for a token holding one: `token.value('zIndex.modal')` is `1400`.
+  Neither takes a fallback: write `token(path) ?? '#fff'`.
 - Alternatives for older browsers: `fallback('100dvh', '100vh')` from `<outdir>/css`, the preferred value first.
 - An animation one component uses: `const fadeIn = keyframes({ from: { opacity: 0 }, to: { opacity: 1 } })` from
   `<outdir>/css` writes the `@keyframes` block and returns its name, for ``css({ animation: `${fadeIn} 0.2s` })``. One

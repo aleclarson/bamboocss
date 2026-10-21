@@ -4224,7 +4224,7 @@ test('use raw value when possible for semanticTokens', () => {
   ).toMatchInlineSnapshot(
     `
     {
-      "dts": "import type { Token, LiteralToken } from './tokens';
+      "dts": "import type { Token, LiteralToken, NumericToken } from './tokens';
 
     export declare const token: {
       /**
@@ -4235,16 +4235,19 @@ test('use raw value when possible for semanticTokens', () => {
        */
       (path: Token): string
       /**
-       * The resolved literal — \`#fca5a5\`. Use where css variables cannot be resolved, such as
-       * a canvas fill or a charting library.
+       * The resolved literal — \`#fca5a5\`, or the number for a token holding one: \`zIndex.modal\`
+       * is \`1400\`. Use where css variables cannot be resolved, such as a canvas fill or a
+       * charting library.
        *
        * Restricted to the tokens that have one. A virtual or conditional token resolves to its
        * \`var()\` because there is no single value to hand back, and a negative token to
        * \`calc(var(--spacing-4) * -1)\` because it has no declaration of its own — so asking for
        * a literal that cannot exist is a type error rather than a reference the caller then
        * hands to a canvas.
+       *
+       * A path typed as any of them may name either kind, and gets \`string | number\`.
        */
-      value: (path: LiteralToken) => string
+      value: <Path extends LiteralToken>(path: Path) => Path extends NumericToken ? number : string
     }
 
     export * from './tokens';",

@@ -92,7 +92,8 @@ const tokens = {
 ```
 
 - The `token()` function returns the CSS custom property that references the token — the same for every token.
-- The `token.value()` function returns the resolved raw value.
+- The `token.value()` function returns the resolved raw value: a string, or the number for a token holding one, typed as
+  one — `token.value('zIndex.modal')` is `1400`.
 
 Both are typesafe and expect a known dot-separated token path. Neither takes a fallback argument: a path that names no
 token returns `undefined`, so `token('colors.brand') ?? '#fff'` supplies one in the language.
