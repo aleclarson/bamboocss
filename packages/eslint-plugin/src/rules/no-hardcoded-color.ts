@@ -1,13 +1,22 @@
 import { createRule } from '../utils'
 import {
   extractTokens,
-  isBambooAttribute,
+  getAncestor,
+  getStyleProperty,
   isBambooProp as isBambooProperty,
-  isRecipeVariant,
+  isInBambooStyle,
+  isRecipeCall,
+  isVariantSelection,
   isColorAttribute as originalIsColorAttribute,
   isColorToken as originalIsColorToken,
 } from '../utils/helpers'
-import { isIdentifier, isJSXExpressionContainer, isJSXIdentifier, isLiteral, isTemplateLiteral } from '../utils/nodes'
+import {
+  isCallExpression,
+  isJSXExpressionContainer,
+  isJSXIdentifier,
+  isLiteral,
+  isTemplateLiteral,
+} from '../utils/nodes'
 import { type TSESTree } from '@typescript-eslint/utils'
 
 export const RULE_NAME = 'no-hardcoded-color'
@@ -119,27 +128,37 @@ const rule = createRule({
       },
 
       Property(node: TSESTree.Property) {
-        if (!isIdentifier(node.key)) {
-          return
-        }
-
-        if (!isBambooAttribute(node, context)) {
-          return
-        }
-
-        if (isRecipeVariant(node, context)) {
-          return
-        }
-
-        const attributeName = node.key.name
         const valueNode = node.value
+        const isWrittenOut =
+          isLiteral(valueNode) || (isTemplateLiteral(valueNode) && valueNode.expressions.length === 0)
 
+        // The tree first: this runs for every key in every file, and most are nothing of bamboo's.
+        if (!isWrittenOut || !isInBambooStyle(node, context)) {
+          return
+        }
+
+        // A value under `base` or a condition is one of the property holding it —
+        // `color: { base: '#ef4444', _hover: '#dc2626' }` — and a quoted key is a property like any
+        // other. A computed key is whatever its expression holds, not the name it is written with.
+        const property = getStyleProperty(node, context)
+        if (!property || property.node.computed) {
+          return
+        }
+
+        // Not a variant being chosen — the argument a recipe is called with, `defaultVariants`, a
+        // compound variant's conditions — whose value names a variant, whatever style its axis
+        // shares a name with: `color: 'loud'`. Where a recipe declares its variants, every value
+        // written out is a style's.
+        const call = getAncestor(isCallExpression, node)
+        if (isVariantSelection(property.node) || (call && isRecipeCall(call, context))) {
+          return
+        }
+
+        // Only a colour property is checked, so a key in the call that is no style goes no further.
         if (isLiteral(valueNode)) {
-          const value = valueNode.value?.toString() || ''
-          checkColorValue(valueNode, value, attributeName)
-        } else if (isTemplateLiteral(valueNode) && valueNode.expressions.length === 0) {
-          const value = valueNode.quasis[0].value.raw
-          checkColorValue(valueNode.quasis[0], value, attributeName)
+          checkColorValue(valueNode, valueNode.value?.toString() || '', property.name)
+        } else if (isTemplateLiteral(valueNode)) {
+          checkColorValue(valueNode.quasis[0], valueNode.quasis[0].value.raw, property.name)
         }
       },
     }
