@@ -72,18 +72,19 @@ const tokenKeys = ['description', 'extensions', 'type', 'value', 'deprecated']
 /**
  * Options whose scalar form is shorthand for setting every member of their object form.
  *
- * `hash: true` says both `cssVar` and `className`; `prefix: 'bb'` says both; `preflight: true`
- * says "on, with the defaults". Expanding them is what lets the object forms compose: a preset
- * that sets `prefix.className` and an app that sets `prefix.cssVar` should end up with both,
- * and before this the app's object replaced the preset's wholesale — silently, since the two
- * name different members. `hash`'s members are optional, so writing the partial form that
- * triggered it is the natural thing to do.
+ * `hash: true` says both `cssVar` and `className`, and so does `hash: 'auto'`; `prefix: 'bb'` says
+ * both; `preflight: true` says "on, with the defaults". Expanding them is what lets the object
+ * forms compose: a preset that sets `prefix.className` and an app that sets `prefix.cssVar`
+ * should end up with both, and before this the app's object replaced the preset's wholesale —
+ * silently, since the two name different members. `hash`'s members are optional, so writing the
+ * partial form that triggered it is the natural thing to do. `'auto'` was left a scalar, and an
+ * app's `hash: 'auto'` lost to any preset setting either member.
  *
  * `preflight: false` has no object form — there is no member meaning "off" — so it stays a
  * scalar and wins outright when it is the value the winning config states.
  */
 const SCALAR_SHORTHANDS: Record<string, (value: any) => any> = {
-  hash: (value) => (typeof value === 'boolean' ? { cssVar: value, className: value } : value),
+  hash: (value) => (typeof value === 'boolean' || value === 'auto' ? { cssVar: value, className: value } : value),
   prefix: (value) => (typeof value === 'string' ? { cssVar: value, className: value } : value),
   preflight: (value) => (value === true ? {} : value),
 }

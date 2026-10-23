@@ -105,6 +105,25 @@ describe('one context for the compiler and the stylesheet', () => {
     expect(await sheet()).toContain(`.${className}`)
   })
 
+  /** What a project setting no `hash` gets: hashed in a build, readable in the dev server. */
+  test('by default a build hashes the class the compiler folded, and the sheet has its rule', async () => {
+    const root = project({ 'src/app.tsx': APP })
+    const { fold, sheet } = await run(root, 'build')
+
+    const className = (await fold('src/app.tsx', APP))?.match(/"([^"\s]+)"/)?.[1]
+
+    expect(className, 'a hash, not the readable name').toMatch(/^[a-zA-Z]+$/)
+    expect(await sheet()).toContain(`.${className}`)
+  })
+
+  test('by default the dev server keeps the class readable, and the sheet has its rule', async () => {
+    const root = project({ 'src/app.tsx': APP })
+    const { fold, sheet } = await run(root, 'serve')
+
+    expect(await fold('src/app.tsx', APP)).toContain('"c_blue"')
+    expect(await sheet()).toContain('.c_blue')
+  })
+
   /**
    * The compiler parses every module it folds, and those parses now run against the context
    * the sheet is emitted from. Sending them to the context's own encoder would put a rule in
@@ -114,7 +133,8 @@ describe('one context for the compiler and the stylesheet', () => {
    */
   test('a module only the compiler read contributes no rule', async () => {
     const outside = `import { css } from 'styled-system/css'\nexport const cls = css({ color: 'rebeccapurple' })\n`
-    const root = project({ 'src/app.tsx': APP, 'elsewhere/loose.tsx': outside })
+    // Readable, so the fold's output says which declaration it named.
+    const root = project({ 'src/app.tsx': APP, 'elsewhere/loose.tsx': outside }, 'hash: false,')
     const { fold, sheet } = await run(root, 'build')
 
     // The `buildStart` sheet is consumed first, so what is asserted below is a pass that ran

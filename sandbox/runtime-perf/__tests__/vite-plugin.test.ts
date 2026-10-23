@@ -5094,7 +5094,8 @@ describe('a source include reached through a link', () => {
     writeFileSync(
       // CommonJS once bundled, so it is compiled in place rather than imported from a temporary file.
       join(app, 'bamboo.config.ts'),
-      `export default { include: ['src/**/*.tsx', '${packages}'], outdir: 'styled-system', preflight: false }\n`,
+      // Readable, so the linked module's atom can be found by name in both outputs.
+      `export default { include: ['src/**/*.tsx', '${packages}'], outdir: 'styled-system', preflight: false, hash: false }\n`,
     )
     writeFileSync(
       join(app, 'src/main.tsx'),
@@ -5566,13 +5567,16 @@ describe('a project with no generated output yet', () => {
     // Written by the build itself, from nothing.
     expect(readdirSync(outdir)).toContain('css')
 
-    // And reached: the import resolved, the call folded, and the sheet carries its rule. A
-    // build that merely wrote the files late would still fail one of these.
+    // And reached: the import resolved, the call folded — to a hashed name, which is what a
+    // build gives a project that sets no `hash` — and the sheet carries its rule. A build that
+    // merely wrote the files late would still fail one of these.
     const outputs = [result].flat().flatMap((bundle) => bundle.output)
     const js = outputs.map((output) => ('code' in output ? output.code : '')).join('\n')
     const css = outputs.map((output) => ('source' in output ? String(output.source) : '')).join('\n')
+    const className = js.match(/const cls = "([^"]+)"/)?.[1]
 
-    expect(js).toContain('d_flex')
+    expect(className).toMatch(/^[a-zA-Z]+$/)
+    expect(css).toContain(`.${className}`)
     expect(css).toContain('display: flex')
   }, 120_000)
 })

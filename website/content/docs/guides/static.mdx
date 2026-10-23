@@ -9,10 +9,13 @@ This is useful if you want to use Bamboo in an HTML project or you want absolute
 
 ## Usage
 
-To generate a static set of CSS classes, add them to your `bamboo.config.js` file:
+To generate a static set of CSS classes, add them to your `bamboo.config.js` file. Markup you write by hand has to name
+these classes, so keep their names readable with `hash: false` — production builds and CLI output hash class names by
+default:
 
 ```js
 export default {
+  hash: false,
   staticCss: {
     // the css properties you want to generate
     css: [],

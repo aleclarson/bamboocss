@@ -18,6 +18,10 @@ const defaults: UserConfig = {
   include: [],
   //
   cssVarRoot: ':where(html)',
+  // Production hashes class names by default, and a fixture context is production. Readable
+  // names are what make an emitted rule reviewable, so the snapshots keep them; a test about
+  // naming states the setting it is about.
+  hash: false,
 }
 const config = Object.assign({}, fixturePreset, defaults)
 

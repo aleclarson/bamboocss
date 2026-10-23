@@ -15,4 +15,7 @@ export default defineConfig({
 
   // The output directory for your css system
   outdir: 'styled-system',
+
+  // The compiler tests building this project for production find atoms by name; readable ones say which.
+  hash: false,
 })

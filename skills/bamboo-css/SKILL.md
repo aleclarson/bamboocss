@@ -189,8 +189,8 @@ export const Button = (props: ButtonProps) => {
 - Don't write Tailwind class strings, JSX style props, `styled`, `<Box>`, `<Stack>`, `createStyleContext`, template
   literal styles (`` css`color: red` ``), or anything from `styled-system/jsx`. None of it exists.
 - Don't edit `styled-system/`. It is generated.
-- Don't assert on generated class names in tests. They are opaque atoms, and under `hash: 'auto'` a production build
-  names them differently from the dev server. Select by role or a `data-*` attribute.
+- Don't assert on generated class names in tests. They are opaque atoms, and a production build hashes them while the
+  dev server does not. Select by role or a `data-*` attribute.
 - Don't add `!important` to win a cascade fight.
 
 ## When styles don't apply

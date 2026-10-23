@@ -6,6 +6,8 @@ export default defineConfig({
   // Scratch compiler fixtures are written beside source so relative imports resolve.
   exclude: ['**/*.folded.tsx', '**/*.broken.tsx'],
   outdir: 'styled-system',
+  // The tests here build for production and find atoms by name; readable ones say which.
+  hash: false,
   theme: {
     tokens: {
       colors: {

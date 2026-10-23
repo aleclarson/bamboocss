@@ -434,9 +434,10 @@ such mix under `opaque-composition`, apart from an ordinary rejected call, so
 ### Hashing
 
 The `hash` option shortens class names and CSS variables, and it is the only thing that does. The Vite compiler and CLI
-artifacts read the same setting, so a project sets it here rather than per command. Use `hash: 'auto'` for readable
-names in the Vite dev server and hashed names in production and CLI output. See the
-[hash reference](/docs/references/config#hash) for independent class-name and CSS-variable settings.
+artifacts read the same setting, so a project sets it here rather than per command. Class names are readable in the Vite
+dev server and hashed in production and CLI output unless you set it; `hash: true` below hashes class names and CSS
+variables everywhere. See the [hash reference](/docs/references/config#hash) for independent class-name and CSS-variable
+settings, and for when `hash: false` is needed.
 
 ```ts filename="bamboo.config.ts"
 import { defineConfig } from '@bamboocss/dev'

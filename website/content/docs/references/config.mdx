@@ -283,29 +283,41 @@ config. [`bamboo debug`](/docs/references/cli#debug) always writes unminified cs
 
 **Type**: `boolean | 'auto' | { cssVar?: boolean | 'auto'; className?: boolean | 'auto' }`
 
-**Default**: `false`
+**Default**: `{ className: 'auto', cssVar: false }`
 
-Whether to hash the generated class names / css variables. This is useful if want to shorten the class names or css
-variables. `true` hashes both; the object form controls each independently, with omitted keys defaulting to `false`.
-`'auto'` keeps names readable in the Vite dev server and hashes them in production builds and CLI output. The Vite
-integration sets the development mode for you.
+Whether to hash the generated class names / css variables. `'auto'` keeps names readable in the Vite dev server and
+hashes them in production builds and CLI output; the Vite integration sets the development mode for you. `true` hashes
+in every mode, and `false` never does. The object form sets each independently, and a key it leaves out keeps its
+default.
+
+Class names are hashed in production by default because a readable name costs every server render that writes it. A name
+holding any of `& " ' < >` — a selector condition, a quoted value — makes React escape the whole attribute, and the
+names are long. On the css-in-js benchmark's product grid, React rendered readable names at 65% of plain React's speed
+and hashed ones as fast as plain React. The gzipped stylesheet is about 4% larger, because readable names repeat and
+hashes do not.
+
+Set `hash: false` only if markup written by hand names Bamboo's classes — an HTML page, or a class
+[`staticCss`](#staticcss) emits for a name assembled at runtime. Nothing can write a hashed name by hand, and a build
+that hashes `staticCss` classes warns about it.
 
 ```ts
 export default defineConfig({
-  hash: 'auto',
-  // Or hash only class names in production:
-  // hash: { className: 'auto', cssVar: false },
+  // Readable class names in production too:
+  hash: false,
+  // Or hash variables as well as class names, in production only:
+  // hash: 'auto',
 })
 ```
 
 For the [shared example](#prefix), the emitted class and variable are:
 
-| setting                              | class             | variable                 |
-| ------------------------------------ | ----------------- | ------------------------ |
-| `false`                              | `.text_blue\.500` | `var(--colors-blue-500)` |
-| `true`                               | `.dOFUTE`         | `var(--cgpxvS)`          |
-| `{ cssVar: true, className: false }` | `.text_blue\.500` | `var(--cgpxvS)`          |
-| `{ cssVar: false, className: true }` | `.dOFUTE`         | `var(--colors-blue-500)` |
+| setting                                      | class             | variable                 |
+| -------------------------------------------- | ----------------- | ------------------------ |
+| default, in the Vite dev server              | `.text_blue\.500` | `var(--colors-blue-500)` |
+| default, in a production build or CLI output | `.dOFUTE`         | `var(--colors-blue-500)` |
+| `false`                                      | `.text_blue\.500` | `var(--colors-blue-500)` |
+| `true`                                       | `.dOFUTE`         | `var(--cgpxvS)`          |
+| `{ cssVar: true, className: false }`         | `.text_blue\.500` | `var(--cgpxvS)`          |
 
 This option applies to every build path, Vite included — it is the only thing that shortens class names. Vite's compiler
 composes StyleSets before naming and then emits the names the stylesheet is written under, so hashing changes what those
@@ -1009,7 +1021,8 @@ Used to generate css utility classes for your project.
 
 <Callout type="info">
   This is for classes your source never writes — a class name assembled at runtime, or one applied from outside the
-  files [`include`](#include) covers.
+  files [`include`](#include) covers. Whatever writes those names writes them by hand, so it needs them readable: set
+  [`hash: false`](#hash), since production hashes class names by default.
 
 It is **not** the way to stop a token being pruned, which is what it used to be reached for. `staticCss` emits a utility
 _rule_ per value, so keeping a colour palette alive meant shipping a rule per colour purely to hold its declaration up —

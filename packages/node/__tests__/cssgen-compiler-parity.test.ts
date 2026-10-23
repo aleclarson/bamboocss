@@ -18,7 +18,8 @@ afterAll(() => {
   temporaryDirectories.clear()
 })
 
-const createProject = () => {
+/** Readable class names unless told otherwise, so an atom can be asserted by name. */
+const createProject = (naming = 'hash: false,') => {
   const directory = mkdtempSync(join(tmpdir(), 'bamboo-cssgen-compiler-'))
   temporaryDirectories.add(directory)
   writeFileSync(
@@ -27,6 +28,7 @@ const createProject = () => {
   preflight: false,
   include: ['src/**/*.ts'],
   outdir: 'styled-system',
+  ${naming}
   theme: {
     extend: {
       recipes: {
@@ -78,6 +80,21 @@ describe('cssgen compiled sheet', () => {
     expect(fromCssgen).toContain('.fs_14px')
     expect(fromCssgen).not.toContain('.chip')
     expect(fromCssgen).not.toMatch(/@layer recipes\b/)
+  })
+
+  /** Both hash by default; a name only one of them gave would be a class with no rule. */
+  test('matches Vite builder emission under the default hashed names', async () => {
+    const cwd = createProject('')
+    const fromCssgen = await emitCssgen(cwd)
+
+    const builder = new Builder()
+    await builder.setup({ cwd })
+    await builder.emit()
+    builder.extract()
+
+    expect(fromCssgen).toBe(builder.toCss({ layerParams: true }))
+    expect(fromCssgen).toContain('display: flex')
+    expect(fromCssgen).not.toContain('.d_flex')
   })
 
   test('matches the CLI bamboo command', async () => {

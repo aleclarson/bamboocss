@@ -199,7 +199,8 @@ beforeAll(() => {
   mkdirSync(join(consumerFixture, 'src'), { recursive: true })
   writeFileSync(
     join(consumerFixture, 'bamboo.config.mjs'),
-    `export default { include: ['./src/**/*.{js,jsx,ts,tsx}'], outdir: 'styled-system' }\n`,
+    // Readable, so the consumer can tell the probe folded by the class it carries.
+    `export default { include: ['./src/**/*.{js,jsx,ts,tsx}'], outdir: 'styled-system', hash: false }\n`,
   )
 }, 120_000)
 

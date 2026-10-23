@@ -429,7 +429,8 @@ describe('compiler', () => {
   mkdirSync(join(cwd, 'src'))
   writeFileSync(
     join(cwd, 'bamboo.config.ts'),
-    `export default { include: ['./src/**/*.{js,jsx,ts,tsx}'], outdir: 'styled-system' }\n`,
+    // Readable, so what a fold wrote can be read for the declaration it carries.
+    `export default { include: ['./src/**/*.{js,jsx,ts,tsx}'], outdir: 'styled-system', hash: false }\n`,
   )
   afterAll(() => rmSync(cwd, { recursive: true, force: true }))
 

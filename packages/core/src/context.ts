@@ -158,6 +158,7 @@ export class Context {
 
     this.staticCss = new StaticCss({
       config,
+      hash: this.hash,
       utility: this.utility,
       patterns: this.patterns,
       recipes: this.recipes,
@@ -240,17 +241,19 @@ export class Context {
    * That is also what keeps a name stable: the mode is read at context creation and every class
    * the sheet and the compiler produce comes from this one answer. Deciding it later, per call
    * site, is how the emitted CSS and the compiled literal would come to disagree.
+   *
+   * Class names left unset are `'auto'`: a readable name costs every server render that writes
+   * it, and nobody reads it in production. Variables left unset stay readable, since hand-written
+   * CSS refers to them by name.
    */
   get hash(): HashOptions {
     const resolve = (setting: HashSetting | undefined) => (setting === 'auto' ? !this.config.dev : !!setting)
+    const { hash } = this.config
+    const whole = isBoolean(hash) || hash === 'auto'
 
     return {
-      tokens: resolve(
-        isBoolean(this.config.hash) || this.config.hash === 'auto' ? this.config.hash : this.config.hash?.cssVar,
-      ),
-      className: resolve(
-        isBoolean(this.config.hash) || this.config.hash === 'auto' ? this.config.hash : this.config.hash?.className,
-      ),
+      tokens: resolve(whole ? hash : hash?.cssVar),
+      className: resolve(whole ? hash : (hash?.className ?? 'auto')),
     }
   }
 

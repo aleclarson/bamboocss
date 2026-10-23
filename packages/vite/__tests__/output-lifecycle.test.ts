@@ -48,7 +48,8 @@ const createProject = () => {
   mkdirSync(join(cwd, 'src'))
   writeFileSync(
     join(cwd, 'bamboo.config.ts'),
-    `export default { include: ['./src/**/*.{js,jsx,ts,tsx}'], outdir: 'styled-system' }\n`,
+    // Readable, so the atoms a test follows across outputs can be found by name.
+    `export default { include: ['./src/**/*.{js,jsx,ts,tsx}'], outdir: 'styled-system', hash: false }\n`,
   )
   onTestFinished(() => rmSync(cwd, { recursive: true, force: true }))
   return cwd

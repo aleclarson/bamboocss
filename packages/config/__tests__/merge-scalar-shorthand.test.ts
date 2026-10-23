@@ -32,6 +32,12 @@ describe('scalar-shorthand options merge per member', () => {
     expect(merge({ prefix: 'bb' }, { prefix: { className: 'x' } }).prefix).toEqual({ cssVar: 'bb', className: 'x' })
   })
 
+  /** It was left a scalar, so a preset setting either member replaced the app's `'auto'` whole. */
+  test("hash: 'auto' is a scalar like true", () => {
+    expect(merge({ hash: { cssVar: true } }, { hash: 'auto' }).hash).toEqual({ cssVar: 'auto', className: 'auto' })
+    expect(merge({ hash: 'auto' }, { hash: { className: false } }).hash).toEqual({ cssVar: 'auto', className: false })
+  })
+
   /** `false` is a statement about the whole option, not a member of it. */
   test('false from the winning config turns the option off', () => {
     expect(merge({ hash: { cssVar: true } }, { hash: false }).hash).toBe(false)

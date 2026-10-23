@@ -398,28 +398,31 @@ interface CodegenOptions {
   /**
    * Whether to hash the generated class names / css variables.
    *
-   * Readable names cost nothing for most of what a project writes — `fs_14px` and `c_accent`
-   * gzip to within a rounding error of a hash, because they repeat. What does cost is an
-   * *arbitrary* value, which is escaped into the name whole: one measured project carried a
-   * complete `linear-gradient(…)` as a 105-character class, and escaped names were 20% of all
-   * class-attribute bytes. Those do not compress away, because the redundancy is inside one long
-   * token rather than across repeated short ones.
+   * Class names are `'auto'` unless set: readable while you are looking at them, hashed when
+   * nobody is. A readable name costs every server render that writes it. One holding any of
+   * `& " ' < >` — a selector condition, a quoted value — sends the whole attribute through the
+   * renderer's escaper, and the names are long: on the css-in-js benchmark's product grid, React
+   * rendered readable names at 65% of plain React's speed and hashed ones as fast as plain React.
+   * Their gzipped stylesheet is about 4% larger, since readable names repeat and hashes do not.
    *
-   * `'auto'` is the answer to both: readable while you are looking at them, hashed when nobody
-   * is. The mode comes from the integration — the Vite plugin's dev server is development and
+   * The mode comes from the integration — the Vite plugin's dev server is development and
    * everything else is production — and is fixed for the life of a context, so the emitted CSS
    * and the compiled class literals cannot disagree about a name.
    *
-   * @default false
+   * `false` keeps class names readable in production too. Only markup written by hand needs that:
+   * an HTML page, or a class `staticCss` emits for a name assembled at runtime. Variables are
+   * readable unless set, since hand-written CSS refers to them by name.
+   *
+   * @default { className: 'auto', cssVar: false }
    */
   hash?: HashSetting | { cssVar?: HashSetting; className?: HashSetting }
   /**
    * Whether this context is serving a development build.
    *
    * Set by the integration rather than by a project — the Vite plugin's dev server is the only
-   * thing that knows — and read by `hash: 'auto'`. It is deliberately not a mode switch for
-   * anything else: a class name that differs between dev and prod is one thing, and CSS that
-   * differs is another.
+   * thing that knows — and read by `hash: 'auto'`, which is what class names are unless set. It
+   * is deliberately not a mode switch for anything else: a class name that differs between dev
+   * and prod is one thing, and CSS that differs is another.
    *
    * @default false
    */

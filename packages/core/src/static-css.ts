@@ -14,8 +14,11 @@ interface StaticCssResults {
 
 type StaticCssContext = Pick<
   Context,
-  'encoder' | 'decoder' | 'utility' | 'patterns' | 'recipes' | 'createSheet' | 'config'
+  'encoder' | 'decoder' | 'utility' | 'patterns' | 'recipes' | 'createSheet' | 'config' | 'hash'
 >
+
+/** Contexts already told their `staticCss` classes are hashed: a build processes it per output. */
+const toldHashed = new WeakSet<StaticCssContext>()
 
 interface StaticCssEngine {
   results: StaticCssResults
@@ -340,6 +343,17 @@ export class StaticCss {
       'static_css:process',
       `Generated style objects: ${results.css.length} css, ${results.recipes.length} recipes, ${results.patterns.length} patterns`,
     )
+
+    // These are classes the source never writes, so whatever applies them writes them by hand —
+    // and a hashed name is one nobody can write.
+    const classes = results.css.length + results.recipes.length + results.patterns.length
+    if (classes > 0 && context.hash.className && !toldHashed.has(context)) {
+      toldHashed.add(context)
+      logger.warn(
+        'static_css:process',
+        '`staticCss` emitted classes, but class names are hashed in this build, so markup written by hand cannot apply them. If yours names these classes, set `hash: false`.',
+      )
+    }
 
     // `processAtomic` rather than hashing straight into `encoder.atomic`, which is the same
     // work: it is what marks these as answering to config rather than to a file, so a file
