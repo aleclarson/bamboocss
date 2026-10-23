@@ -212,10 +212,31 @@ export function withoutImportant<T extends string | number | boolean>(value: T):
   return candidates ? `fallback(${candidates.map(unmarked).join(', ')})` : stripped
 }
 
+/**
+ * A value as a class name spells it: a space is `_`, a literal underscore `\_`, as Tailwind spells
+ * one in an arbitrary value, and a backslash before a space, an underscore or another backslash
+ * `\\`.
+ *
+ * An underscore used to mean the same as a space, so `fontFamily: 'My Font'` and `'My_Font'` were
+ * both `ff_My_Font` — one class carrying both declarations, the later winning on both elements.
+ * Hashed names were no different, since a hashed name is a hash of this one.
+ *
+ * A backslash is doubled only where it could be read as the start of `\_`: `My\ Font`, an escaped
+ * space, would otherwise be spelled as `My_Font` is. Anywhere else it is left as written, so a CSS
+ * escape such as `var(--spacing-0\.5)` or `"\f101"` keeps the name it had. Read left to right,
+ * `\\` is a backslash, `\_` an underscore, `_` a space and any other `\` itself, so no two values
+ * share a spelling.
+ */
 export function withoutSpace<T extends string | number | boolean>(str: T): string | T {
   if (typeof str !== 'string') return str
-  return str.includes(' ') ? str.replaceAll(' ', '_') : str
+  // Searched for first: almost no value holds either, and one with only a space then costs what
+  // it always did — the replacement below cost such a value 6% in `leafClass`.
+  if (!str.includes('_') && !str.includes('\\')) return str.includes(' ') ? str.replaceAll(' ', '_') : str
+  return str.replace(SPELLED, spell)
 }
+
+const SPELLED = /\\(?=[\\ _])|[ _]/g
+const spell = (match: string) => (match === ' ' ? '_' : match === '_' ? '\\_' : '\\\\')
 
 type Dict = Record<string, unknown>
 

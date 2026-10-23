@@ -25,11 +25,11 @@ import { isImportant, sanitize, withoutImportant, withoutSpace } from './importa
  *
  * ## Why the character scan
  *
- * The remaining work — collapsing whitespace, stripping `!important`, turning spaces into
- * underscores — is three regexes, and paying them per call makes this *slower* than a
- * memo hit. Almost no token value contains whitespace or `!`, so one scan for the
- * characters that make any of it necessary sends the common value straight to a
- * concatenation. A false positive only costs the slow path, so the scan errs wide.
+ * The remaining work — collapsing whitespace, stripping `!important`, spelling spaces,
+ * underscores and backslashes the way a class name does — is a handful of regexes, and paying
+ * them per call makes this *slower* than a memo hit. Almost no token value contains any of
+ * those characters, so one scan for them sends the common value straight to a concatenation.
+ * A false positive only costs the slow path, so the scan errs wide.
  */
 export function leafClass(prefix: string, value: unknown): string | undefined {
   if (value == null) return ''
@@ -43,10 +43,10 @@ export function leafClass(prefix: string, value: unknown): string | undefined {
   for (let index = 0; index < str.length; index++) {
     const code = str.charCodeAt(index)
 
-    // Everything `\s` matches, plus `!`. Below 0x21 covers space, tab, the line breaks and
-    // the control range; the three literals and the 0x2000 floor cover the rest of what
+    // Everything `\s` matches, plus `!`, `_` and `\`. Below 0x21 covers space, tab, the line
+    // breaks and the control range; the 0xa0, 0x1680 and 0x2000 floor cover the rest of what
     // Unicode counts as space — NBSP, Ogham, the general punctuation spaces, and BOM.
-    if (code <= 0x21 || code === 0xa0 || code === 0x1680 || code >= 0x2000) {
+    if (code <= 0x21 || code === 0x5f || code === 0x5c || code === 0xa0 || code === 0x1680 || code >= 0x2000) {
       return slowLeaf(prefix, str)
     }
   }

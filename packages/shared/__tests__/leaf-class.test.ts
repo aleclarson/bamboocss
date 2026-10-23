@@ -66,6 +66,10 @@ describe('leafClass', () => {
       'a b',
       'calc(1px + 2px)',
       '0 0 0 1px red',
+      'My_Font',
+      'var(--my_var)',
+      '"\\f101"',
+      'a_ b',
     ]
 
     for (const value of slow) {
@@ -113,6 +117,12 @@ describe('leafClass', () => {
         const value = `a${String.fromCharCode(code)}b`
         expect(viaLeaf(value), `U+${code.toString(16)}`).toBe(viaCss(value))
       }
+    })
+
+    test('an underscore or a backslash routes to the slow path, where the name spells it', () => {
+      expect(viaLeaf('a_b')).toBe('color_a\\_b')
+      expect(viaLeaf('a\\_b')).toBe('color_a\\\\\\_b')
+      expect(viaLeaf('a\\.b')).toBe('color_a\\.b')
     })
   })
 })

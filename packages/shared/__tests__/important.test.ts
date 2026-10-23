@@ -247,6 +247,29 @@ describe('important and space handling', () => {
       expect(withoutSpace('red')).toBe('red')
       expect(withoutSpace(4)).toBe(4)
     })
+
+    /** It meant a space, so `My Font` and `My_Font` named one class carrying both fonts. */
+    test('spells a literal underscore apart from a space', () => {
+      expect(withoutSpace('My Font')).toBe('My_Font')
+      expect(withoutSpace('My_Font')).toBe('My\\_Font')
+      // An escaped space, which would otherwise read as the underscore.
+      expect(withoutSpace('My\\ Font')).toBe('My\\\\_Font')
+    })
+
+    /** Fractional spacing tokens and icon fonts write these, and their names did not change. */
+    test('leaves a CSS escape alone', () => {
+      expect(withoutSpace('var(--spacing-0\\.5)')).toBe('var(--spacing-0\\.5)')
+      expect(withoutSpace('"\\f101"')).toBe('"\\f101"')
+    })
+
+    /** Every pair of these was one class under some earlier spelling. */
+    test('gives every value its own spelling', () => {
+      const values = ['a b', 'a_b', 'a\\ b', 'a\\_b', 'a\\b', 'a _b', 'a_ b', 'a__b', 'a  b', 'a\\\\b']
+      const spelled = values.map(withoutSpace)
+
+      expect(new Set(spelled).size).toBe(values.length)
+      for (const name of spelled) expect(name).not.toContain(' ')
+    })
   })
   describe('fallback candidates', () => {
     const SEP = FALLBACK_SEPARATOR
