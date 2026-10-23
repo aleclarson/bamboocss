@@ -761,10 +761,18 @@ export class Builder {
    * Later calls stay narrow, which is what the guard was reaching for. A watch rebuild re-emits
    * only the artifacts a config change affected, and a rebuild that changed no config writes
    * nothing at all.
+   *
+   * Unless the output directory is gone: the flag says this builder wrote the artifacts once, not
+   * that they are still there. A process running several builds with the same plugin instances,
+   * and cleaning `styled-system/` between them, failed every build after the first on
+   * `Could not load styled-system/css`.
    */
   async emit() {
-    if (!this.hasEmitted) {
-      logger.debug('builder', 'Emit artifacts')
+    const ctx = this.context
+    const gone = this.hasEmitted && ctx !== undefined && !existsSync(ctx.runtime.path.join(...ctx.paths.root))
+
+    if (!this.hasEmitted || gone) {
+      logger.debug('builder', gone ? 'Emit artifacts, the output directory having been removed' : 'Emit artifacts')
       await codegen(this.getContextOrThrow())
     } else if (this.affecteds?.hasConfigChanged) {
       logger.debug('builder', 'Emit artifacts after config change')

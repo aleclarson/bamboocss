@@ -5579,6 +5579,29 @@ describe('a project with no generated output yet', () => {
     expect(css).toContain(`.${className}`)
     expect(css).toContain('display: flex')
   }, 120_000)
+
+  /**
+   * One set of plugin instances, built from twice with the output cleaned in between — as a tool
+   * running several builds in one process does. Having written `styled-system/` once, the plugin
+   * did not write it again, and the second build failed on `Could not load styled-system/css`.
+   */
+  test('generates it again for a later build in the same process that finds it gone', async () => {
+    const plugins = [bamboocss({ cwd: projectDir, reportSummary: false })]
+    const once = () =>
+      build({
+        root: projectDir,
+        logLevel: 'silent',
+        css: { postcss: { plugins: [] } },
+        plugins,
+        build: { write: false, minify: false, lib: { entry, formats: ['es'], fileName: 'clean-tree' } },
+      })
+
+    await once()
+    rmSync(outdir, { force: true, recursive: true })
+    await once()
+
+    expect(readdirSync(outdir)).toContain('css')
+  }, 120_000)
 })
 
 /**

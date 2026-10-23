@@ -1,4 +1,7 @@
-import { describe, expect, test } from 'vitest'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { afterAll, describe, expect, test } from 'vitest'
 import { Builder } from '../src/builder'
 
 /**
@@ -15,14 +18,24 @@ import { Builder } from '../src/builder'
  * what a config change affected, and one that changed no config writes nothing.
  *
  * A stub context rather than a real one — `codegen` is covered on its own, and what is asserted
- * here is which artifacts `emit` hands it.
+ * here is which artifacts `emit` hands it. Its output directory is real, since whether that is
+ * still on disk is one of the things `emit` asks.
  */
+const outdirs: string[] = []
+afterAll(() => {
+  for (const outdir of outdirs) rmSync(outdir, { recursive: true, force: true })
+})
+
 const stubBuilder = () => {
   const written: string[] = []
   const builder = new Builder()
+  const outdir = mkdtempSync(join(tmpdir(), 'bamboo-emit-'))
+  outdirs.push(outdir)
 
   builder.context = {
     config: {},
+    paths: { root: [outdir] },
+    runtime: { path: { join } },
     // Labelled by what was asked for, so a filtered emit is distinguishable from a full one.
     getArtifacts: (ids?: string[]) => [{ files: [{ file: `${(ids ?? ['all']).join('+')}.mjs`, code: 'x' }] }],
     output: {
@@ -47,7 +60,7 @@ const stubBuilder = () => {
     }
   }
 
-  return { builder, configChanged, written }
+  return { builder, configChanged, outdir, written }
 }
 
 describe('builder.emit', () => {
@@ -92,6 +105,21 @@ describe('builder.emit', () => {
     written.length = 0
 
     configChanged(['css', 'tokens'], ['outExtension'])
+    await builder.emit()
+
+    expect(written).toEqual(['all.mjs'])
+  })
+
+  /**
+   * Having written them once is not having them on disk. A process reusing its plugin instances
+   * across builds, and cleaning `styled-system/` between them, failed every build after the first.
+   */
+  test('writes every artifact again when the output directory is gone', async () => {
+    const { builder, outdir, written } = stubBuilder()
+
+    await builder.emit()
+    written.length = 0
+    rmSync(outdir, { recursive: true, force: true })
     await builder.emit()
 
     expect(written).toEqual(['all.mjs'])
