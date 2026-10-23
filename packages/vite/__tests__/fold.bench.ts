@@ -244,6 +244,49 @@ export const fixed${index} = token.value('zIndex.${layer}').toFixed()
 }).join('')}
 `
 
+/**
+ * `cx()` over module-scope `css()` bindings, picked by conditions — `cx(base, active && on)`, the
+ * way a component chooses a variant — which nothing else here writes: the other modules pass `cx`
+ * nothing, or `css()` calls written in place. Each call composes every combination its conditions
+ * can produce, so this is the shape whose fold cost grows with something other than call sites.
+ */
+const cxStyles = (index: number) => `
+const base${index} = css({ display: 'flex', padding: '${index % 4}', color: 'gray.700' })
+const on${index} = css({ color: '${TONES[index % 3]}' })
+const small${index} = css({ fontSize: 'sm' })
+const large${index} = css({ fontSize: 'lg' })`
+
+const CX_MODULE = `
+import { css, cx } from 'styled-system/css'
+
+${Array.from(
+  { length: 6 },
+  (_, index) => `${cxStyles(index)}
+export const plain${index} = cx(base${index}, small${index})
+export const picked${index} = (active, size) => cx(base${index}, active && on${index}, size === 'sm' ? small${index} : large${index})
+`,
+).join('')}
+`
+
+/** The bindings of `CX_MODULE` declared in another module, which the analysis follows the import to. */
+const CX_STYLES_MODULE = `
+import { css } from 'styled-system/css'
+${Array.from({ length: 6 }, (_, index) => cxStyles(index).replaceAll('\nconst ', '\nexport const ')).join('\n')}
+`
+
+const CX_IMPORTED_MODULE = `
+import { cx } from 'styled-system/css'
+import { ${Array.from({ length: 6 }, (_, index) => `base${index}, on${index}, small${index}, large${index}`).join(', ')} } from './bench-cx-styles'
+
+${Array.from(
+  { length: 6 },
+  (_, index) => `
+export const plain${index} = cx(base${index}, small${index})
+export const picked${index} = (active, size) => cx(base${index}, active && on${index}, size === 'sm' ? small${index} : large${index})
+`,
+).join('')}
+`
+
 const layered = (depth: number): string =>
   depth > 0 ? `{ '& > div': ${layered(depth - 1)}, padding: '2' }` : `{ color: 'blue.500' }`
 
@@ -262,6 +305,9 @@ export const layered${index} = css(${layered(LAYERS)})
 const ctx = createContext()
 const runtimeCss = createRuntimeCss(ctx)
 const styleCompiler = createStaticStyleSetCompiler(ctx, runtimeCss)
+
+// Where `CX_IMPORTED_MODULE` finds its styles: an overlay, so nothing is written to disk.
+ctx.project.overlaySource(join(ctx.config.cwd, 'app/src/bench-cx-styles.ts'), CX_STYLES_MODULE)
 
 let counter = 0
 /** A fresh path per iteration, so nothing is served from a per-file cache. */
@@ -342,6 +388,20 @@ describe('per-module transform cost', () => {
 
   bench('analyze + fold, names cold (recipe module)', () => {
     parseAndFoldCold(RECIPE_MODULE)
+  })
+
+  // The control for the two below.
+  bench('analyze only (cx module)', () => {
+    parseOnly(CX_MODULE)
+  })
+
+  bench('analyze + fold (cx module)', () => {
+    parseAndFold(CX_MODULE)
+  })
+
+  // Read against the pair above: the same calls, with every binding imported from another module.
+  bench('analyze + fold (cx module, imported bindings)', () => {
+    parseAndFold(CX_IMPORTED_MODULE)
   })
 
   // The control for the two below.

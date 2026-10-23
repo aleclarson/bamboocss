@@ -72,7 +72,7 @@ pub struct FoldCall {
     /// `token('colors.brand') ?? '#fff'`: a path naming no token is a case its author handled,
     /// and the call is compiled to the `undefined` it returns. See `result_guarded`.
     pub guarded: bool,
-    /// A `token.value()` call written first in an expression statement,
+    /// A `token.value()` or `cx()` call written first in an expression statement,
     /// `token.value('zIndex.hide').toFixed()` standing as one. What replaces it there cannot open
     /// with `(` or `-`, which would continue the line before it where that line has no semicolon.
     pub statement_start: bool,
@@ -145,12 +145,42 @@ pub struct FoldOrigin {
 #[napi(object)]
 pub struct FoldCxArgument {
     pub span: FoldSpan,
-    /// `string` (a literal class), `ignored` (`false`/`null`/`undefined`/…), `array`, or
+    /// `string` (a literal class), `ignored` (`false`/`null`/`undefined`/…), `array`, `binding`
+    /// (a module-scope `const` initialised with a `css()` or pattern call, here or in a module
+    /// this one imports it from), `when` (`test && value`), `choose` (`test ? a : b`), or
     /// `expression` (anything else — matched against a folded call by span).
     pub kind: String,
     pub value: Option<String>,
     /// For `array`: its elements, classified the same way. Absent when an element is a spread.
+    /// For `when`: the value. For `choose`: the consequent, then the alternate.
     pub elements: Option<Vec<FoldCxArgument>>,
+    /// For `when` and `choose`: the condition, as written. Never one reading a Bamboo binding or
+    /// a recipe: the fold copies it into what it writes, and a copy would keep that read alive.
+    pub test: Option<FoldSpan>,
+    /// For a `binding` declared in this module: the style call it is initialised with, which is
+    /// where the fold finds its declarations.
+    pub definition: Option<FoldSpan>,
+    /// For a `binding` imported from another module: the local name, which `imported_styles`
+    /// is keyed by.
+    pub binding: Option<String>,
+}
+
+/// A named import of a module-scope `const` that another module initialises with an exact
+/// `css()` or pattern call: `export const base = css({ … })`.
+#[napi(object)]
+pub struct FoldImportedStyle {
+    pub local: String,
+    pub file_path: String,
+    pub name: String,
+    /// `css` or `pattern`.
+    pub kind: String,
+    /// The function called: `css`, or the pattern's name.
+    pub callee: String,
+    /// The call's evaluated arguments, which are exact.
+    pub data: Vec<serde_json::Value>,
+    /// The modules a `cx()` composed against this style depends on: the import's target, every
+    /// module a re-export route crossed, the declaring module and whatever its arguments read.
+    pub dependencies: Vec<String>,
 }
 
 /// `x.splitVariantProps(arg)` on a binding the module can name.
@@ -241,6 +271,9 @@ pub struct FoldAnalysis {
     pub local_exports: Vec<FoldLocalExport>,
     /// Imports of this module that resolve to an inline recipe declared elsewhere.
     pub imported_recipes: Vec<FoldImportedRecipe>,
+    /// Imports of this module that a `cx()` argument names and that resolve to an exact style
+    /// call bound at module scope elsewhere.
+    pub imported_styles: Vec<FoldImportedStyle>,
     /// Other modules whose values reached a call's data.
     pub dependencies: Vec<String>,
     /// Bamboo bindings a `<script setup>` exposes to a separately compiled template.

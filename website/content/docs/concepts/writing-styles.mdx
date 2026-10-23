@@ -393,6 +393,10 @@ cx(css({ paddingX: '4' }), css({ paddingX: '2' }))
 // one atom for padding-inline: 2
 ```
 
+A `const` holding a `css()` call is as analyzable as the call, declared beside the `cx()` or imported, and so is a
+choice between such arguments with `&&` or `?:`: `cx(base, active && selected)` compiles to one complete class string
+per answer, chosen by a ternary.
+
 The compiler cannot infer the declarations behind `className` in the component example. When style objects are
 statically available, compose them before allocating classes:
 

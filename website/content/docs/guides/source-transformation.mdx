@@ -162,6 +162,23 @@ cx(css({ color: 'red.300' }), css({ color: 'blue.500' }))
 // contains only the blue declaration atom
 ```
 
+An argument may also name a module-scope `const` holding a `css()` or pattern call — declared in the same module or
+imported from another — and choose with `test && value` or `test ? a : b`. Each combination of answers is composed in
+full, and the call compiles to a ternary choosing between them, so nothing is joined at runtime and an overridden
+declaration never reaches the markup:
+
+```tsx
+const badge = css({ background: 'amber.500', color: 'white' })
+const badgeHigh = css({ background: 'red.600' })
+
+cx(badge, discount >= 30 && badgeHigh)
+// compiles to: (discount >= 30) ? "bg_red.600 c_white" : "bg_amber.500 c_white"
+```
+
+Every condition still runs exactly when, and as often as, it did in the call. Up to three independent conditions — eight
+combinations — are compiled this way; a call with more, a condition that reads a Bamboo import or a recipe, or a binding
+that is not a `const` whose call is static stays the runtime join it was written as.
+
 For a finite dynamic recipe plus static Bamboo styles, the static styles are composed into every decision-table leaf. A
 `cx()` whose arbitrary class inputs are runtime values remains the tiny string-joining helper; Bamboo makes no
 conflict-resolution guarantee for that shape.

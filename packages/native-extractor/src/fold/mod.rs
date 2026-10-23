@@ -13,8 +13,8 @@ use oxc_ast::{
     AstKind,
     ast::{
         Argument, BindingPattern, Declaration, Expression, IdentifierReference,
-        ImportDeclarationSpecifier, ModuleExportName, ObjectPropertyKind, PropertyKind, Statement,
-        StaticMemberExpression, TSModuleReference,
+        ImportDeclarationSpecifier, LogicalOperator, ModuleExportName, ObjectPropertyKind,
+        PropertyKind, Statement, StaticMemberExpression, TSModuleReference,
     },
 };
 use oxc_parser::Parser;
@@ -278,6 +278,68 @@ fn recipe_definitions<'a>(
                 continue;
             }
             output.push((id.name.to_string(), &**call, binding.imported.clone()));
+        }
+    }
+    output
+}
+
+/// A module-scope `const` initialised with a style call, which a `cx()` argument naming the
+/// binding stands for: `const base = css({ … })`, `const row = hstack({ … })`.
+struct StyleDefinition<'a> {
+    name: String,
+    call: &'a oxc_ast::ast::CallExpression<'a>,
+    /// `css` or `pattern`.
+    kind: String,
+    /// `css`, or the pattern's name.
+    callee: String,
+}
+
+/// Module-scope style bindings, through an import of the css or patterns entrypoint. Not
+/// `css.raw()`, which returns a style object rather than a class.
+fn style_definitions<'a>(
+    facts: &ModuleFacts<'a>,
+    bindings: &HashMap<SymbolId, BambooBinding>,
+    entrypoints: &FoldEntrypoints<'_>,
+) -> Vec<StyleDefinition<'a>> {
+    let scoping = facts.semantic.scoping();
+    let mut output = Vec::new();
+    for statement in &facts.program.body {
+        let declaration = match statement {
+            Statement::VariableDeclaration(declaration) => declaration,
+            Statement::ExportDeclaration(export) => match &export.declaration {
+                Declaration::VariableDeclaration(declaration) => declaration,
+                _ => continue,
+            },
+            _ => continue,
+        };
+        if declaration.kind != oxc_ast::ast::VariableDeclarationKind::Const {
+            continue;
+        }
+        for declarator in &declaration.declarations {
+            let BindingPattern::BindingIdentifier(id) = &declarator.id else {
+                continue;
+            };
+            let Some(Expression::CallExpression(call)) = declarator.init.as_ref().map(unwrap)
+            else {
+                continue;
+            };
+            if is_raw_callee(&call.callee) {
+                continue;
+            }
+            let Some((kind, callee, property)) =
+                classify_callee(&call.callee, scoping, bindings, entrypoints)
+            else {
+                continue;
+            };
+            if property.is_some() || !((kind == "css" && callee == "css") || kind == "pattern") {
+                continue;
+            }
+            output.push(StyleDefinition {
+                name: id.name.to_string(),
+                call,
+                kind,
+                callee,
+            });
         }
     }
     output
@@ -702,6 +764,7 @@ fn empty_analysis(errors: Vec<String>) -> FoldAnalysis {
         runtime_shapes: Vec::new(),
         local_exports: Vec::new(),
         imported_recipes: Vec::new(),
+        imported_styles: Vec::new(),
         dependencies: Vec::new(),
         vue_exposures: Vec::new(),
         errors,
@@ -817,8 +880,9 @@ fn analyze_facts<'a>(
         })
         .collect();
 
-    // Imports that resolve to an inline recipe declared in another module.
-    let imported_recipes = imported_recipe_bindings(project, filename, facts.program, entrypoints);
+    // Imports that resolve to an inline recipe, or to a style binding, declared in another module.
+    let (imported_recipes, imported_styles) =
+        imported_recipe_bindings(project, filename, facts.program, entrypoints);
     let imported_recipe_symbols: HashMap<SymbolId, usize> = imported_recipes
         .iter()
         .enumerate()
@@ -828,6 +892,32 @@ fn analyze_facts<'a>(
                 .map(|symbol| (symbol, index))
         })
         .collect();
+
+    // What a `cx()` argument naming a binding can stand for: a style call bound at module scope
+    // here, by the call, or in a module this one imports it from, by its local name.
+    let style_symbols: HashMap<SymbolId, FoldSpan> =
+        style_definitions(facts, &bindings, entrypoints)
+            .iter()
+            .filter_map(|definition| {
+                scoping
+                    .get_binding(scoping.root_scope_id(), definition.name.as_str().into())
+                    .map(|symbol| (symbol, utf16.span(definition.call.span)))
+            })
+            .collect();
+    let imported_style_symbols: HashMap<SymbolId, String> = imported_styles
+        .iter()
+        .filter_map(|style| {
+            scoping
+                .get_binding(scoping.root_scope_id(), style.local.as_str().into())
+                .map(|symbol| (symbol, style.local.clone()))
+        })
+        .collect();
+    // Reads a `cx()` condition may not hold, by byte span, sorted. The fold copies a condition
+    // into what it writes, so one reading a Bamboo import would keep the import alive, and one
+    // reading a recipe would read the `undefined` the recipe's declaration is erased to.
+    let mut guarded_reads: Option<Vec<Span>> = None;
+    // Of `imported_styles`, those a `cx()` argument names: the only ones the fold reads.
+    let mut cx_imported_styles: HashSet<String> = HashSet::new();
 
     let helper_names: Vec<&str> = ["cvaMap", "splitProps"]
         .into_iter()
@@ -1035,6 +1125,30 @@ fn analyze_facts<'a>(
         }
 
         if kind == "cx" {
+            let guarded_reads = guarded_reads.get_or_insert_with(|| {
+                let mut reads: Vec<Span> = bindings
+                    .keys()
+                    .chain(definition_symbols.keys())
+                    .chain(imported_recipe_symbols.keys())
+                    .flat_map(|symbol| scoping.get_resolved_references(*symbol))
+                    .map(|reference| semantic.nodes().get_node(reference.node_id()).kind().span())
+                    .collect();
+                reads.sort_unstable_by_key(|span| span.start);
+                reads
+            });
+            let scope = CxScope {
+                utf16: &utf16,
+                scoping,
+                styles: &style_symbols,
+                imported_styles: &imported_style_symbols,
+                guarded_reads,
+            };
+            let cx_arguments: Vec<FoldCxArgument> = call
+                .arguments
+                .iter()
+                .map(|argument| cx_argument(argument, &scope))
+                .collect();
+            named_styles(&cx_arguments, &mut cx_imported_styles);
             calls.push(FoldCall {
                 name,
                 kind,
@@ -1053,14 +1167,10 @@ fn analyze_facts<'a>(
                 selection: None,
                 origin: None,
                 binding: None,
-                cx_arguments: call
-                    .arguments
-                    .iter()
-                    .map(|argument| cx_argument(argument, &utf16))
-                    .collect(),
+                cx_arguments,
                 value: None,
                 guarded: false,
-                statement_start: false,
+                statement_start: is_statement_start(semantic, node.id()),
             });
             continue;
         }
@@ -1313,6 +1423,19 @@ fn analyze_facts<'a>(
                 dependencies: recipe.dependencies,
             })
             .collect(),
+        imported_styles: imported_styles
+            .into_iter()
+            .filter(|style| cx_imported_styles.contains(&style.local))
+            .map(|style| FoldImportedStyle {
+                local: style.local,
+                file_path: style.file_path,
+                name: style.name,
+                kind: style.style.kind.clone(),
+                callee: style.style.callee.clone(),
+                data: style.style.data.clone(),
+                dependencies: style.dependencies,
+            })
+            .collect(),
         dependencies: Vec::new(),
         errors,
     }
@@ -1550,71 +1673,140 @@ fn recipe_invocation<'a>(
     }
 }
 
-fn cx_argument(argument: &Argument<'_>, utf16: &Utf16) -> FoldCxArgument {
-    let Some(expression) = argument.as_expression() else {
-        return FoldCxArgument {
-            span: utf16.span(argument.span()),
-            kind: "spread".into(),
-            value: None,
-            elements: None,
-        };
-    };
-    cx_expression(expression, utf16)
+/// What a `cx()` argument naming a binding, or holding a condition, is resolved against.
+struct CxScope<'s> {
+    utf16: &'s Utf16,
+    scoping: &'s Scoping,
+    /// A module-scope binding of a style call → the call.
+    styles: &'s HashMap<SymbolId, FoldSpan>,
+    /// An import of a style binding declared in another module → its local name.
+    imported_styles: &'s HashMap<SymbolId, String>,
+    /// Byte spans of the reads a condition may not hold, sorted by start.
+    guarded_reads: &'s [Span],
 }
 
-fn cx_expression(expression: &Expression<'_>, utf16: &Utf16) -> FoldCxArgument {
-    let span = utf16.span(expression.span());
+impl CxScope<'_> {
+    /// Whether the condition at `span` reads something the fold may not copy.
+    fn holds_guarded_read(&self, span: Span) -> bool {
+        let first = self
+            .guarded_reads
+            .partition_point(|read| read.start < span.start);
+        self.guarded_reads[first..]
+            .first()
+            .is_some_and(|read| read.start < span.end)
+    }
+}
+
+fn cx_argument<'a>(argument: &'a Argument<'a>, scope: &CxScope<'_>) -> FoldCxArgument {
+    let Some(expression) = argument.as_expression() else {
+        return cx_leaf(scope.utf16.span(argument.span()), "spread");
+    };
+    cx_expression(expression, scope)
+}
+
+fn cx_leaf(span: FoldSpan, kind: &str) -> FoldCxArgument {
+    FoldCxArgument {
+        span,
+        kind: kind.into(),
+        value: None,
+        elements: None,
+        test: None,
+        definition: None,
+        binding: None,
+    }
+}
+
+fn cx_expression<'a>(expression: &'a Expression<'a>, scope: &CxScope<'_>) -> FoldCxArgument {
+    let expression = unwrap(expression);
+    let span = scope.utf16.span(expression.span());
     match expression {
         Expression::StringLiteral(literal) => FoldCxArgument {
-            span,
-            kind: "string".into(),
             value: Some(literal.value.to_string()),
-            elements: None,
+            ..cx_leaf(span, "string")
         },
         Expression::TemplateLiteral(template) if template.expressions.is_empty() => {
             FoldCxArgument {
-                span,
-                kind: "string".into(),
                 value: template.single_quasi().map(|value| value.to_string()),
-                elements: None,
+                ..cx_leaf(span, "string")
             }
         }
         Expression::BooleanLiteral(_)
         | Expression::NullLiteral(_)
-        | Expression::NumericLiteral(_) => FoldCxArgument {
-            span,
-            kind: "ignored".into(),
-            value: None,
-            elements: None,
-        },
-        Expression::Identifier(identifier) if identifier.name == "undefined" => FoldCxArgument {
-            span,
-            kind: "ignored".into(),
-            value: None,
-            elements: None,
-        },
+        | Expression::NumericLiteral(_) => cx_leaf(span, "ignored"),
+        Expression::Identifier(identifier) if identifier.name == "undefined" => {
+            cx_leaf(span, "ignored")
+        }
+        Expression::Identifier(identifier) => {
+            let symbol = identifier
+                .reference_id
+                .get()
+                .and_then(|reference| scope.scoping.get_reference(reference).symbol_id());
+            if let Some(definition) = symbol.and_then(|symbol| scope.styles.get(&symbol)) {
+                FoldCxArgument {
+                    definition: Some(*definition),
+                    ..cx_leaf(span, "binding")
+                }
+            } else if let Some(local) = symbol.and_then(|symbol| scope.imported_styles.get(&symbol))
+            {
+                FoldCxArgument {
+                    binding: Some(local.clone()),
+                    ..cx_leaf(span, "binding")
+                }
+            } else {
+                cx_leaf(span, "expression")
+            }
+        }
+        // `test && value` is `value` when the test is truthy, and the falsy test otherwise —
+        // which `cx` skips, as it skips every falsy argument.
+        Expression::LogicalExpression(logical)
+            if logical.operator == LogicalOperator::And
+                && !scope.holds_guarded_read(logical.left.span()) =>
+        {
+            FoldCxArgument {
+                elements: Some(vec![cx_expression(&logical.right, scope)]),
+                test: Some(scope.utf16.span(logical.left.span())),
+                ..cx_leaf(span, "when")
+            }
+        }
+        Expression::ConditionalExpression(conditional)
+            if !scope.holds_guarded_read(conditional.test.span()) =>
+        {
+            FoldCxArgument {
+                elements: Some(vec![
+                    cx_expression(&conditional.consequent, scope),
+                    cx_expression(&conditional.alternate, scope),
+                ]),
+                test: Some(scope.utf16.span(conditional.test.span())),
+                ..cx_leaf(span, "choose")
+            }
+        }
         Expression::ArrayExpression(array) => {
             let mut elements = Vec::new();
             let mut spread = false;
             for element in &array.elements {
                 match element.as_expression() {
-                    Some(expression) => elements.push(cx_expression(expression, utf16)),
+                    Some(expression) => elements.push(cx_expression(expression, scope)),
                     None => spread = true,
                 }
             }
             FoldCxArgument {
-                span,
-                kind: "array".into(),
-                value: None,
                 elements: (!spread).then_some(elements),
+                ..cx_leaf(span, "array")
             }
         }
-        _ => FoldCxArgument {
-            span,
-            kind: "expression".into(),
-            value: None,
-            elements: None,
-        },
+        _ => cx_leaf(span, "expression"),
+    }
+}
+
+/// Every imported style binding `arguments` name, at any depth.
+fn named_styles(arguments: &[FoldCxArgument], output: &mut HashSet<String>) {
+    for argument in arguments {
+        if let Some(local) = &argument.binding {
+            output.insert(local.clone());
+        }
+        if let Some(elements) = &argument.elements {
+            named_styles(elements, output);
+        }
     }
 }
 
@@ -1641,14 +1833,22 @@ struct ImportedRecipe {
     dependencies: Vec<String>,
 }
 
+struct ImportedStyle {
+    local: String,
+    file_path: String,
+    name: String,
+    style: Arc<ModuleStyle>,
+    dependencies: Vec<String>,
+}
+
 /// Named imports of this module that resolve — through re-exports, aliases and star exports —
-/// to an inline recipe declared at module scope in another module.
+/// to an inline recipe, or to an exact style binding, declared at module scope in another module.
 fn imported_recipe_bindings(
     project: &ProjectEvaluator<'_>,
     filename: &str,
     program: &oxc_ast::ast::Program<'_>,
     entrypoints: &FoldEntrypoints<'_>,
-) -> Vec<ImportedRecipe> {
+) -> (Vec<ImportedRecipe>, Vec<ImportedStyle>) {
     // Every module this walk opens is a probe, not a dependency: a consumer importing ten
     // components from a barrel must not be re-folded when an unrelated one changes. The reads
     // are captured and discarded; each recipe found reports the modules it actually came through.
@@ -1662,9 +1862,12 @@ fn imported_recipe_walk(
     filename: &str,
     program: &oxc_ast::ast::Program<'_>,
     entrypoints: &FoldEntrypoints<'_>,
-) -> Vec<ImportedRecipe> {
+) -> (Vec<ImportedRecipe>, Vec<ImportedStyle>) {
     let mut output = Vec::new();
-    let mut cache: HashMap<String, Option<ModuleRecipes>> = HashMap::new();
+    let mut styles = Vec::new();
+    let mut cache: HashMap<String, Option<Arc<ModuleRecipes>>> = HashMap::new();
+    // Normalised once: a module importing many names compared every path against it, per name.
+    let consumer = crate::evaluator::normalize_path(filename);
     for statement in &program.body {
         let Statement::ImportDeclaration(declaration) = statement else {
             continue;
@@ -1695,7 +1898,8 @@ fn imported_recipe_walk(
         let Some(target) = project.resolve_specifier(filename, specifier) else {
             continue;
         };
-        if crate::evaluator::normalize_path(&target) == crate::evaluator::normalize_path(filename) {
+        let normalized_target = crate::evaluator::normalize_path(&target);
+        if normalized_target == consumer {
             continue;
         }
         let exports = exported_recipes_cached(project, &target, entrypoints, &mut cache);
@@ -1706,6 +1910,35 @@ fn imported_recipe_walk(
                 continue;
             };
             let declaring = module_recipes(project, &origin.file_path, entrypoints, &mut cache);
+            let dependencies = |reads: Vec<String>| {
+                let mut dependencies: Vec<String> = std::iter::once(normalized_target.clone())
+                    .chain(origin.through.iter().cloned())
+                    .chain(std::iter::once(crate::evaluator::normalize_path(
+                        &origin.file_path,
+                    )))
+                    .chain(reads)
+                    .filter(|path| *path != consumer)
+                    .collect();
+                dependencies.sort();
+                dependencies.dedup();
+                dependencies
+            };
+            // A style binding is not a recipe: one whose call is not exact names nothing the
+            // fold can use, and is left for the runtime `cx` to read.
+            if let Some(module) = &declaring
+                && let Some(style) = module.styles.get(&origin.name)
+            {
+                if let Some(style) = style {
+                    styles.push(ImportedStyle {
+                        local: named.local.name.to_string(),
+                        file_path: origin.file_path.clone(),
+                        name: origin.name.clone(),
+                        style: style.clone(),
+                        dependencies: dependencies(module.reads.clone()),
+                    });
+                }
+                continue;
+            }
             let (config, declaring_imports, config_reads) = declaring
                 .map(|module| {
                     (
@@ -1715,28 +1948,17 @@ fn imported_recipe_walk(
                     )
                 })
                 .unwrap_or_default();
-            let mut dependencies: Vec<String> =
-                std::iter::once(crate::evaluator::normalize_path(&target))
-                    .chain(origin.through.iter().cloned())
-                    .chain(std::iter::once(crate::evaluator::normalize_path(
-                        &origin.file_path,
-                    )))
-                    .chain(config_reads)
-                    .filter(|path| *path != crate::evaluator::normalize_path(filename))
-                    .collect();
-            dependencies.sort();
-            dependencies.dedup();
             output.push(ImportedRecipe {
                 local: named.local.name.to_string(),
                 file_path: origin.file_path.clone(),
                 name: origin.name.clone(),
                 config,
                 declaring_imports,
-                dependencies,
+                dependencies: dependencies(config_reads),
             });
         }
     }
-    output
+    (output, styles)
 }
 
 #[derive(Clone)]
@@ -1768,10 +1990,22 @@ impl RecipeOrigin {
 struct ModuleRecipes {
     /// Declared at module scope: name → config (absent when ambiguous).
     configs: HashMap<String, Option<serde_json::Value>>,
+    /// Style bindings declared at module scope: name → the call (absent when it is not exact).
+    styles: HashMap<String, Option<Arc<ModuleStyle>>>,
     exported_locally: HashSet<String>,
     imports: Vec<String>,
-    /// Modules the configs' evaluation read.
+    /// Modules the configs' and the styles' evaluation read.
     reads: Vec<String>,
+}
+
+/// An exact style call a module binds at module scope.
+#[derive(Clone)]
+struct ModuleStyle {
+    /// `css` or `pattern`.
+    kind: String,
+    /// `css`, or the pattern's name.
+    callee: String,
+    data: Vec<serde_json::Value>,
 }
 
 #[derive(Clone)]
@@ -1784,8 +2018,8 @@ fn module_recipes(
     project: &ProjectEvaluator<'_>,
     filename: &str,
     entrypoints: &FoldEntrypoints<'_>,
-    cache: &mut HashMap<String, Option<ModuleRecipes>>,
-) -> Option<ModuleRecipes> {
+    cache: &mut HashMap<String, Option<Arc<ModuleRecipes>>>,
+) -> Option<Arc<ModuleRecipes>> {
     let key = crate::evaluator::normalize_path(filename);
     if let Some(cached) = cache.get(&key) {
         return cached.clone();
@@ -1805,7 +2039,7 @@ fn module_recipes(
         return result;
     }
     let (result, witnesses) =
-        project.witnessed(|| module_recipes_uncached(project, filename, entrypoints));
+        project.witnessed(|| module_recipes_uncached(project, filename, entrypoints).map(Arc::new));
     if let Ok(mut global) = MODULE_RECIPES_CACHE
         .get_or_init(|| std::sync::Mutex::new(HashMap::new()))
         .lock()
@@ -1820,7 +2054,7 @@ fn module_recipes(
 }
 
 /// One module's recipes, keyed by project fingerprint and path, with the files they read.
-type ModuleRecipesEntry = (Option<ModuleRecipes>, Vec<(String, Option<u64>)>);
+type ModuleRecipesEntry = (Option<Arc<ModuleRecipes>>, Vec<(String, Option<u64>)>);
 static MODULE_RECIPES_CACHE: std::sync::OnceLock<
     std::sync::Mutex<HashMap<(u64, String), ModuleRecipesEntry>>,
 > = std::sync::OnceLock::new();
@@ -1849,7 +2083,8 @@ fn module_recipes_uncached(
         };
         let bindings = collect_bamboo_bindings(&parsed.program, entrypoints);
         let definitions = recipe_definitions(&facts, &bindings);
-        let (configs, reads) = project.capture(|| {
+        let style_definitions = style_definitions(&facts, &bindings, entrypoints);
+        let ((configs, styles), reads) = project.capture(|| {
             let mut evaluator = FileEvaluator::new(filename, project, &semantic, &parsed.program);
             let mut configs: HashMap<String, Option<serde_json::Value>> = HashMap::new();
             for (name, call, _) in &definitions {
@@ -1861,7 +2096,36 @@ fn module_recipes_uncached(
                 };
                 configs.insert(name.clone(), config);
             }
-            configs
+            // Judged as the module's own fold judges the call: every argument exact, and a
+            // nullish one only where `css()` drops it.
+            let mut styles: HashMap<String, Option<Arc<ModuleStyle>>> = HashMap::new();
+            for definition in &style_definitions {
+                let style = if styles.contains_key(&definition.name) {
+                    None
+                } else {
+                    let (data, _, _) = argument_values(&mut evaluator, definition.call);
+                    let drops_nullish =
+                        definition.kind == "css" && definition.call.arguments.len() == 1;
+                    let exact = definition.call.arguments.iter().all(|argument| {
+                        argument.as_expression().is_some_and(|expression| {
+                            Exactness {
+                                evaluator: &mut evaluator,
+                                drops_nullish,
+                            }
+                            .check(expression)
+                        })
+                    });
+                    exact.then(|| {
+                        Arc::new(ModuleStyle {
+                            kind: definition.kind.clone(),
+                            callee: definition.callee.clone(),
+                            data,
+                        })
+                    })
+                };
+                styles.insert(definition.name.clone(), style);
+            }
+            (configs, styles)
         });
         let mut exported_locally = HashSet::new();
         for statement in &parsed.program.body {
@@ -1889,6 +2153,7 @@ fn module_recipes_uncached(
             .collect();
         Some(ModuleRecipes {
             configs,
+            styles,
             exported_locally,
             imports,
             reads,
@@ -1908,7 +2173,7 @@ fn exported_recipes_cached(
     project: &ProjectEvaluator<'_>,
     filename: &str,
     entrypoints: &FoldEntrypoints<'_>,
-    cache: &mut HashMap<String, Option<ModuleRecipes>>,
+    cache: &mut HashMap<String, Option<Arc<ModuleRecipes>>>,
 ) -> Option<ExportedRecipes> {
     let key = (
         project.fingerprint(),
@@ -1940,7 +2205,7 @@ fn exported_recipes(
     project: &ProjectEvaluator<'_>,
     filename: &str,
     entrypoints: &FoldEntrypoints<'_>,
-    cache: &mut HashMap<String, Option<ModuleRecipes>>,
+    cache: &mut HashMap<String, Option<Arc<ModuleRecipes>>>,
     seen: &mut HashSet<String>,
 ) -> Option<ExportedRecipes> {
     let key = crate::evaluator::normalize_path(filename);
@@ -1961,7 +2226,9 @@ fn exported_recipes(
     let mut names = HashMap::new();
     let mut local: HashMap<String, RecipeOrigin> = HashMap::new();
     if let Some(recipes) = &recipes {
-        for name in recipes.configs.keys() {
+        // A style binding travels the same routes a recipe does; the declaring module's record
+        // tells the two apart at the end of the walk.
+        for name in recipes.configs.keys().chain(recipes.styles.keys()) {
             let origin = RecipeOrigin {
                 file_path: filename.to_string(),
                 name: name.clone(),

@@ -144,9 +144,23 @@ export interface FoldSelection {
 
 export interface FoldCxArgument {
   span: FoldSpan
-  kind: 'string' | 'ignored' | 'array' | 'expression' | 'spread'
+  /**
+   * `binding` is a module-scope `const` initialised with a `css()` or pattern call, here or in a
+   * module this one imports it from. `when` is `test && value`, `choose` is `test ? a : b`.
+   */
+  kind: 'string' | 'ignored' | 'array' | 'binding' | 'when' | 'choose' | 'expression' | 'spread'
   value?: string
+  /** For `array`, its elements; for `when`, the value; for `choose`, the consequent then the alternate. */
   elements?: FoldCxArgument[]
+  /**
+   * For `when` and `choose`: the condition, as written. Never one reading a Bamboo binding or a
+   * recipe, since the fold copies it into what it writes.
+   */
+  test?: FoldSpan
+  /** For a `binding` declared in this module: the style call it is initialised with. */
+  definition?: FoldSpan
+  /** For a `binding` imported from another module: the local name `importedStyles` is keyed by. */
+  binding?: string
 }
 
 export interface FoldCall {
@@ -189,8 +203,9 @@ export interface FoldCall {
    */
   guarded: boolean
   /**
-   * A `token.value()` call written first in an expression statement. What replaces it there cannot
-   * open with `(` or `-`, which would continue the line before it where that line has no semicolon.
+   * A `token.value()` or `cx()` call written first in an expression statement. What replaces it there
+   * cannot open with `(` or `-`, which would continue the line before it where that line has no
+   * semicolon.
    */
   statementStart: boolean
 }
@@ -252,6 +267,20 @@ export interface FoldAnalysis {
     name: string
     config?: unknown
     declaringImports: string[]
+    dependencies: string[]
+  }>
+  /**
+   * Imports a `cx()` argument names that resolve to an exact `css()` or pattern call bound at module
+   * scope in another module: `kind` is `css` or `pattern`, `callee` the function called, `data` its
+   * evaluated arguments, `dependencies` every module a composition against it depends on.
+   */
+  importedStyles: Array<{
+    local: string
+    filePath: string
+    name: string
+    kind: 'css' | 'pattern'
+    callee: string
+    data: unknown[]
     dependencies: string[]
   }>
   dependencies: string[]

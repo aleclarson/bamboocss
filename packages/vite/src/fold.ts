@@ -1,6 +1,6 @@
 import { resolveTsPathPattern } from '@bamboocss/config/ts-path'
 import type { Context } from '@bamboocss/core'
-import type { FoldAnalysis, FoldCall, FoldCxArgument, FoldRefusal } from '@bamboocss/native-extractor'
+import type { FoldAnalysis, FoldCall, FoldCxArgument, FoldRefusal, FoldSpan } from '@bamboocss/native-extractor'
 import { BambooError, viewTransitionClassName } from '@bamboocss/shared'
 import type { Dict } from '@bamboocss/types'
 import MagicString from 'magic-string'
@@ -182,6 +182,98 @@ const hasStyles = (data: unknown[]): data is Dict[] =>
 
 /** `recipe(props).slot` names a slot only when the recipe declares one by that name. */
 const slotsOf = (config: RecipeConfig | undefined) => (Array.isArray(config?.slots) ? (config.slots as string[]) : [])
+
+/**
+ * The most combinations of answers a `cx()` holding conditions is compiled to.
+ *
+ * Each is written out whole, as one arm of a ternary, so what the call compiles to grows with their
+ * number: three independent conditions are eight. Past this the call stays the runtime join it was
+ * written as.
+ */
+export const MAX_CX_COMBINATIONS = 8
+
+/** One `cx()` argument the fold can compose, in the order it is written. */
+type CxPart<C> =
+  | { kind: 'style'; candidate: C }
+  | { kind: 'dynamic'; candidate: C }
+  | { kind: 'class'; value: string; candidate?: C }
+
+/** A condition among a `cx()` call's arguments, with what each answer contributes. */
+interface CxBranch<C> {
+  kind: 'branch'
+  test: FoldSpan
+  then: CxItem<C>[]
+  otherwise: CxItem<C>[]
+}
+
+type CxItem<C> = CxPart<C> | CxBranch<C>
+
+/** Every part `items` hold, in both answers of each condition. */
+const flattenCxItems = <C>(items: CxItem<C>[]): CxPart<C>[] =>
+  items.flatMap((item) =>
+    item.kind === 'branch' ? [...flattenCxItems(item.then), ...flattenCxItems(item.otherwise)] : [item],
+  )
+
+/** How many combinations of answers `items` can produce, counting no further than past `limit`. */
+const countCxCombinations = <C>(items: CxItem<C>[], limit: number): number => {
+  const index = items.findIndex((item) => item.kind === 'branch')
+  if (index < 0) return 1
+  const branch = items[index] as CxBranch<C>
+  const rest = items.slice(index + 1)
+  const then = countCxCombinations([...branch.then, ...rest], limit)
+  if (then > limit) return then
+  return then + countCxCombinations([...branch.otherwise, ...rest], limit - then)
+}
+
+/**
+ * A ternary choosing between the class strings `items` compose to, one per combination of answers.
+ *
+ * Each condition is asked where its argument asked it, and only on the path that reached it: the
+ * conditions after it are asked again in each of its answers, as they would have been once in the
+ * one taken. So every condition runs exactly when, and as often as, it did in the call.
+ */
+const writeCxBranches = <C>(
+  items: CxItem<C>[],
+  leaf: (parts: CxPart<C>[]) => string,
+  testSource: (span: FoldSpan) => string,
+  before: CxPart<C>[] = [],
+): string => {
+  const index = items.findIndex((item) => item.kind === 'branch')
+  if (index < 0) return JSON.stringify(leaf([...before, ...(items as CxPart<C>[])]))
+  const branch = items[index] as CxBranch<C>
+  const rest = items.slice(index + 1)
+  const prefix = [...before, ...(items.slice(0, index) as CxPart<C>[])]
+  const answer = (answered: CxItem<C>[]) => {
+    const written = writeCxBranches([...answered, ...rest], leaf, testSource, prefix)
+    return written.startsWith('"') ? written : `(${written})`
+  }
+  return `(${testSource(branch.test)}) ? ${answer(branch.then)} : ${answer(branch.otherwise)}`
+}
+
+/**
+ * The class string one combination of `cx()` arguments composes to: their declarations merged,
+ * later ones winning, and the merged atoms written where the first style stood among the classes
+ * passed through as written.
+ */
+const composeCxParts = <C extends { styleSet?: Dict }>(parts: CxPart<C>[], styleCompiler: StaticStyleSetCompiler) => {
+  const styles = parts.flatMap((part) =>
+    part.kind === 'style' && part.candidate.styleSet ? [part.candidate.styleSet] : [],
+  )
+  const compiled = styles.length > 0 ? styleCompiler.className(styleCompiler.compose(...styles)) : ''
+  const classParts: string[] = []
+  let wroteCompiled = false
+  for (const part of parts) {
+    if (part.kind === 'class') {
+      if (part.value) classParts.push(part.value)
+      continue
+    }
+    if (!wroteCompiled && compiled) {
+      classParts.push(compiled)
+      wroteCompiled = true
+    }
+  }
+  return classParts.join(' ')
+}
 
 export const foldSource = (options: FoldOptions): FoldResult => {
   const { ctx, code, analysis, styleCompiler, maxRecipeStates, reportSurvivors } = options
@@ -695,24 +787,97 @@ export const foldSource = (options: FoldOptions): FoldResult => {
 
   // Semantic `cx()`: compose every analyzable argument's declarations before allocating.
   const byRange = new Map(candidates.map((candidate) => [`${candidate.start}:${candidate.end}`, candidate]))
+
+  /**
+   * A style binding another module declares, by the name this one imports it as: its declarations,
+   * composed once however many `cx()` calls name it, and the modules they were read from. Absent
+   * where its data holds no styles.
+   */
+  const importedStyleSets = new Map<string, { styleSet: Dict; dependencies: string[] } | undefined>()
+  const importedStyleSet = (local: string) => {
+    if (importedStyleSets.has(local)) return importedStyleSets.get(local)
+    const style = analysis.importedStyles.find((entry) => entry.local === local)
+    const resolved =
+      style && hasStyles(style.data)
+        ? {
+            styleSet: styleCompiler.compose(
+              ...(style.kind === 'pattern'
+                ? style.data.map((entry) => ctx.patterns.transform(style.callee, entry))
+                : style.data),
+            ),
+            dependencies: style.dependencies,
+          }
+        : undefined
+    importedStyleSets.set(local, resolved)
+    return resolved
+  }
+
+  /**
+   * Whether copying the condition at `span` would copy something the fold rewrites or counts on
+   * rewriting: a call it compiles, or a read of a binding a compiled template reaches through
+   * `$setup`. The analysis has already declined a condition reading a Bamboo binding or a recipe.
+   */
+  const copiesCompiledCode = (span: FoldSpan) => {
+    const within = (inner: FoldSpan) => inner.start >= span.start && inner.end <= span.end
+    return (
+      analysis.calls.some((other) => !other.notImported && within(other.span)) ||
+      analysis.vueExposures.some((exposure) => exposure.reads.some(within))
+    )
+  }
+
   for (const call of analysis.calls) {
     if (call.kind !== 'cx' || call.notImported) continue
 
     const matched: Candidate[] = []
-    const parts: Array<
-      | { kind: 'style'; candidate: Candidate }
-      | { kind: 'dynamic'; candidate: Candidate }
-      | { kind: 'class'; value: string; candidate?: Candidate }
-    > = []
+    const items: CxItem<Candidate>[] = []
     const dynamic: Candidate[] = []
     const constantCandidates: Candidate[] = []
+    const tests: FoldSpan[] = []
     let supported = true
     let holdsFailure = false
     /** The classes among the arguments written as strings, passed through as they are. */
     const literalClasses = () =>
-      parts.flatMap((part) => (part.kind === 'class' && !part.candidate ? part.value.split(' ') : [])).filter(Boolean)
+      flattenCxItems(items)
+        .flatMap((part) => (part.kind === 'class' && !part.candidate ? part.value.split(' ') : []))
+        .filter(Boolean)
 
-    const take = (arg: FoldCxArgument): boolean => {
+    const take = (arg: FoldCxArgument, into: CxItem<Candidate>[]): boolean => {
+      // A module-scope binding of a style call: here, the call itself, which is a candidate like
+      // any other; elsewhere, its declarations, which the analysis evaluated where they are written.
+      if (arg.kind === 'binding') {
+        let candidate = arg.definition ? byRange.get(`${arg.definition.start}:${arg.definition.end}`) : undefined
+        const imported = arg.binding === undefined ? undefined : importedStyleSet(arg.binding)
+        if (imported && arg.binding !== undefined) {
+          candidate = {
+            call,
+            name: arg.binding,
+            start: arg.span.start,
+            end: arg.span.end,
+            styleSet: imported.styleSet,
+            foreign: imported.dependencies,
+          }
+        }
+        if (candidate?.failed) {
+          holdsFailure = true
+          return false
+        }
+        if (!candidate?.styleSet) return false
+        matched.push(candidate)
+        into.push({ kind: 'style', candidate })
+        return true
+      }
+      // `test && value` and `test ? a : b`: each answer is a list of its own, and the call is
+      // compiled once per combination of answers.
+      if (arg.kind === 'when' || arg.kind === 'choose') {
+        const [consequent, alternate] = arg.elements ?? []
+        if (!arg.test || !consequent || copiesCompiledCode(arg.test)) return false
+        const then: CxItem<Candidate>[] = []
+        const otherwise: CxItem<Candidate>[] = []
+        if (!take(consequent, then) || (alternate && !take(alternate, otherwise))) return false
+        tests.push(arg.test)
+        into.push({ kind: 'branch', test: arg.test, then, otherwise })
+        return true
+      }
       const candidate = byRange.get(`${arg.span.start}:${arg.span.end}`)
       if (candidate?.failed) {
         holdsFailure = true
@@ -720,26 +885,26 @@ export const foldSource = (options: FoldOptions): FoldResult => {
       }
       if (candidate?.styleMap?.outputKind === 'class') {
         dynamic.push(candidate)
-        parts.push({ kind: 'dynamic', candidate })
+        into.push({ kind: 'dynamic', candidate })
         return true
       }
       if (candidate?.styleSet) {
         matched.push(candidate)
-        parts.push({ kind: 'style', candidate })
+        into.push({ kind: 'style', candidate })
         return true
       }
       if (candidate?.call.kind === 'viewTransition' && candidate.replacement && candidate.className) {
         constantCandidates.push(candidate)
-        parts.push({ kind: 'class', value: candidate.className, candidate })
+        into.push({ kind: 'class', value: candidate.className, candidate })
         return true
       }
       if (arg.kind === 'string') {
-        parts.push({ kind: 'class', value: arg.value ?? '' })
+        into.push({ kind: 'class', value: arg.value ?? '' })
         return true
       }
       if (arg.kind === 'array') {
         if (!arg.elements) return false
-        for (const element of arg.elements) if (!take(element)) return false
+        for (const element of arg.elements) if (!take(element, into)) return false
         return true
       }
       // Values the runtime `cx` ignores and whose evaluation is inert.
@@ -747,21 +912,26 @@ export const foldSource = (options: FoldOptions): FoldResult => {
     }
 
     for (const arg of call.cxArguments) {
-      if (take(arg)) continue
+      if (take(arg, items)) continue
       supported = false
       break
     }
 
     // Two runtime maps cannot be reduced to a single lookup, so more than one declines the
-    // call whether or not the walk finished. It is the *mix* of compiled atoms and an opaque
+    // call whether or not the walk finished — as does one beside a condition, whose answers
+    // would each need a lookup of their own. It is the *mix* of compiled atoms and an opaque
     // class that is worth a separate word.
-    if (!supported || dynamic.length > 1) {
+    if (!supported || dynamic.length > 1 || (dynamic.length > 0 && tests.length > 0)) {
       // An argument reported already says what is wrong; the composition has nothing to add.
       if (holdsFailure) continue
       const composesStyleSet = (arg: FoldCxArgument): boolean => {
+        if (arg.kind === 'binding') return true
         const candidate = byRange.get(`${arg.span.start}:${arg.span.end}`)
         if (candidate?.styleSet || candidate?.styleMap?.outputKind === 'class' || candidate?.replacement) return true
-        return arg.kind === 'array' && (arg.elements ?? []).some(composesStyleSet)
+        return (
+          (arg.kind === 'array' || arg.kind === 'when' || arg.kind === 'choose') &&
+          (arg.elements ?? []).some(composesStyleSet)
+        )
       }
       const mixed = !supported && call.cxArguments.some(composesStyleSet)
       skipped.push({
@@ -773,6 +943,49 @@ export const foldSource = (options: FoldOptions): FoldResult => {
       continue
     }
 
+    // Conditions: one complete composition per combination of answers, chosen by a ternary that
+    // asks each condition where and in the order the arguments did.
+    if (tests.length > 0) {
+      // Classes passed through as written and nothing of Bamboo's: the join is somebody else's.
+      const composesNothing = matched.length === 0 && constantCandidates.length === 0
+      if (composesNothing || countCxCombinations(items, MAX_CX_COMBINATIONS) > MAX_CX_COMBINATIONS) {
+        skipped.push({ name: 'cx', reason: 'dynamic', start: call.span.start, end: call.span.end })
+        continue
+      }
+      const classNames = new Set<string>()
+      let written: string
+      try {
+        written = writeCxBranches(
+          items,
+          (parts) => {
+            const className = composeCxParts(parts, styleCompiler)
+            for (const name of className.split(' ')) if (name) classNames.add(name)
+            return className
+          },
+          (span) => code.slice(span.start, span.end),
+        )
+      } catch (error) {
+        if (!(error instanceof UnknownConditionError)) throw error
+        reportComposing({ name: 'cx', start: call.span.start, end: call.span.end }, matched, error)
+        continue
+      }
+      candidates.push({
+        call,
+        name: 'cx',
+        start: call.span.start,
+        end: call.span.end,
+        // Parenthesized, since a ternary binds more loosely than the call it replaces; and at the
+        // start of a statement, after `void 0, `, so it cannot continue the line before it.
+        replacement: `${call.statementStart ? 'void 0, ' : ''}(${written})`,
+        className: '',
+        classNames: [...classNames],
+        literalClassNames: literalClasses(),
+        foreign: matched.flatMap((candidate) => candidate.foreign ?? []),
+      })
+      continue
+    }
+
+    const parts = flattenCxItems(items)
     const calleeName = localNameOf(analysis, 'cx', isBambooCssModule) ?? 'cx'
 
     if (dynamic.length === 1 && matched.length > 0) {

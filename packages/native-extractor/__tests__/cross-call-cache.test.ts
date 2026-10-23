@@ -135,6 +135,21 @@ describe('the cross-call export cache', () => {
     expect(configOf()).toEqual([{ base: { color: 'orange.500' } }])
   })
 
+  test('sees an edit to an imported style binding a cx() argument names', () => {
+    const p = project({
+      'src/ui/index.ts': `export * from './tone'\n`,
+      'src/ui/tone.ts': `import { css } from '../../styled-system/css'\nexport const loud = css({ color: 'red' })\n`,
+    })
+    const consumer = `import { cx } from '../styled-system/css'\nimport { loud } from './ui'\nexport const a = (on) => cx('x', on && loud)\n`
+    const dataOf = () => p.compile(consumer).importedStyles.map((style) => style.data)
+    expect(dataOf()).toEqual([[{ color: 'red' }]])
+    p.write(
+      'src/ui/tone.ts',
+      `import { css } from '../../styled-system/css'\nexport const loud = css({ color: 'orange.500' })\n`,
+    )
+    expect(dataOf()).toEqual([[{ color: 'orange.500' }]])
+  })
+
   test('a cycle does not freeze a partial answer', () => {
     const p = project({
       'src/ui/index.ts': `export * from './a'\n`,
