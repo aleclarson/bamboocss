@@ -1698,10 +1698,16 @@ impl CxScope<'_> {
 }
 
 fn cx_argument<'a>(argument: &'a Argument<'a>, scope: &CxScope<'_>) -> FoldCxArgument {
-    let Some(expression) = argument.as_expression() else {
-        return cx_leaf(scope.utf16.span(argument.span()), "spread");
+    let written = scope.utf16.span(argument.span());
+    let classified = match argument.as_expression() {
+        Some(expression) => cx_expression(expression, scope),
+        None => cx_leaf(written, "spread"),
     };
-    cx_expression(expression, scope)
+    FoldCxArgument {
+        written: Some(written),
+        reads_bamboo: scope.holds_guarded_read(argument.span()),
+        ..classified
+    }
 }
 
 fn cx_leaf(span: FoldSpan, kind: &str) -> FoldCxArgument {
@@ -1713,6 +1719,8 @@ fn cx_leaf(span: FoldSpan, kind: &str) -> FoldCxArgument {
         test: None,
         definition: None,
         binding: None,
+        written: None,
+        reads_bamboo: false,
     }
 }
 

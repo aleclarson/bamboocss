@@ -24,11 +24,13 @@ const module = (body: string) => `import { css, cx } from 'styled-system/css'\n$
 
 /**
  * A folded module's exports, evaluated. Its imports are dropped, so a call left uncompiled throws
- * for want of `cx` rather than passing for one that compiled.
+ * for want of `cx` rather than passing for one that compiled — unless `runtime` names the bindings
+ * a call the fold left standing is meant to reach, which are given the runtime join.
  */
-const evaluate = (code: string, names: string[]) =>
+const evaluate = (code: string, names: string[], runtime: string[] = []) =>
   new Function(
-    `${code.replace(/^import .*$/gm, '').replaceAll('export const ', 'const ')}\nreturn { ${names.join(', ')} }`,
+    `${runtime.map((name) => `const ${name} = (...args) => args.filter((arg) => typeof arg === 'string' && arg).join(' ')`).join('\n')}\n` +
+      `${code.replace(/^import .*$/gm, '').replaceAll('export const ', 'const ')}\nreturn { ${names.join(', ')} }`,
   )() as Record<string, (...args: unknown[]) => string>
 
 describe('cx() over module-scope style bindings', () => {
@@ -162,6 +164,123 @@ describe('cx() over module-scope style bindings', () => {
 
     expect(result.code).toContain('void 0, (')
     expect(evaluate(result.code, ['touched']).touched).toEqual(['ran'])
+  })
+})
+
+describe('cx() beside an argument the compiler cannot read', () => {
+  /**
+   * A component forwarding the `className` it was given is how most `cx()` calls are written, and
+   * the class is the caller's: nothing the build can see. The rest composes as it would alone, and
+   * the forwarded class is joined to it at runtime, with no conflict between the two resolved.
+   */
+  test('composes the rest, and joins the forwarded class at runtime', () => {
+    const fixture = createFoldFixture()
+    const result = fixture.foldStrict(module(`export const pick = (on, className) => cx(base, on && loud, className)`))
+
+    const loudBase = fixture.runtimeCss({ display: 'flex', color: 'blue.500' })
+    const quietBase = fixture.runtimeCss({ display: 'flex', color: 'red.300' })
+    expect(result.code).toContain(`cx((on) ? ${JSON.stringify(loudBase)} : ${JSON.stringify(quietBase)}, className)`)
+    expect(result.skipped).toEqual([])
+    const { pick } = evaluate(result.code, ['pick'], ['cx'])
+    expect(pick!(true, 'external')).toBe(`${loudBase} external`)
+    expect(pick!(false, undefined)).toBe(quietBase)
+  })
+
+  test('merges the styles beside it', () => {
+    const fixture = createFoldFixture()
+    const result = fixture.foldStrict(module(`export const pick = (className) => cx(base, loud, className)`))
+
+    const merged = fixture.runtimeCss({ display: 'flex', color: 'blue.500' })
+    expect(result.code).toContain(`cx(${JSON.stringify(merged)}, className)`)
+  })
+
+  test('runs every argument where it ran, before and after the conditions', () => {
+    const fixture = createFoldFixture()
+    const result = fixture.foldStrict(
+      module(
+        `export const pick = (log, a, c) => cx((log.push('before'), c), base, (log.push('a'), a) && loud, (log.push('after'), c))`,
+      ),
+    )
+    const { pick } = evaluate(result.code, ['pick'], ['cx'])
+
+    for (const a of [true, false]) {
+      const log: string[] = []
+      const composed = fixture.runtimeCss({ display: 'flex', color: a ? 'blue.500' : 'red.300' })
+      expect(pick!(log, a, 'x')).toBe(`x ${composed} x`)
+      expect(log).toEqual(['before', 'a', 'after'])
+    }
+  })
+
+  test('copies an argument whole, parentheses included', () => {
+    const fixture = createFoldFixture()
+    const result = fixture.foldStrict(
+      module(`export const pick = (log, on, className) => cx(base, on && loud, (log.push('read'), className))`),
+    )
+
+    const log: string[] = []
+    const { pick } = evaluate(result.code, ['pick'], ['cx'])
+    expect(pick!(log, true, 'external')).toBe(`${fixture.runtimeCss({ display: 'flex', color: 'blue.500' })} external`)
+    expect(log).toEqual(['read'])
+  })
+
+  test('copies a spread, and keeps the name the call was made by', () => {
+    const fixture = createFoldFixture()
+    const result = fixture.foldStrict(`import { css, cx as join } from 'styled-system/css'
+${STYLES}
+export const pick = (on, rest) => join(base, on && loud, ...rest)
+`)
+
+    expect(result.code).toMatch(/join\(\(on\) \? "[^"]+" : "[^"]+", \.\.\.rest\)/)
+    const { pick } = evaluate(result.code, ['pick'], ['join'])
+    expect(pick!(false, ['a', 'b'])).toBe(`${fixture.runtimeCss({ display: 'flex', color: 'red.300' })} a b`)
+  })
+
+  test('takes a condition choosing between classes it cannot read as one of them', () => {
+    const fixture = createFoldFixture()
+    const result = fixture.foldStrict(
+      module(`export const pick = (on, open, extra) => cx(base, on && loud, open && extra)`),
+    )
+
+    expect(result.code).toContain(', open && extra)')
+    const { pick } = evaluate(result.code, ['pick'], ['cx'])
+    expect(pick!(true, true, 'shown')).toBe(`${fixture.runtimeCss({ display: 'flex', color: 'blue.500' })} shown`)
+  })
+
+  test('one style beside it is the class it already was', () => {
+    const result = createFoldFixture().foldStrict(module(`export const pick = (className) => cx(base, className)`))
+
+    expect(result.code).toContain('cx(base, className)')
+    expect(result.skipped).toContainEqual(expect.objectContaining({ name: 'cx', reason: 'opaque-composition' }))
+  })
+
+  // One would run after the conditions it ran before, or before one it ran after.
+  test('is left alone where an argument it cannot read stands between two conditions', () => {
+    const result = createFoldFixture().foldStrict(
+      module(`export const pick = (a, b, className) => cx(base, a && loud, className, b && small)`),
+    )
+
+    expect(result.code).toContain('cx(base, a && loud, className, b && small)')
+    expect(result.skipped).toContainEqual(expect.objectContaining({ name: 'cx', reason: 'opaque-composition' }))
+  })
+
+  test('is left alone where an argument it cannot read reads a recipe, which the copy would keep reading', () => {
+    const result = createFoldFixture().foldStrict(`import { css, cva, cx } from 'styled-system/css'
+${STYLES}
+const badge = cva({ base: { color: 'red.300' } })
+export const pick = (on) => cx(base, on && loud, badge.config ? 'a' : 'b')
+`)
+
+    expect(result.code).toContain(`cx(base, on && loud, badge.config ? 'a' : 'b')`)
+  })
+
+  test('is left alone where an argument it cannot read holds a call it compiles on its own', () => {
+    const fixture = createFoldFixture()
+    const result = fixture.foldStrict(
+      module(`export const pick = (on, extra) => cx(base, on && loud, [css({ color: 'gray.700' }), extra])`),
+    )
+
+    expect(result.code).toContain('cx(base, on && loud, [')
+    expect(result.code).toContain(JSON.stringify(fixture.runtimeCss({ color: 'gray.700' })))
   })
 })
 

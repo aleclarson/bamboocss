@@ -179,9 +179,20 @@ Every condition still runs exactly when, and as often as, it did in the call. Up
 combinations — are compiled this way; a call with more, a condition that reads a Bamboo import or a recipe, or a binding
 that is not a `const` whose call is static stays the runtime join it was written as.
 
-For a finite dynamic recipe plus static Bamboo styles, the static styles are composed into every decision-table leaf. A
-`cx()` whose arbitrary class inputs are runtime values remains the tiny string-joining helper; Bamboo makes no
-conflict-resolution guarantee for that shape.
+For a finite dynamic recipe plus static Bamboo styles, the static styles are composed into every decision-table leaf.
+
+An argument the compiler cannot read — a `className` a component forwards, usually — stays an argument of the runtime
+`cx`, and every other argument is composed into one beside it:
+
+```tsx
+cx(base, active && selected, className)
+// compiles to: cx((active) ? "…" : "…", className)
+```
+
+The composed arguments still merge, later ones winning; the forwarded class is joined to them at runtime, and Bamboo
+makes no conflict-resolution guarantee between the two. Every argument still runs where it did, so a call with one the
+compiler cannot read standing between two conditions, or reading a Bamboo import or a recipe, stays the runtime join it
+was written as.
 
 ### Tokens
 

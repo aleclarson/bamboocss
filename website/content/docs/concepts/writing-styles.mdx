@@ -368,7 +368,8 @@ composes the same way: `cx(card({ size }).root, css({ color: 'blue.400' }))`.
 Bamboo provides a `cx` function for combining class names. Vite gives it two deliberately different contracts:
 
 - when every Bamboo argument is analyzable, the compiler merges their StyleSets before allocating classes;
-- when an arbitrary runtime class is present, the generated helper is a tiny string join with no conflict guarantee.
+- when an arbitrary runtime class is present, the other arguments are still merged at build time, and the generated
+  helper joins the runtime class to them — a tiny string join with no conflict guarantee between the two.
 
 ```jsx
 import { css, cx } from '../styled-system/css'

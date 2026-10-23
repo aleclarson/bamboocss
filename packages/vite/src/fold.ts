@@ -833,7 +833,6 @@ export const foldSource = (options: FoldOptions): FoldResult => {
     const dynamic: Candidate[] = []
     const constantCandidates: Candidate[] = []
     const tests: FoldSpan[] = []
-    let supported = true
     let holdsFailure = false
     /** The classes among the arguments written as strings, passed through as they are. */
     const literalClasses = () =>
@@ -911,19 +910,107 @@ export const foldSource = (options: FoldOptions): FoldResult => {
       return arg.kind === 'ignored'
     }
 
-    for (const arg of call.cxArguments) {
-      if (take(arg, items)) continue
-      supported = false
-      break
+    /** Arguments the fold cannot read — a `className` forwarded from props, usually — by position. */
+    const opaque: Array<{ index: number; arg: FoldCxArgument }> = []
+    /** Where each argument the fold reads stands, and how many conditions it holds. */
+    const read: Array<{ index: number; tests: number }> = []
+
+    for (const [index, arg] of call.cxArguments.entries()) {
+      const marks = [items.length, matched.length, dynamic.length, constantCandidates.length, tests.length] as const
+      if (take(arg, items)) {
+        read.push({ index, tests: tests.length - marks[4] })
+        continue
+      }
+      // An argument reported already says what is wrong; the composition has nothing to add.
+      if (holdsFailure) break
+      // What the argument contributed before it turned out unreadable goes with it.
+      items.length = marks[0]
+      matched.length = marks[1]
+      dynamic.length = marks[2]
+      constantCandidates.length = marks[3]
+      tests.length = marks[4]
+      opaque.push({ index, arg })
+    }
+    if (holdsFailure) continue
+
+    /**
+     * Every argument the fold reads, composed: a class string, or a ternary choosing one per
+     * combination of answers. Absent where composing found a key that is not a condition, which is
+     * reported by the arguments that hold it.
+     */
+    const compose = (): { written: string; classNames: string[] } | undefined => {
+      const classNames = new Set<string>()
+      const leaf = (parts: CxPart<Candidate>[]) => {
+        const className = composeCxParts(parts, styleCompiler)
+        for (const name of className.split(' ')) if (name) classNames.add(name)
+        return className
+      }
+      try {
+        const written =
+          tests.length > 0
+            ? writeCxBranches(items, leaf, (span) => code.slice(span.start, span.end))
+            : JSON.stringify(leaf(flattenCxItems(items)))
+        return { written, classNames: [...classNames] }
+      } catch (error) {
+        if (!(error instanceof UnknownConditionError)) throw error
+        reportComposing({ name: 'cx', start: call.span.start, end: call.span.end }, matched, error)
+        return undefined
+      }
+    }
+
+    const composesBamboo = matched.length > 0 || constantCandidates.length > 0
+    const withinLimit = () => countCxCombinations(items, MAX_CX_COMBINATIONS) <= MAX_CX_COMBINATIONS
+
+    // Arguments it cannot read stay a runtime join, beside one argument composing all the others.
+    // The conditions are asked where the first of them stood, so every argument still runs in the
+    // order it was written: none the fold cannot read may stand between two conditions, and each is
+    // copied as written, which nothing compiled or counted on being compiled may be inside.
+    if (opaque.length > 0) {
+      const testing = read.filter((entry) => entry.tests > 0)
+      const firstTest = testing[0]?.index ?? -1
+      const lastTest = testing.at(-1)?.index ?? -1
+      const written = call.cxArguments.map((arg) => arg.written)
+      const partial =
+        dynamic.length === 0 &&
+        composesBamboo &&
+        // One style composed with nothing is the class it already was.
+        (tests.length > 0 || flattenCxItems(items).length > 1) &&
+        written.every(Boolean) &&
+        opaque.every(({ index, arg }) => {
+          const span = written[index]!
+          return !arg.readsBamboo && !copiesCompiledCode(span) && (index < firstTest || index > lastTest)
+        }) &&
+        withinLimit()
+      if (partial) {
+        const composed = compose()
+        if (!composed) continue
+        const position = testing[0]?.index ?? read[0]!.index
+        const runtime = new Set(opaque.map(({ index }) => index))
+        const args = written.flatMap((span, index) => {
+          if (runtime.has(index)) return [code.slice(span!.start, span!.end)]
+          return index === position ? [composed.written] : []
+        })
+        candidates.push({
+          call,
+          name: 'cx',
+          // The arguments only: the call stays, spelled as it was — an alias, a namespace member or
+          // a compiled template's `$setup.cx` included.
+          start: written[0]!.start,
+          end: written.at(-1)!.end,
+          replacement: args.join(', '),
+          className: '',
+          classNames: composed.classNames,
+          literalClassNames: literalClasses(),
+          foreign: matched.flatMap((candidate) => candidate.foreign ?? []),
+        })
+        continue
+      }
     }
 
     // Two runtime maps cannot be reduced to a single lookup, so more than one declines the
-    // call whether or not the walk finished — as does one beside a condition, whose answers
-    // would each need a lookup of their own. It is the *mix* of compiled atoms and an opaque
-    // class that is worth a separate word.
-    if (!supported || dynamic.length > 1 || (dynamic.length > 0 && tests.length > 0)) {
-      // An argument reported already says what is wrong; the composition has nothing to add.
-      if (holdsFailure) continue
+    // call — as does one beside a condition, whose answers would each need a lookup of their
+    // own. It is the *mix* of compiled atoms and an opaque class that is worth a separate word.
+    if (opaque.length > 0 || dynamic.length > 1 || (dynamic.length > 0 && tests.length > 0)) {
       const composesStyleSet = (arg: FoldCxArgument): boolean => {
         if (arg.kind === 'binding') return true
         const candidate = byRange.get(`${arg.span.start}:${arg.span.end}`)
@@ -933,7 +1020,7 @@ export const foldSource = (options: FoldOptions): FoldResult => {
           (arg.elements ?? []).some(composesStyleSet)
         )
       }
-      const mixed = !supported && call.cxArguments.some(composesStyleSet)
+      const mixed = opaque.length > 0 && call.cxArguments.some(composesStyleSet)
       skipped.push({
         name: 'cx',
         reason: mixed ? 'opaque-composition' : 'dynamic',
@@ -947,28 +1034,12 @@ export const foldSource = (options: FoldOptions): FoldResult => {
     // asks each condition where and in the order the arguments did.
     if (tests.length > 0) {
       // Classes passed through as written and nothing of Bamboo's: the join is somebody else's.
-      const composesNothing = matched.length === 0 && constantCandidates.length === 0
-      if (composesNothing || countCxCombinations(items, MAX_CX_COMBINATIONS) > MAX_CX_COMBINATIONS) {
+      if (!composesBamboo || !withinLimit()) {
         skipped.push({ name: 'cx', reason: 'dynamic', start: call.span.start, end: call.span.end })
         continue
       }
-      const classNames = new Set<string>()
-      let written: string
-      try {
-        written = writeCxBranches(
-          items,
-          (parts) => {
-            const className = composeCxParts(parts, styleCompiler)
-            for (const name of className.split(' ')) if (name) classNames.add(name)
-            return className
-          },
-          (span) => code.slice(span.start, span.end),
-        )
-      } catch (error) {
-        if (!(error instanceof UnknownConditionError)) throw error
-        reportComposing({ name: 'cx', start: call.span.start, end: call.span.end }, matched, error)
-        continue
-      }
+      const composed = compose()
+      if (!composed) continue
       candidates.push({
         call,
         name: 'cx',
@@ -976,9 +1047,9 @@ export const foldSource = (options: FoldOptions): FoldResult => {
         end: call.span.end,
         // Parenthesized, since a ternary binds more loosely than the call it replaces; and at the
         // start of a statement, after `void 0, `, so it cannot continue the line before it.
-        replacement: `${call.statementStart ? 'void 0, ' : ''}(${written})`,
+        replacement: `${call.statementStart ? 'void 0, ' : ''}(${composed.written})`,
         className: '',
-        classNames: [...classNames],
+        classNames: composed.classNames,
         literalClassNames: literalClasses(),
         foreign: matched.flatMap((candidate) => candidate.foreign ?? []),
       })

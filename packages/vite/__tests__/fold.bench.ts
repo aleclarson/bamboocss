@@ -249,6 +249,7 @@ export const fixed${index} = token.value('zIndex.${layer}').toFixed()
  * way a component chooses a variant — which nothing else here writes: the other modules pass `cx`
  * nothing, or `css()` calls written in place. Each call composes every combination its conditions
  * can produce, so this is the shape whose fold cost grows with something other than call sites.
+ * `forwarded` adds the `className` a component passes on, which stays a runtime argument.
  */
 const cxStyles = (index: number) => `
 const base${index} = css({ display: 'flex', padding: '${index % 4}', color: 'gray.700' })
@@ -264,6 +265,7 @@ ${Array.from(
   (_, index) => `${cxStyles(index)}
 export const plain${index} = cx(base${index}, small${index})
 export const picked${index} = (active, size) => cx(base${index}, active && on${index}, size === 'sm' ? small${index} : large${index})
+export const forwarded${index} = (active, className) => cx(base${index}, active && on${index}, className)
 `,
 ).join('')}
 `
@@ -283,6 +285,7 @@ ${Array.from(
   (_, index) => `
 export const plain${index} = cx(base${index}, small${index})
 export const picked${index} = (active, size) => cx(base${index}, active && on${index}, size === 'sm' ? small${index} : large${index})
+export const forwarded${index} = (active, className) => cx(base${index}, active && on${index}, className)
 `,
 ).join('')}
 `

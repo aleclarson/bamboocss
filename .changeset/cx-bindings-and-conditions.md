@@ -21,6 +21,12 @@ overridden declaration — the amber background above — no longer reaches the 
 the two used to disagree, the stylesheet's order decided which one applied; the argument order decides now, as the
 `cx()` documentation says.
 
+A class the compiler cannot read — the `className` a component forwards — stays an argument of the runtime `cx`, and the
+rest is composed into one argument beside it: `cx(base, active && selected, className)` compiles to
+`cx((active) ? "…" : "…", className)`, whose two arguments the runtime joins on its fast path. The composed arguments
+merge as above; between them and the forwarded class there is still no conflict guarantee.
+
 Every condition still runs exactly when, and as often as, it did in the call. Up to three independent conditions — eight
-combinations — are compiled; a call with more, a condition reading a Bamboo import or a recipe, and a binding that is
-not a `const` holding a static call stay the runtime join they were written as.
+combinations — are compiled; a call with more, a condition or a forwarded argument reading a Bamboo import or a recipe,
+a forwarded argument standing between two conditions, and a binding that is not a `const` holding a static call stay the
+runtime join they were written as.

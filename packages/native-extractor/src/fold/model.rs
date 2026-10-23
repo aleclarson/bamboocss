@@ -163,6 +163,14 @@ pub struct FoldCxArgument {
     /// For a `binding` imported from another module: the local name, which `imported_styles`
     /// is keyed by.
     pub binding: Option<String>,
+    /// For an argument of the call itself: its whole span, wrappers and parentheses included.
+    /// `span` is what the argument holds, which is where a folded call is matched; this is what
+    /// the fold copies when it leaves the argument to the runtime join, and copying `span` would
+    /// make two arguments of `(a, b)`.
+    pub written: Option<FoldSpan>,
+    /// For an argument of the call itself: it reads a Bamboo binding or a recipe, so a copy of it
+    /// would keep that read alive.
+    pub reads_bamboo: bool,
 }
 
 /// A named import of a module-scope `const` that another module initialises with an exact

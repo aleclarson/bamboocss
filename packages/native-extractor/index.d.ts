@@ -161,6 +161,13 @@ export interface FoldCxArgument {
   definition?: FoldSpan
   /** For a `binding` imported from another module: the local name `importedStyles` is keyed by. */
   binding?: string
+  /**
+   * For an argument of the call itself: its whole span, wrappers and parentheses included — what the
+   * fold copies when it leaves the argument to the runtime join. `span` is what the argument holds.
+   */
+  written?: FoldSpan
+  /** For an argument of the call itself: it reads a Bamboo binding or a recipe, so it cannot be copied. */
+  readsBamboo: boolean
 }
 
 export interface FoldCall {
