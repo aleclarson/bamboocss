@@ -290,6 +290,29 @@ export const forwarded${index} = (active, className) => cx(base${index}, active 
 ).join('')}
 `
 
+/**
+ * `cx()` with four conditions — a button's state, two exclusive variants and a flag — which is sixteen
+ * combinations, each composed and written out whole. While the limit was eight the fold declined the
+ * call and left it the runtime join, which cost it nothing, so this reads what compiling one costs.
+ */
+const cxVariantStyles = (index: number) => `
+const base${index} = css({ display: 'inline-flex', padding: '${index % 4}', bg: 'blue.500', color: 'white', borderRadius: 'md' })
+const muted${index} = css({ bg: 'gray.200', color: 'gray.700' })
+const secondary${index} = css({ bg: 'gray.100', color: '${TONES[index % 3]}' })
+const ghost${index} = css({ bg: 'transparent', color: 'blue.500', _hover: { bg: 'gray.100' } })
+const wide${index} = css({ width: 'full' })`
+
+const CX_VARIANT_MODULE = `
+import { css, cx } from 'styled-system/css'
+
+${Array.from(
+  { length: 6 },
+  (_, index) => `${cxVariantStyles(index)}
+export const button${index} = (active, variant, full) => cx(base${index}, !active && muted${index}, variant === 'secondary' && secondary${index}, variant === 'ghost' && ghost${index}, full && wide${index})
+`,
+).join('')}
+`
+
 const layered = (depth: number): string =>
   depth > 0 ? `{ '& > div': ${layered(depth - 1)}, padding: '2' }` : `{ color: 'blue.500' }`
 
@@ -405,6 +428,15 @@ describe('per-module transform cost', () => {
   // Read against the pair above: the same calls, with every binding imported from another module.
   bench('analyze + fold (cx module, imported bindings)', () => {
     parseAndFold(CX_IMPORTED_MODULE)
+  })
+
+  // The control for the one below.
+  bench('analyze only (cx module, four conditions)', () => {
+    parseOnly(CX_VARIANT_MODULE)
+  })
+
+  bench('analyze + fold (cx module, four conditions)', () => {
+    parseAndFold(CX_VARIANT_MODULE)
   })
 
   // The control for the two below.

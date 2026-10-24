@@ -176,9 +176,11 @@ cx(badge, discount >= 30 && badgeHigh)
 // compiles to: (discount >= 30) ? "bg_red.600 c_white" : "bg_amber.500 c_white"
 ```
 
-Every condition still runs exactly when, and as often as, it did in the call. Up to three independent conditions — eight
-combinations — are compiled this way; a call with more, a condition that reads a Bamboo import or a recipe, or a binding
-that is not a `const` whose call is static stays the runtime join it was written as.
+Every condition still runs exactly when, and as often as, it did in the call. Up to five independent conditions —
+thirty-two combinations — are compiled this way; a call with more, a condition that reads a Bamboo import or a recipe,
+or a binding that is not a `const` whose call is static stays the runtime join it was written as. A join does not merge:
+where two of its arguments set the same property, the browser applies whichever rule the stylesheet holds later, not the
+later argument. A component choosing between that many styles is better written as a recipe.
 
 For a finite dynamic recipe plus static Bamboo styles, the static styles are composed into every decision-table leaf.
 

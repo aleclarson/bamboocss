@@ -186,11 +186,13 @@ const slotsOf = (config: RecipeConfig | undefined) => (Array.isArray(config?.slo
 /**
  * The most combinations of answers a `cx()` holding conditions is compiled to.
  *
- * Each is written out whole, as one arm of a ternary, so what the call compiles to grows with their
- * number: three independent conditions are eight. Past this the call stays the runtime join it was
- * written as.
+ * Each is written out whole, as one arm of a ternary, so what the call compiles to doubles with each
+ * independent condition: five are thirty-two. Past this the call stays the runtime join it was
+ * written as, and a join does not merge: where two arguments set one property, the browser applies
+ * whichever rule the stylesheet holds later, not the later argument. At eight, a variant component
+ * with four conditions — a state, two variants and a flag — was left to that.
  */
-export const MAX_CX_COMBINATIONS = 8
+export const MAX_CX_COMBINATIONS = 32
 
 /** One `cx()` argument the fold can compose, in the order it is written. */
 type CxPart<C> =

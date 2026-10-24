@@ -110,6 +110,25 @@ describe('cx() over module-scope style bindings', () => {
     }
   })
 
+  /**
+   * A state, two variants and a flag are sixteen combinations, which a limit of eight left to the
+   * runtime join. There a property two arguments set went to whichever rule the stylesheet held later:
+   * `muted` is declared above `base`, so an inactive one kept `base`'s color.
+   */
+  test("compiles a variant component's four conditions, the later argument winning", () => {
+    const fixture = createFoldFixture()
+    const result = fixture.foldStrict(`import { css, cx } from 'styled-system/css'
+const muted = css({ color: 'gray.700' })
+${STYLES}
+export const pick = (active, size, full) => cx(base, !active && muted, size === 'sm' && small, size === 'lg' && large, full && loud)
+`)
+
+    expect(result.code).not.toContain('cx(')
+    const { pick } = evaluate(result.code, ['pick'])
+    expect(pick!(false, 'sm', false)).toBe(fixture.runtimeCss({ display: 'flex', color: 'gray.700', fontSize: 'sm' }))
+    expect(pick!(true, 'lg', true)).toBe(fixture.runtimeCss({ display: 'flex', color: 'blue.500', fontSize: 'lg' }))
+  })
+
   test('stays the runtime join past the combinations it is compiled to', () => {
     const conditions = Math.log2(MAX_CX_COMBINATIONS) + 1
     const flags = Array.from({ length: conditions }, (_, index) => `f${index}`)
