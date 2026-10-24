@@ -3,22 +3,24 @@ import type { Config, BambooPlugin } from '@bamboocss/types'
 import { pluginSvelte } from '@bamboocss/plugin-svelte'
 import { pluginVue } from '@bamboocss/plugin-vue'
 import { pluginAstro } from './astro-to-tsx'
+import { pluginTsrx } from './tsrx-to-tsx'
 import { BambooContext } from './create-context'
 import { copyLaidOver, rememberConfigReload } from './config-reload'
 import { loadTsConfig, rememberTsConfigResolutionFiles } from './load-tsconfig'
 import { pluginMdx } from './mdx-to-tsx'
 
 const RESOLVED_HOOKS_NAME = '__resolved__'
-const AUTO_PARSER_HOOKS = Object.freeze(['vue', 'svelte', 'astro'] as const)
+const AUTO_PARSER_HOOKS = Object.freeze(['vue', 'svelte', 'astro', 'tsrx'] as const)
 const autoPluginFactories: Record<(typeof AUTO_PARSER_HOOKS)[number], () => BambooPlugin> = {
   astro: pluginAstro,
   svelte: pluginSvelte,
+  tsrx: pluginTsrx,
   vue: pluginVue,
 }
 
 /**
  * Built-in plugins that are auto-injected when using the CLI or PostCSS plugin.
- * These provide Vue, Svelte and Astro single-file-component support.
+ * These provide Vue, Svelte and Astro single-file-component and TSRX template support.
  *
  * LightningCSS is not among them any more. It was reached through a `lightningcss: true`
  * config flag whose only job was to push `pluginLightningcss()` into this list — a second
